@@ -116,3 +116,297 @@ export async function fetchPagesWithIG(
   const data = await res.json();
   return data.data ?? [];
 }
+
+// ---------------------------------------------------------------------------
+// Instagram Media
+// ---------------------------------------------------------------------------
+
+export interface IGMediaItem {
+  id: string;
+  caption?: string;
+  media_type: string;
+  media_url?: string;
+  thumbnail_url?: string;
+  timestamp: string;
+  like_count?: number;
+  comments_count?: number;
+}
+
+/**
+ * Fetch recent media for an Instagram Business Account.
+ */
+export async function fetchIGMedia(
+  igUserId: string,
+  token: string
+): Promise<IGMediaItem[]> {
+  const res = await fetch(
+    `${GRAPH_API}/${igUserId}/media?fields=id,caption,media_type,media_url,thumbnail_url,timestamp,like_count,comments_count&limit=25&access_token=${token}`
+  );
+  if (!res.ok) {
+    const error = await res.text();
+    throw new Error(`Failed to fetch IG media: ${error}`);
+  }
+  const data = await res.json();
+  return data.data ?? [];
+}
+
+// ---------------------------------------------------------------------------
+// Media Insights
+// ---------------------------------------------------------------------------
+
+export interface MediaInsight {
+  name: string;
+  period: string;
+  values: { value: number }[];
+  title: string;
+  description: string;
+  id: string;
+}
+
+/**
+ * Fetch insights for a specific media object.
+ */
+export async function fetchMediaInsights(
+  mediaId: string,
+  token: string
+): Promise<MediaInsight[]> {
+  const res = await fetch(
+    `${GRAPH_API}/${mediaId}/insights?metric=impressions,reach,saved,profile_visits&access_token=${token}`
+  );
+  if (!res.ok) {
+    const error = await res.text();
+    throw new Error(`Failed to fetch media insights: ${error}`);
+  }
+  const data = await res.json();
+  return data.data ?? [];
+}
+
+// ---------------------------------------------------------------------------
+// Ad Accounts
+// ---------------------------------------------------------------------------
+
+export interface AdAccount {
+  id: string;
+  name: string;
+  account_status: number;
+  currency: string;
+}
+
+/**
+ * Fetch ad accounts for the authenticated user.
+ */
+export async function fetchAdAccounts(
+  token: string
+): Promise<AdAccount[]> {
+  const res = await fetch(
+    `${GRAPH_API}/me/adaccounts?fields=id,name,account_status,currency&access_token=${token}`
+  );
+  if (!res.ok) {
+    const error = await res.text();
+    throw new Error(`Failed to fetch ad accounts: ${error}`);
+  }
+  const data = await res.json();
+  return data.data ?? [];
+}
+
+// ---------------------------------------------------------------------------
+// Campaign CRUD
+// ---------------------------------------------------------------------------
+
+/**
+ * Create a campaign in PAUSED state with OUTCOME_AWARENESS objective.
+ */
+export async function createCampaign(
+  adAccountId: string,
+  name: string,
+  token: string
+): Promise<{ id: string }> {
+  const res = await fetch(`${GRAPH_API}/act_${adAccountId}/campaigns`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      name,
+      objective: "OUTCOME_AWARENESS",
+      status: "PAUSED",
+      special_ad_categories: [],
+      access_token: token,
+    }),
+  });
+  if (!res.ok) {
+    const error = await res.text();
+    throw new Error(`Failed to create campaign: ${error}`);
+  }
+  return res.json();
+}
+
+/**
+ * Fetch campaigns for an ad account (ACTIVE and PAUSED only).
+ */
+export async function fetchCampaigns(
+  adAccountId: string,
+  token: string
+): Promise<
+  {
+    id: string;
+    name: string;
+    status: string;
+    daily_budget?: string;
+    created_time: string;
+  }[]
+> {
+  const res = await fetch(
+    `${GRAPH_API}/act_${adAccountId}/campaigns?fields=id,name,status,daily_budget,created_time&effective_status=['ACTIVE','PAUSED']&access_token=${token}`
+  );
+  if (!res.ok) {
+    const error = await res.text();
+    throw new Error(`Failed to fetch campaigns: ${error}`);
+  }
+  const data = await res.json();
+  return data.data ?? [];
+}
+
+/**
+ * Update a campaign's status (ACTIVE, PAUSED, DELETED, etc.).
+ */
+export async function updateCampaignStatus(
+  campaignId: string,
+  status: string,
+  token: string
+): Promise<{ success: boolean }> {
+  const res = await fetch(`${GRAPH_API}/${campaignId}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      status,
+      access_token: token,
+    }),
+  });
+  if (!res.ok) {
+    const error = await res.text();
+    throw new Error(`Failed to update campaign status: ${error}`);
+  }
+  return res.json();
+}
+
+// ---------------------------------------------------------------------------
+// Ad Set
+// ---------------------------------------------------------------------------
+
+/**
+ * Create an ad set with radius-based geo targeting.
+ * dailyBudget is in GBP (e.g. 5.00) — converted to cents for Meta API.
+ */
+export async function createAdSet(
+  campaignId: string,
+  adAccountId: string,
+  name: string,
+  dailyBudget: number,
+  radiusMiles: number,
+  lat: number,
+  lng: number,
+  token: string
+): Promise<{ id: string }> {
+  const res = await fetch(`${GRAPH_API}/act_${adAccountId}/adsets`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      name,
+      campaign_id: campaignId,
+      daily_budget: Math.round(dailyBudget * 100), // cents
+      billing_event: "IMPRESSIONS",
+      optimization_goal: "REACH",
+      targeting: {
+        geo_locations: {
+          custom_locations: [
+            {
+              latitude: lat,
+              longitude: lng,
+              radius: radiusMiles,
+              distance_unit: "mile",
+            },
+          ],
+        },
+      },
+      status: "PAUSED",
+      access_token: token,
+    }),
+  });
+  if (!res.ok) {
+    const error = await res.text();
+    throw new Error(`Failed to create ad set: ${error}`);
+  }
+  return res.json();
+}
+
+// ---------------------------------------------------------------------------
+// Ad
+// ---------------------------------------------------------------------------
+
+/**
+ * Create an ad using an existing IG media post as creative.
+ * Uses object_story_id format: {pageId}_{igMediaId}
+ */
+export async function createAd(
+  adSetId: string,
+  adAccountId: string,
+  name: string,
+  igMediaId: string,
+  pageId: string,
+  token: string
+): Promise<{ id: string }> {
+  const res = await fetch(`${GRAPH_API}/act_${adAccountId}/ads`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      name,
+      adset_id: adSetId,
+      creative: {
+        object_story_id: `${pageId}_${igMediaId}`,
+      },
+      status: "PAUSED",
+      access_token: token,
+    }),
+  });
+  if (!res.ok) {
+    const error = await res.text();
+    throw new Error(`Failed to create ad: ${error}`);
+  }
+  return res.json();
+}
+
+// ---------------------------------------------------------------------------
+// Ad Insights
+// ---------------------------------------------------------------------------
+
+export interface AdInsightAction {
+  action_type: string;
+  value: string;
+}
+
+export interface AdInsightEntry {
+  impressions: string;
+  reach: string;
+  clicks: string;
+  spend: string;
+  actions?: AdInsightAction[];
+  campaign_id?: string;
+  campaign_name?: string;
+}
+
+/**
+ * Fetch ad account insights at the campaign level for the last 7 days.
+ */
+export async function fetchAdInsights(
+  adAccountId: string,
+  token: string
+): Promise<AdInsightEntry[]> {
+  const res = await fetch(
+    `${GRAPH_API}/act_${adAccountId}/insights?fields=impressions,reach,clicks,spend,actions&date_preset=last_7d&level=campaign&access_token=${token}`
+  );
+  if (!res.ok) {
+    const error = await res.text();
+    throw new Error(`Failed to fetch ad insights: ${error}`);
+  }
+  const data = await res.json();
+  return data.data ?? [];
+}

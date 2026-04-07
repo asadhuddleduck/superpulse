@@ -1,4 +1,6 @@
 import { createClient, type Client } from "@libsql/client";
+import { readFileSync } from "fs";
+import { join } from "path";
 
 let _db: Client | null = null;
 
@@ -25,3 +27,22 @@ export const db = new Proxy({} as Client, {
     return value;
   },
 });
+
+/**
+ * Reads schema.sql and executes each CREATE TABLE IF NOT EXISTS statement.
+ * Idempotent — safe to call on every startup.
+ */
+export async function runSchema(): Promise<void> {
+  const schemaPath = join(process.cwd(), "src", "lib", "schema.sql");
+  const sql = readFileSync(schemaPath, "utf-8");
+
+  // Split on semicolons, filter out empty statements
+  const statements = sql
+    .split(";")
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0);
+
+  for (const statement of statements) {
+    await db.execute(statement);
+  }
+}
