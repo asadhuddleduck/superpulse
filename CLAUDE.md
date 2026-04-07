@@ -211,7 +211,24 @@ Ahmed-type: Local restaurant/takeaway owner, 2-5K followers, posts 3-4x/week, £
 - `docs/API-FEASIBILITY.md` — **DEFINITIVE** technical assessment of Meta API capabilities for scoring formula (5-agent research). Read this first for any technical work.
 - `docs/BUSINESS-PLAN-V1.md` — First draft business plan from agent swarm
 - `docs/ARCHITECTURE.md` — Technical architecture (schema, system flows, build plan). Note: scoring formula in this doc is superseded by API-FEASIBILITY.md.
+- `docs/PRIVACY-POLICY.md` — Privacy policy (written, not deployed yet). Will become /privacy route.
+- `docs/META-APP-REVIEW-JUSTIFICATIONS.md` — 7 permission justification texts ready to paste into Meta submission form.
+- `docs/BRAND-STRATEGY.md` — Brand strategy document
+- `docs/BRAND-KIT.md` — Brand kit with colours, typography, usage rules
+- `brand/logo-mark.jpg` — **THE master logo** (thick SP-style gold bolt on black). All other brand assets derive from this.
 - `research/SPEAKING-CIRCUIT.md` — UK speaking events, strategy, and 90-day calendar
+
+## App Structure (Scaffolded 4 April 2026)
+- Next.js 16.2.2 with TypeScript, Tailwind v4, App Router, `src/` directory
+- `src/app/page.tsx` — Landing page with "Get Started" button
+- `src/app/login/page.tsx` — Facebook Login OAuth page
+- `src/app/dashboard/page.tsx` — Protected dashboard (shows user, Pages, linked IG accounts)
+- `src/app/privacy/page.tsx` — Privacy policy page (renders docs/PRIVACY-POLICY.md)
+- `src/app/api/auth/callback/facebook/route.ts` — OAuth callback (code → short-lived → long-lived token → cookie)
+- `src/app/api/auth/logout/route.ts` — Clears token cookie
+- `src/lib/auth.ts` — Cookie helpers (httpOnly, secure, sameSite strict, 60-day maxAge)
+- `src/lib/facebook.ts` — Facebook Graph API v25.0 helpers (OAuth URL, token exchange, fetch user/pages/IG)
+- `src/lib/db.ts` — Turso lazy proxy pattern (not connected yet)
 
 ## Meta App (Created 3 April 2026)
 - **App Name:** SuperPulse
@@ -220,12 +237,19 @@ Ahmed-type: Local restaurant/takeaway owner, 2-5K followers, posts 3-4x/week, £
 - **Contact Email:** asad@huddleduck.co.uk
 - **Business Verification:** DONE (inherited from Huddle Duck portfolio)
 - **Products:** Facebook Login for Business, Marketing API (both auto-configured on creation)
-- **Domain:** superpulse.io (transferring from NameCheap to Cloudflare)
+- **App Icon:** Uploaded (gold SP bolt on black — from brand/logo-mark.jpg)
+- **Category:** Business and pages
+- **Domain:** superpulse.io (on Cloudflare — zone ID: 462b291abeab6beb2d5373a95f21fec2, NS: cartman.ns.cloudflare.com + jill.ns.cloudflare.com)
+- **Permissions configured:** ads_management, ads_read, business_management, instagram_manage_insights, pages_read_engagement, pages_show_list, pages_manage_ads, email — all "Ready for testing"
+- **Test user:** Linda Faegdejcibfjaj Alisonberg (ID: 122098086860816797)
+- **Initial API calls:** All 7 permissions tested via Graph API Explorer (4 Apr 2026)
 
 ## Meta App Review Status
-- **Current state:** App created, not submitted. No code built yet.
-- **Business Verification:** DONE (green checkmark — inherited from Huddle Duck portfolio)
-- **Still missing for submission:** App icon (1024x1024), Privacy policy URL (written locally, needs deploy), Category
+- **Current state:** App created, code scaffolded with OAuth flow. Not submitted.
+- **Business Verification:** DONE (inherited from Huddle Duck portfolio)
+- **App icon:** DONE (uploaded)
+- **Category:** DONE (Business and pages)
+- **Privacy policy URL:** NOT DONE (written locally at docs/PRIVACY-POLICY.md, needs deploy to live URL)
 - **Permissions needing Advanced Access (App Review):** ads_management, instagram_manage_insights, business_management
-- **Blockers:** Working app (for screencast), deploy privacy policy, 1,500 API calls in 15 days
-- **Estimated timeline:** 2-3 weeks from code start to approval
+- **Blockers:** Deploy app + privacy policy to live URL, record screencast, 1,500 API calls in 15 days
+- **Estimated timeline:** 1-2 weeks from deploy to approval
