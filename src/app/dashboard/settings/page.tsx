@@ -4,16 +4,16 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 
 interface BoostSettings {
-  daily_budget: number;
-  target_radius: number;
-  auto_boost: boolean;
+  dailyBudgetCap: number;
+  targetRadiusMiles: number;
+  autoBoostEnabled: boolean;
 }
 
 export default function SettingsPage() {
   const [settings, setSettings] = useState<BoostSettings>({
-    daily_budget: 5.0,
-    target_radius: 5,
-    auto_boost: true,
+    dailyBudgetCap: 5.0,
+    targetRadiusMiles: 5,
+    autoBoostEnabled: true,
   });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -29,9 +29,9 @@ export default function SettingsPage() {
         if (res.ok) {
           const data = await res.json();
           setSettings({
-            daily_budget: data.daily_budget ?? 5.0,
-            target_radius: data.target_radius ?? 5,
-            auto_boost: data.auto_boost ?? true,
+            dailyBudgetCap: data.dailyBudgetCap ?? 5.0,
+            targetRadiusMiles: data.targetRadiusMiles ?? 5,
+            autoBoostEnabled: data.autoBoostEnabled ?? true,
           });
         }
       } catch {
@@ -159,11 +159,11 @@ export default function SettingsPage() {
               min="1"
               max="1000"
               step="0.50"
-              value={settings.daily_budget}
+              value={settings.dailyBudgetCap}
               onChange={(e) =>
                 setSettings((s) => ({
                   ...s,
-                  daily_budget: parseFloat(e.target.value) || 0,
+                  dailyBudgetCap: parseFloat(e.target.value) || 0,
                 }))
               }
               className="w-full rounded-lg border border-zinc-700 bg-zinc-800 pl-7 pr-4 py-2.5 text-white text-sm focus:border-[#1EBA8F] focus:outline-none focus:ring-1 focus:ring-[#1EBA8F] transition-colors"
@@ -189,11 +189,11 @@ export default function SettingsPage() {
               min="1"
               max="50"
               step="1"
-              value={settings.target_radius}
+              value={settings.targetRadiusMiles}
               onChange={(e) =>
                 setSettings((s) => ({
                   ...s,
-                  target_radius: parseInt(e.target.value) || 0,
+                  targetRadiusMiles: parseInt(e.target.value) || 0,
                 }))
               }
               className="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-4 py-2.5 text-white text-sm focus:border-[#1EBA8F] focus:outline-none focus:ring-1 focus:ring-[#1EBA8F] transition-colors"
@@ -204,29 +204,29 @@ export default function SettingsPage() {
           </div>
         </div>
 
-        {/* Auto-Boost Toggle */}
+        {/* Smart Boost Toggle */}
         <div className="rounded-lg border border-zinc-800 bg-zinc-900/50 p-5">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm font-medium text-zinc-300">Auto-Boost</p>
+              <p className="text-sm font-medium text-zinc-300">Smart Boost</p>
               <p className="text-xs text-zinc-500 mt-1">
-                Automatically boost new posts that score above the threshold
+                Recommend and boost new posts that score above the threshold
               </p>
             </div>
             <button
               type="button"
               role="switch"
-              aria-checked={settings.auto_boost}
+              aria-checked={settings.autoBoostEnabled}
               onClick={() =>
-                setSettings((s) => ({ ...s, auto_boost: !s.auto_boost }))
+                setSettings((s) => ({ ...s, autoBoostEnabled: !s.autoBoostEnabled }))
               }
               className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-[#1EBA8F] focus:ring-offset-2 focus:ring-offset-black ${
-                settings.auto_boost ? "bg-[#1EBA8F]" : "bg-zinc-700"
+                settings.autoBoostEnabled ? "bg-[#1EBA8F]" : "bg-zinc-700"
               }`}
             >
               <span
                 className={`pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow-lg transform transition duration-200 ease-in-out ${
-                  settings.auto_boost ? "translate-x-5" : "translate-x-0"
+                  settings.autoBoostEnabled ? "translate-x-5" : "translate-x-0"
                 }`}
               />
             </button>

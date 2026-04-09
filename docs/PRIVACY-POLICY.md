@@ -4,7 +4,7 @@
 
 ## Who We Are
 
-Superpulse is an AI-powered Instagram post boosting service operated by Huddle Duck Ltd. We automatically boost your Instagram posts to reach local audiences, helping your business grow its Instagram presence without manual effort.
+Superpulse is an Instagram post boosting service operated by Huddle Duck Ltd. We help local businesses boost their best Instagram posts to reach nearby audiences, growing your presence without the complexity of managing ads yourself.
 
 **Contact:** asad@huddleduck.co.uk
 
@@ -13,7 +13,7 @@ Superpulse is an AI-powered Instagram post boosting service operated by Huddle D
 When you connect your Instagram account to Superpulse via Facebook Login, we request the following permissions:
 
 ### Instagram & Page Data
-- **Your Instagram posts, engagement metrics, and insights** (likes, comments, saves, views, follower demographics) — so our AI can decide which posts to boost and measure performance.
+- **Your Instagram posts, engagement metrics, and insights** (likes, comments, saves, views, follower demographics) — to analyse which posts are performing well and recommend them for boosting.
 - **Your Facebook Page information** — to identify which Instagram account is connected and to create ad campaigns on your behalf.
 - **A list of Pages you manage** — so you can select which business to connect during setup.
 
@@ -29,20 +29,20 @@ When you connect your Instagram account to Superpulse via Facebook Login, we req
 
 We use your data solely to provide the Superpulse service:
 
-- **Automated post boosting** — Our AI analyses your Instagram posts and automatically creates, manages, and optimises ad campaigns to boost them to local audiences.
-- **Performance monitoring** — We track campaign metrics (impressions, spend, clicks, reach, profile visits) to adjust budgets, targeting, and duration in real time.
+- **Post boosting** — Superpulse analyses your Instagram posts' engagement data and helps you create, manage, and optimise ad campaigns to boost them to local audiences.
+- **Performance monitoring** — We track campaign metrics (impressions, spend, clicks, reach, profile visits) to help adjust budgets, targeting, and duration.
 - **Reporting** — We display performance data on your Superpulse dashboard and in email reports.
-- **Service improvement** — Aggregated, anonymised performance data helps us improve our AI decision-making over time.
+- **Service improvement** — Aggregated, anonymised performance data helps us improve our recommendation engine over time.
 
 We do **not** use your data to:
 - Sell or share it with third parties for their own marketing purposes
-- Train AI models on your content
+- Train models on your content
 - Access your direct messages or private conversations
 
 ## Data Storage & Security
 
 - Your data is stored in an encrypted database (Turso/LibSQL) hosted by Vercel.
-- Access tokens are encrypted at rest and refreshed automatically before expiry.
+- Access tokens are encrypted at rest and refreshed before expiry.
 - All data transfer uses HTTPS/TLS encryption.
 - Access to your data is restricted to authorised Superpulse systems and personnel only.
 

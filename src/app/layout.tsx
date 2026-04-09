@@ -13,9 +13,9 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "SuperPulse — AI-Powered Instagram Boosting",
+  title: "SuperPulse — Smart Instagram Boosting",
   description:
-    "SuperPulse automatically boosts your Instagram posts to reach local audiences. AI-powered advertising for local businesses.",
+    "SuperPulse helps local businesses boost their best Instagram posts to reach nearby audiences.",
 };
 
 export default function RootLayout({

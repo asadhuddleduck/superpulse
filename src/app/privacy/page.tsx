@@ -119,7 +119,7 @@ export default function PrivacyPage() {
         <h1 className="text-4xl font-bold tracking-tight mb-2">
           <span className="text-viridian">Privacy Policy</span>
         </h1>
-        <p className="text-zinc-500 mb-10 text-sm">Last updated: 3 April 2026</p>
+        <div className="mb-10" />
         <div className="space-y-4">{content}</div>
       </div>
     </div>

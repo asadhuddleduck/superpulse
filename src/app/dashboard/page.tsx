@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { cookies } from "next/headers";
 import { getTokenCookie } from "@/lib/auth";
-import { fetchMe, fetchPagesWithIG } from "@/lib/facebook";
-import type { PageWithIG } from "@/lib/facebook";
+import { fetchMe, fetchPagesWithIG, fetchAdAccounts } from "@/lib/facebook";
+import type { PageWithIG, AdAccount } from "@/lib/facebook";
 import SummaryCard from "@/components/SummaryCard";
 
 export const metadata: Metadata = {
@@ -69,22 +69,43 @@ function formatNumber(n: number): string {
 export default async function DashboardPage() {
   const token = await getTokenCookie();
 
-  let user: { id: string; name: string; email?: string };
-  let pages: PageWithIG[];
+  let user: { id: string; name: string; email?: string } | null = null;
+  let pages: PageWithIG[] = [];
+  let adAccounts: AdAccount[] = [];
 
   try {
-    [user, pages] = await Promise.all([
-      fetchMe(token!),
-      fetchPagesWithIG(token!),
-    ]);
+    user = await fetchMe(token!);
   } catch {
-    // Layout handles redirect, but just in case:
     return null;
   }
 
+  // Fetch pages and ad accounts independently — don't crash if one fails
+  const [pagesResult, adAccountsResult] = await Promise.allSettled([
+    fetchPagesWithIG(token!),
+    fetchAdAccounts(token!),
+  ]);
+  if (pagesResult.status === "fulfilled") pages = pagesResult.value;
+  if (adAccountsResult.status === "fulfilled") adAccounts = adAccountsResult.value;
+
   const stats = await fetchCampaignStats();
-  const pagesWithIG = pages.filter((p) => p.instagram_business_account);
-  const pagesWithoutIG = pages.filter((p) => !p.instagram_business_account);
+
+  // Show only the user's own Page for a clean single-business view
+  // In production, onboarding would select the active Page
+  const userPage = pages.find(
+    (p) => p.instagram_business_account && p.name === "Asad Shah"
+  );
+  const pagesWithIG = userPage
+    ? [userPage]
+    : pages.filter((p) => p.instagram_business_account).slice(0, 1);
+  const pagesWithoutIG: typeof pages = [];
+
+  // Show only the relevant ad account for a clean single-business view
+  const superpulseAd = adAccounts.find((a) =>
+    a.name.toLowerCase().includes("superpulse")
+  );
+  const filteredAdAccounts = superpulseAd
+    ? [superpulseAd]
+    : adAccounts.filter((a) => a.account_status === 1).slice(0, 2);
 
   return (
     <>
@@ -193,7 +214,7 @@ export default async function DashboardPage() {
                   Boost Settings
                 </p>
                 <p className="text-sm text-zinc-500">
-                  Configure budget, radius, and auto-boost
+                  Configure budget, radius, and boost preferences
                 </p>
               </div>
             </div>
@@ -233,6 +254,49 @@ export default async function DashboardPage() {
                     IG Account: {page.instagram_business_account!.id}
                   </span>
                 </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+
+      {/* Ad Accounts */}
+      <section className="mb-10">
+        <h3 className="text-lg font-semibold text-sandstorm mb-4">
+          Ad Accounts
+        </h3>
+        {filteredAdAccounts.length === 0 ? (
+          <div className="rounded-lg border border-zinc-800 bg-zinc-900/50 p-6 text-center">
+            <p className="text-zinc-400">No ad accounts found.</p>
+            <p className="text-zinc-500 text-sm mt-2">
+              Make sure you have an ad account in Meta Business Manager.
+            </p>
+          </div>
+        ) : (
+          <div className="grid gap-4 sm:grid-cols-2">
+            {filteredAdAccounts.map((account) => (
+              <div
+                key={account.id}
+                className="rounded-lg border border-zinc-800 bg-zinc-900/50 p-5"
+              >
+                <div className="flex items-center justify-between">
+                  <p className="font-semibold text-white">{account.name}</p>
+                  <span
+                    className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-medium ${
+                      account.account_status === 1
+                        ? "bg-[#1EBA8F]/15 text-[#1EBA8F] border-[#1EBA8F]/30"
+                        : "bg-[#F7CE46]/15 text-[#F7CE46] border-[#F7CE46]/30"
+                    }`}
+                  >
+                    {account.account_status === 1 ? "Active" : "Inactive"}
+                  </span>
+                </div>
+                <p className="text-sm text-zinc-500 mt-1">
+                  Account ID: {account.id}
+                </p>
+                <p className="text-sm text-zinc-500 mt-1">
+                  Currency: {account.currency}
+                </p>
               </div>
             ))}
           </div>

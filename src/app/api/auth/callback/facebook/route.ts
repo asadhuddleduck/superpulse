@@ -27,11 +27,20 @@ export async function GET(request: NextRequest) {
     // Step 2: Exchange short-lived for long-lived token (~60 days)
     const longLived = await exchangeForLongLivedToken(shortLived.access_token);
 
-    // Step 3: Store long-lived token in httpOnly cookie
-    await setTokenCookie(longLived.access_token);
-
-    // Step 4: Redirect to dashboard
-    return NextResponse.redirect(new URL("/dashboard", request.url));
+    // Step 3: Redirect to dashboard with cookie set on the SAME response object
+    // (cookies().set() + NextResponse.redirect() are separate responses — cookie gets lost on Vercel)
+    const dashboardUrl = new URL("/dashboard", request.url);
+    const response = NextResponse.redirect(dashboardUrl);
+    response.cookies.set({
+      name: "fb_access_token",
+      value: longLived.access_token,
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+      path: "/",
+      maxAge: 60 * 60 * 24 * 60, // 60 days
+    });
+    return response;
   } catch (err) {
     console.error("Facebook OAuth callback error:", err);
     const loginUrl = new URL("/login", request.url);

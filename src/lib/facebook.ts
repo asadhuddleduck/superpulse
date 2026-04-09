@@ -7,9 +7,10 @@ const FB_APP_SECRET = process.env.FB_APP_SECRET!;
 export const FB_SCOPES = [
   "ads_management",
   "ads_read",
-  "business_management",
+  "instagram_basic",
   "instagram_manage_insights",
   "pages_read_engagement",
+  "pages_read_user_content",
   "pages_show_list",
   "pages_manage_ads",
   "email",
@@ -165,20 +166,37 @@ export interface MediaInsight {
 
 /**
  * Fetch insights for a specific media object.
+ * Uses media-type-appropriate metrics (impressions deprecated April 2025, use views).
  */
 export async function fetchMediaInsights(
   mediaId: string,
+  mediaType: "IMAGE" | "VIDEO" | "CAROUSEL_ALBUM",
   token: string
 ): Promise<MediaInsight[]> {
+  // Different metrics per media type — requesting incompatible metrics causes hard errors
+  const metrics =
+    mediaType === "VIDEO"
+      ? "views,reach,saved,shares,likes,comments"
+      : "views,reach,saved,shares,profile_visits,likes,comments";
+
   const res = await fetch(
-    `${GRAPH_API}/${mediaId}/insights?metric=impressions,reach,saved,profile_visits&access_token=${token}`
+    `${GRAPH_API}/${mediaId}/insights?metric=${metrics}&access_token=${token}`
   );
-  if (!res.ok) {
-    const error = await res.text();
-    throw new Error(`Failed to fetch media insights: ${error}`);
+  if (res.ok) {
+    const data = await res.json();
+    return data.data ?? [];
   }
-  const data = await res.json();
-  return data.data ?? [];
+
+  // If the specific set fails, try minimal universal set
+  const fallbackRes = await fetch(
+    `${GRAPH_API}/${mediaId}/insights?metric=reach,saved&access_token=${token}`
+  );
+  if (fallbackRes.ok) {
+    const data = await fallbackRes.json();
+    return data.data ?? [];
+  }
+
+  return [];
 }
 
 // ---------------------------------------------------------------------------
@@ -229,6 +247,7 @@ export async function createCampaign(
       objective: "OUTCOME_AWARENESS",
       status: "PAUSED",
       special_ad_categories: [],
+      is_adset_budget_sharing_enabled: false,
       access_token: token,
     }),
   });
@@ -315,6 +334,7 @@ export async function createAdSet(
       daily_budget: Math.round(dailyBudget * 100), // cents
       billing_event: "IMPRESSIONS",
       optimization_goal: "REACH",
+      bid_strategy: "LOWEST_COST_WITHOUT_CAP",
       targeting: {
         geo_locations: {
           custom_locations: [
@@ -343,15 +363,43 @@ export async function createAdSet(
 // ---------------------------------------------------------------------------
 
 /**
- * Create an ad using an existing IG media post as creative.
- * Uses object_story_id format: {pageId}_{igMediaId}
+ * Create an ad creative using an existing IG post.
+ * Uses source_instagram_media_id (NOT object_story_id which is for FB posts).
+ */
+export async function createAdCreative(
+  adAccountId: string,
+  name: string,
+  igMediaId: string,
+  igUserId: string,
+  pageId: string,
+  token: string
+): Promise<{ id: string }> {
+  const res = await fetch(`${GRAPH_API}/act_${adAccountId}/adcreatives`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      name,
+      object_id: pageId,
+      instagram_user_id: igUserId,
+      source_instagram_media_id: igMediaId,
+      access_token: token,
+    }),
+  });
+  if (!res.ok) {
+    const error = await res.text();
+    throw new Error(`Failed to create ad creative: ${error}`);
+  }
+  return res.json();
+}
+
+/**
+ * Create an ad referencing an existing ad creative.
  */
 export async function createAd(
   adSetId: string,
   adAccountId: string,
   name: string,
-  igMediaId: string,
-  pageId: string,
+  creativeId: string,
   token: string
 ): Promise<{ id: string }> {
   const res = await fetch(`${GRAPH_API}/act_${adAccountId}/ads`, {
@@ -360,9 +408,7 @@ export async function createAd(
     body: JSON.stringify({
       name,
       adset_id: adSetId,
-      creative: {
-        object_story_id: `${pageId}_${igMediaId}`,
-      },
+      creative: { creative_id: creativeId },
       status: "PAUSED",
       access_token: token,
     }),

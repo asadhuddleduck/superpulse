@@ -33,7 +33,7 @@ export default async function LoginPage() {
             <span className="text-sandstorm">Pulse</span>
           </h1>
           <p className="mt-3 text-zinc-400 leading-relaxed">
-            Connect your Instagram via Facebook to start auto-boosting your posts to local audiences.
+            Connect your Instagram via Facebook to start boosting your best posts to local audiences.
           </p>
         </div>
 

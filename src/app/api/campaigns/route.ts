@@ -62,10 +62,7 @@ export async function GET() {
       };
     });
 
-    return NextResponse.json({
-      adAccountId,
-      campaigns: campaignsWithPerformance,
-    });
+    return NextResponse.json(campaignsWithPerformance);
   } catch (err) {
     console.error("Failed to fetch campaigns:", err);
     return NextResponse.json(

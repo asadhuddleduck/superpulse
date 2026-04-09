@@ -6,6 +6,7 @@ import {
   fetchAdAccounts,
   createCampaign,
   createAdSet,
+  createAdCreative,
   createAd,
   updateCampaignStatus,
 } from "@/lib/facebook";
@@ -78,12 +79,12 @@ export async function POST() {
   }
 
   try {
-    // 1. Check if auto-boost is enabled
+    // 1. Check if smart boost is enabled
     const settings = await getSettings(DEFAULT_TENANT_ID);
     if (!settings.autoBoostEnabled) {
       return NextResponse.json({
         boosted: false,
-        reason: "Auto-boost is disabled",
+        reason: "Smart boost is disabled",
       });
     }
 
@@ -162,7 +163,7 @@ export async function POST() {
     );
 
     // 7. Create campaign -> ad set -> ad (all PAUSED initially)
-    const campaignName = `SP-AutoBoost-${bestPost.id.slice(-8)}`;
+    const campaignName = `SP-Boost-${bestPost.id.slice(-8)}`;
     const campaign = await createCampaign(adAccountId, campaignName, token);
 
     // Default location: use centre of Birmingham as fallback (MVP)
@@ -180,12 +181,20 @@ export async function POST() {
       token
     );
 
+    const creative = await createAdCreative(
+      adAccountId,
+      `${campaignName}-Creative`,
+      bestPost.id,
+      igUserId,
+      pageId,
+      token
+    );
+
     const ad = await createAd(
       adSet.id,
       adAccountId,
       `${campaignName}-Ad`,
-      bestPost.id,
-      pageId,
+      creative.id,
       token
     );
 

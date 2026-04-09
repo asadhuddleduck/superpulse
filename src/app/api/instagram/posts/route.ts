@@ -11,8 +11,12 @@ export async function GET() {
 
   try {
     // Get the user's pages to find the IG Business Account ID
+    // Prefer the user's own Page (not agency/client Pages) for a cleaner demo
     const pages = await fetchPagesWithIG(token);
-    const pageWithIG = pages.find((p) => p.instagram_business_account);
+    const userPage = pages.find(
+      (p) => p.instagram_business_account && p.name === "Asad Shah"
+    );
+    const pageWithIG = userPage ?? pages.find((p) => p.instagram_business_account);
 
     if (!pageWithIG || !pageWithIG.instagram_business_account) {
       return NextResponse.json(

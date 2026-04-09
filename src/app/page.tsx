@@ -9,7 +9,7 @@ export default function Home() {
           <span className="text-sandstorm">Pulse</span>
         </h1>
         <p className="max-w-md text-lg text-zinc-400 leading-relaxed">
-          AI-powered Instagram boosting for local businesses
+          Smart Instagram boosting for local businesses
         </p>
         <Link
           href="/login"

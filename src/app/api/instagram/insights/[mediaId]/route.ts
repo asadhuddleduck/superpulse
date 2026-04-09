@@ -12,9 +12,11 @@ export async function GET(
   }
 
   const { mediaId } = await params;
+  const { searchParams } = new URL(_request.url);
+  const mediaType = (searchParams.get("type") ?? "IMAGE") as "IMAGE" | "VIDEO" | "CAROUSEL_ALBUM";
 
   try {
-    const insights = await fetchMediaInsights(mediaId, token);
+    const insights = await fetchMediaInsights(mediaId, mediaType, token);
 
     // Transform the insights array into a flat metrics object
     const metrics: Record<string, number> = {};
