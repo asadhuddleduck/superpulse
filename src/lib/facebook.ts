@@ -322,6 +322,7 @@ export async function createAdSet(
   radiusMiles: number,
   lat: number,
   lng: number,
+  pageId: string,
   token: string
 ): Promise<{ id: string }> {
   const res = await fetch(`${GRAPH_API}/act_${adAccountId}/adsets`, {
@@ -333,7 +334,7 @@ export async function createAdSet(
       daily_budget: Math.round(dailyBudget * 100), // cents
       billing_event: "IMPRESSIONS",
       optimization_goal: "VISIT_INSTAGRAM_PROFILE",
-      destination_type: "INSTAGRAM_PROFILE",
+      promoted_object: { page_id: pageId },
       bid_strategy: "LOWEST_COST_WITHOUT_CAP",
       targeting: {
         geo_locations: {
@@ -346,6 +347,7 @@ export async function createAdSet(
             },
           ],
         },
+        publisher_platforms: ["instagram"],
       },
       status: "PAUSED",
       access_token: token,
@@ -365,6 +367,12 @@ export async function createAdSet(
 /**
  * Create an ad creative using an existing IG post.
  * Uses source_instagram_media_id (NOT object_story_id which is for FB posts).
+ *
+ * NOTE: Do NOT pass call_to_action here. When the ad set uses
+ * destination_type=INSTAGRAM_PROFILE, Meta auto-assigns the
+ * "Visit Instagram Profile" CTA. Sending an explicit CTA (e.g.
+ * LEARN_MORE with a link) conflicts with the destination type and
+ * causes the ad to be malformed / invisible in Ads Manager.
  */
 export async function createAdCreative(
   adAccountId: string,
@@ -372,7 +380,6 @@ export async function createAdCreative(
   igMediaId: string,
   igUserId: string,
   pageId: string,
-  igUsername: string,
   token: string
 ): Promise<{ id: string }> {
   const res = await fetch(`${GRAPH_API}/act_${adAccountId}/adcreatives`, {
@@ -383,12 +390,6 @@ export async function createAdCreative(
       object_id: pageId,
       instagram_user_id: igUserId,
       source_instagram_media_id: igMediaId,
-      call_to_action: {
-        type: "LEARN_MORE",
-        value: {
-          link: `https://www.instagram.com/${igUsername}/`,
-        },
-      },
       access_token: token,
     }),
   });
@@ -425,6 +426,71 @@ export async function createAd(
     throw new Error(`Failed to create ad: ${error}`);
   }
   return res.json();
+}
+
+// ---------------------------------------------------------------------------
+// Ad Verification (Debug)
+// ---------------------------------------------------------------------------
+
+export interface AdVerification {
+  id: string;
+  name: string;
+  status: string;
+  effective_status: string;
+  ad_review_feedback?: Record<string, unknown>;
+  creative?: {
+    id: string;
+    source_instagram_media_id?: string;
+    effective_instagram_media_id?: string;
+    call_to_action_type?: string;
+  };
+}
+
+/**
+ * Fetch an ad's full status to verify it was created correctly.
+ * Use this after createAd() to confirm the ad is valid and visible.
+ */
+export async function verifyAd(
+  adId: string,
+  token: string
+): Promise<AdVerification> {
+  const res = await fetch(
+    `${GRAPH_API}/${adId}?fields=id,name,status,effective_status,ad_review_feedback,creative{id,source_instagram_media_id,effective_instagram_media_id,call_to_action_type}&access_token=${token}`
+  );
+  if (!res.ok) {
+    const error = await res.text();
+    throw new Error(`Failed to verify ad: ${error}`);
+  }
+  return res.json();
+}
+
+/**
+ * Check if an Instagram post is eligible for boosting.
+ * Must be called BEFORE creating an ad creative.
+ */
+export async function checkBoostEligibility(
+  igMediaId: string,
+  token: string
+): Promise<{ eligible: boolean; reason?: string }> {
+  const res = await fetch(
+    `${GRAPH_API}/${igMediaId}?fields=boost_eligibility_info&access_token=${token}`
+  );
+  if (!res.ok) {
+    return { eligible: false, reason: "Failed to check eligibility" };
+  }
+  const data = await res.json();
+  const info = data.boost_eligibility_info;
+  if (!info) {
+    return { eligible: true }; // No restriction info = assume eligible
+  }
+  // boost_eligibility_info.eligible is a boolean when present
+  if (info.eligible === false) {
+    return {
+      eligible: false,
+      reason: info.ineligible_reason ?? "Post is not eligible for boosting",
+    };
+  }
+  return { eligible: true };
 }
 
 // ---------------------------------------------------------------------------

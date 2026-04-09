@@ -178,6 +178,7 @@ export async function POST() {
       settings.targetRadiusMiles,
       lat,
       lng,
+      pageId,
       token
     );
 
@@ -187,7 +188,6 @@ export async function POST() {
       bestPost.id,
       igUserId,
       pageId,
-      "mr.asadshah",
       token
     );
 
