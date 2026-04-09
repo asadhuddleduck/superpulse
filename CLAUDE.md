@@ -1,4 +1,7 @@
-# SuperPulse — AI-Powered Instagram Post Boosting for Local Businesses
+# SuperPulse — Smart Instagram Post Boosting for Local Businesses
+
+## Version
+**Current: v7** — Meta campaign naming uses this (e.g. "SuperPulse v7 | caption"). Bump this number when shipping significant improvements to the boost engine, scoring algorithm, or campaign creation flow. Update it in `src/app/api/boost/create/route.ts` and `src/app/api/cron/scan-posts/route.ts`.
 
 ## Product
 SuperPulse automatically boosts Instagram posts for local businesses using AI. The business owner just posts on Instagram — SuperPulse decides what to boost, where (radius targeting), when, how much budget, and when to pause/adjust. 100% automated.

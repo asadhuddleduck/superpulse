@@ -21,7 +21,8 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { postId, dailyBudget = 5, radiusMiles = 5, lat, lng } = body;
+    const { postId, caption = "", dailyBudget = 5, radiusMiles = 5, lat, lng } = body;
+    const shortCaption = caption.replace(/[^\w\s]/g, "").trim().split(/\s+/).slice(0, 5).join(" ") || postId.slice(-6);
 
     if (!postId) {
       return NextResponse.json(
@@ -75,14 +76,14 @@ export async function POST(request: NextRequest) {
     // Create campaign → ad set → ad, all in PAUSED state
     const campaign = await createCampaign(
       adAccountId,
-      `SuperPulse Boost — ${postId.slice(-6)}`,
+      `SuperPulse v7 | ${shortCaption}`,
       token
     );
 
     const adSet = await createAdSet(
       campaign.id,
       adAccountId,
-      `Local Reach — ${radiusMiles}mi radius`,
+      `${radiusMiles}mi · £${dailyBudget}/day`,
       dailyBudget,
       radiusMiles,
       targetLat,
@@ -94,7 +95,7 @@ export async function POST(request: NextRequest) {
     const igUserId = pageWithIG.instagram_business_account!.id;
     const creative = await createAdCreative(
       adAccountId,
-      `Creative — ${postId.slice(-6)}`,
+      `SP Creative | ${shortCaption}`,
       postId,
       igUserId,
       pageId,
@@ -104,7 +105,7 @@ export async function POST(request: NextRequest) {
     const ad = await createAd(
       adSet.id,
       adAccountId,
-      `Boost — ${postId.slice(-6)}`,
+      `SP Ad | ${shortCaption}`,
       creative.id,
       token
     );

@@ -79,6 +79,7 @@ export default function PostCard({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           postId: post.id,
+          caption: post.caption,
           dailyBudget: budget,
           radiusMiles: radius,
         }),
