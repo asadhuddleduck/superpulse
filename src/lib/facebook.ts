@@ -117,6 +117,24 @@ export async function fetchPagesWithIG(
   return data.data ?? [];
 }
 
+/**
+ * Fetch the IG Business Account username (needed for profile visit CTA link).
+ */
+export async function fetchIGUsername(
+  igUserId: string,
+  token: string
+): Promise<string> {
+  const res = await fetch(
+    `${GRAPH_API}/${igUserId}?fields=username&access_token=${token}`
+  );
+  if (!res.ok) {
+    const error = await res.text();
+    throw new Error(`Failed to fetch IG username: ${error}`);
+  }
+  const data = await res.json();
+  return data.username;
+}
+
 // ---------------------------------------------------------------------------
 // Instagram Media
 // ---------------------------------------------------------------------------
@@ -231,7 +249,14 @@ export async function fetchAdAccounts(
 // ---------------------------------------------------------------------------
 
 /**
- * Create a campaign in PAUSED state with OUTCOME_AWARENESS objective.
+ * Create a campaign in PAUSED state with OUTCOME_TRAFFIC objective.
+ *
+ * OUTCOME_TRAFFIC + VISIT_INSTAGRAM_PROFILE ad set = "boost IG post to drive
+ * profile visits". This matches the working "SuperPulse Test 1" campaign
+ * created via Ads Manager UI (verified 9 Apr 2026).
+ *
+ * OUTCOME_ENGAGEMENT + POST_ENGAGEMENT + ON_POST does NOT work — ads return
+ * success from the API but never appear in Ads Manager.
  */
 export async function createCampaign(
   adAccountId: string,
@@ -243,7 +268,7 @@ export async function createCampaign(
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       name,
-      objective: "OUTCOME_ENGAGEMENT",
+      objective: "OUTCOME_TRAFFIC",
       status: "PAUSED",
       special_ad_categories: [],
       is_adset_budget_sharing_enabled: false,
@@ -312,7 +337,14 @@ export async function updateCampaignStatus(
 
 /**
  * Create an ad set with radius-based geo targeting.
- * dailyBudget is in GBP (e.g. 5.00) — converted to cents for Meta API.
+ * dailyBudget is in GBP (e.g. 5.00) — converted to pence for Meta API.
+ *
+ * Uses VISIT_INSTAGRAM_PROFILE + INSTAGRAM_PROFILE destination to drive
+ * profile visits. This is the exact config from the working "SuperPulse
+ * Test 1" campaign (verified 9 Apr 2026).
+ *
+ * DO NOT use POST_ENGAGEMENT + ON_POST — those ads silently fail to appear
+ * in Ads Manager even though the API returns success IDs.
  */
 export async function createAdSet(
   campaignId: string,
@@ -331,10 +363,10 @@ export async function createAdSet(
     body: JSON.stringify({
       name,
       campaign_id: campaignId,
-      daily_budget: Math.round(dailyBudget * 100), // cents
+      daily_budget: Math.round(dailyBudget * 100), // pence
       billing_event: "IMPRESSIONS",
-      optimization_goal: "POST_ENGAGEMENT",
-      destination_type: "ON_POST",
+      optimization_goal: "VISIT_INSTAGRAM_PROFILE",
+      destination_type: "INSTAGRAM_PROFILE",
       promoted_object: { page_id: pageId },
       bid_strategy: "LOWEST_COST_WITHOUT_CAP",
       targeting: {
@@ -369,17 +401,22 @@ export async function createAdSet(
  * Create an ad creative using an existing IG post.
  * Uses source_instagram_media_id (NOT object_story_id which is for FB posts).
  *
- * NOTE: Do NOT pass call_to_action here. When the ad set uses
- * destination_type=INSTAGRAM_PROFILE, Meta auto-assigns the
- * "Visit Instagram Profile" CTA. Sending an explicit CTA (e.g.
- * LEARN_MORE with a link) conflicts with the destination type and
- * causes the ad to be malformed / invisible in Ads Manager.
+ * CRITICAL FIELDS (verified against working "SuperPulse Test 1" 9 Apr 2026):
+ * - actor_id (NOT object_id) — the Facebook Page ID that acts as the ad's identity
+ * - instagram_user_id — the IG Business Account ID
+ * - source_instagram_media_id — the IG post to boost
+ * - call_to_action — MUST include type: VIEW_INSTAGRAM_PROFILE with a link to
+ *   the IG profile URL. Without this, ad creation fails with "website URL required"
+ *
+ * The old approach used object_id and omitted the CTA — this caused "website URL
+ * required" errors when attaching the creative to an ad.
  */
 export async function createAdCreative(
   adAccountId: string,
   name: string,
   igMediaId: string,
   igUserId: string,
+  igUsername: string,
   pageId: string,
   token: string
 ): Promise<{ id: string }> {
@@ -388,9 +425,15 @@ export async function createAdCreative(
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       name,
-      object_id: pageId,
+      actor_id: pageId,
       instagram_user_id: igUserId,
       source_instagram_media_id: igMediaId,
+      call_to_action: {
+        type: "VIEW_INSTAGRAM_PROFILE",
+        value: {
+          link: `https://www.instagram.com/${igUsername}/`,
+        },
+      },
       access_token: token,
     }),
   });

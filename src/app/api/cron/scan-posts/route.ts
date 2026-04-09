@@ -3,6 +3,7 @@ import { getTokenCookie } from "@/lib/auth";
 import {
   fetchPagesWithIG,
   fetchIGMedia,
+  fetchIGUsername,
   fetchAdAccounts,
   createCampaign,
   createAdSet,
@@ -182,11 +183,15 @@ export async function POST() {
       token
     );
 
+    // Fetch IG username for the VIEW_INSTAGRAM_PROFILE CTA link
+    const igUsername = await fetchIGUsername(igUserId, token);
+
     const creative = await createAdCreative(
       adAccountId,
       `${campaignName}-Creative`,
       bestPost.id,
       igUserId,
+      igUsername,
       pageId,
       token
     );

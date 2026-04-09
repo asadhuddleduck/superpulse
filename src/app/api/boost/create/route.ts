@@ -3,6 +3,7 @@ import { getTokenCookie } from "@/lib/auth";
 import {
   fetchPagesWithIG,
   fetchAdAccounts,
+  fetchIGUsername,
   createCampaign,
   createAdSet,
   createAdCreative,
@@ -94,14 +95,18 @@ export async function POST(request: NextRequest) {
 
     const igUserId = pageWithIG.instagram_business_account!.id;
 
+    // Fetch IG username for the VIEW_INSTAGRAM_PROFILE CTA link
+    const igUsername = await fetchIGUsername(igUserId, token);
+
     // 2-step creative flow: create AdCreative first, then Ad referencing it
-    // NOTE: No call_to_action needed — destination_type=INSTAGRAM_PROFILE
-    // on the ad set causes Meta to auto-assign "Visit Instagram Profile" CTA.
+    // MUST include call_to_action with VIEW_INSTAGRAM_PROFILE + IG profile link.
+    // Without the CTA, ad creation fails with "website URL required" error.
     const creative = await createAdCreative(
       adAccountId,
       `SuperPulse v7 Creative | ${shortCaption}`,
       postId,
       igUserId,
+      igUsername,
       pageId,
       token
     );
