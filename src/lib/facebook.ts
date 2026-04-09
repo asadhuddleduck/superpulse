@@ -10,7 +10,6 @@ export const FB_SCOPES = [
   "instagram_basic",
   "instagram_manage_insights",
   "pages_read_engagement",
-  "pages_read_user_content",
   "pages_show_list",
   "pages_manage_ads",
   "email",
