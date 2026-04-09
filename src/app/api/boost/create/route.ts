@@ -91,14 +91,22 @@ export async function POST(request: NextRequest) {
       token
     );
 
-    // 2-step creative flow: create AdCreative first, then Ad referencing it
+    // Get IG username for the profile visit CTA link
     const igUserId = pageWithIG.instagram_business_account!.id;
+    const igProfileRes = await fetch(
+      `https://graph.facebook.com/v25.0/${igUserId}?fields=username&access_token=${token}`
+    );
+    const igProfile = igProfileRes.ok ? await igProfileRes.json() : { username: "instagram" };
+    const igUsername = igProfile.username || "instagram";
+
+    // 2-step creative flow: create AdCreative first, then Ad referencing it
     const creative = await createAdCreative(
       adAccountId,
-      `SP Creative | ${shortCaption}`,
+      `SuperPulse v7 Creative | ${shortCaption}`,
       postId,
       igUserId,
       pageId,
+      igUsername,
       token
     );
 

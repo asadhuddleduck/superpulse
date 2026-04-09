@@ -372,6 +372,7 @@ export async function createAdCreative(
   igMediaId: string,
   igUserId: string,
   pageId: string,
+  igUsername: string,
   token: string
 ): Promise<{ id: string }> {
   const res = await fetch(`${GRAPH_API}/act_${adAccountId}/adcreatives`, {
@@ -382,6 +383,12 @@ export async function createAdCreative(
       object_id: pageId,
       instagram_user_id: igUserId,
       source_instagram_media_id: igMediaId,
+      call_to_action: {
+        type: "LEARN_MORE",
+        value: {
+          link: `https://www.instagram.com/${igUsername}/`,
+        },
+      },
       access_token: token,
     }),
   });
