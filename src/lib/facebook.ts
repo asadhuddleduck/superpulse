@@ -243,7 +243,7 @@ export async function createCampaign(
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       name,
-      objective: "OUTCOME_TRAFFIC",
+      objective: "OUTCOME_ENGAGEMENT",
       status: "PAUSED",
       special_ad_categories: [],
       is_adset_budget_sharing_enabled: false,
@@ -333,7 +333,8 @@ export async function createAdSet(
       campaign_id: campaignId,
       daily_budget: Math.round(dailyBudget * 100), // cents
       billing_event: "IMPRESSIONS",
-      optimization_goal: "VISIT_INSTAGRAM_PROFILE",
+      optimization_goal: "POST_ENGAGEMENT",
+      destination_type: "ON_POST",
       promoted_object: { page_id: pageId },
       bid_strategy: "LOWEST_COST_WITHOUT_CAP",
       targeting: {
