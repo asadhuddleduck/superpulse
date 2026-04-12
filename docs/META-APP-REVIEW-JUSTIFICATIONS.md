@@ -1,6 +1,6 @@
 # Meta App Review — Permission Justifications
 
-These are the 7 permission justification texts for Superpulse's Meta App Review submission. Paste each one into the corresponding permission's "Tell us how you'll use this permission" field on the App Review form.
+These are the 6 permission justification texts for Superpulse's Meta App Review submission. Paste each one into the corresponding permission's "Tell us how you'll use this permission" field on the App Review form.
 
 Each justification is self-contained and written for Meta's review team. They should be submitted alongside the screencast demo.
 
@@ -26,17 +26,7 @@ The reporting data also feeds back into Superpulse's recommendation engine. By r
 
 ---
 
-## 3. `instagram_manage_insights` (Advanced Access)
-
-Superpulse's core intelligence comes from understanding which Instagram posts are worth boosting before any money is spent. To make that determination, the app analyses organic engagement signals on every post — including likes, comments, saves, video view duration, skip rate, and follower demographic breakdowns. These signals are only available through the Instagram Insights API, which requires this permission.
-
-This is the foundation of our scoring algorithm. Rather than blindly boosting every post a business publishes, Superpulse identifies which content is already resonating organically with the local audience and recommends only those posts for boosting. This saves business owners money by avoiding spend on content that is unlikely to perform, and maximises the return on every pound spent.
-
-We request Advanced Access because the app reads insights across multiple Instagram Business accounts belonging to different local business customers. Each business authorises Superpulse to access their account's insights data during onboarding, and the app reviews new posts to inform boosting recommendations on their behalf.
-
----
-
-## 4. `pages_read_engagement` (Standard)
+## 3. `pages_read_engagement` (Standard)
 
 Superpulse reads basic engagement data from Facebook Pages connected to our customers' Instagram Business accounts — including post likes, comments, post type (image, video, carousel), captions, and publication timestamps. This data forms the foundation of the content scoring system that determines which posts are candidates for boosting.
 
@@ -46,7 +36,7 @@ Without this permission, the app would lose access to fundamental content metada
 
 ---
 
-## 5. `pages_show_list` (Standard)
+## 4. `pages_show_list` (Standard)
 
 During onboarding, a new business owner logs into Superpulse with their Facebook account and needs to select which Facebook Page (and its connected Instagram Business account) they want Superpulse to manage. This permission allows the app to retrieve the list of Pages the user administers, so we can present them in a simple selection screen.
 
@@ -56,7 +46,7 @@ This is a one-time step during account setup. Once the user selects their Page, 
 
 ---
 
-## 6. `pages_manage_ads` (Standard)
+## 5. `pages_manage_ads` (Standard)
 
 Instagram post boosts are created as ad campaigns associated with the Facebook Page linked to the Instagram Business account. This permission allows Superpulse to create and manage those boost campaigns on the Page level, working in conjunction with ads_management to execute the full campaign lifecycle — from creation through to pausing and budget adjustments.
 
@@ -66,10 +56,10 @@ This permission is essential for the seamless operation of post boosting. Busine
 
 ---
 
-## 7. `business_management` (Advanced Access)
+## 6. `pages_read_user_content` (Standard)
 
-When a business owner connects their account to Superpulse, the app needs to identify which Business Manager and ad account to use for running boost campaigns. Many business owners have their Facebook Page and Instagram account sitting inside a Meta Business Manager — either one they created themselves, or one set up by a previous agency or marketing partner. This permission allows Superpulse to access the user's Business Manager structure to locate and connect the correct ad account.
+Superpulse reads the business owner's own Page content so they can see their Instagram posts inside the Superpulse dashboard and choose which ones to promote. When a local business owner connects their Facebook Page and linked Instagram Business account during onboarding, the app displays a grid of their recent posts alongside basic engagement data, so the owner can review their own content in one place and decide what is worth boosting. This permission is the dependency that makes that view possible — Instagram posts are surfaced through the Page that owns them, and the Graph API requires pages_read_user_content to retrieve the content attached to the user's own Page.
 
-Without business_management, the app cannot programmatically discover which ad accounts are available to the user or determine which one is associated with their selected Page. The user would need to manually find and provide their ad account ID from Business Manager settings — a step that causes significant friction and drop-off during onboarding, especially for non-technical business owners who may not even know what an ad account ID is.
+Without this permission, the dashboard cannot show the business owner their own posts, and the entire content-selection step of the product breaks down. The owner would have no way to review what they have published, compare recent posts, or pick a candidate to boost — they would be forced to flip back and forth between Instagram and Superpulse, defeating the purpose of a single dashboard built for non-technical local business owners who do not want to navigate Meta's native tools.
 
-We request Advanced Access because Superpulse serves multiple local businesses, each with their own Business Manager configuration. The app must be able to access the Business Manager context for every customer who authorises it, in order to correctly set up and manage campaigns on their behalf.
+Superpulse only reads content that belongs to the authenticated user's own Page. The app does not read Page content belonging to other users, and the boost flow keeps the business owner in full control — they select which of their own posts to promote, set budget and targeting, and each campaign is created in a paused state before the owner reviews and activates it.

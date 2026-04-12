@@ -31,7 +31,7 @@ SuperPulse automatically boosts Instagram posts for local businesses using AI. T
 ## Existing Code to Reuse
 - `../client-dashboards/src/lib/meta-api.ts` — Meta API wrapper (GET operations, rate limiting, pagination, backoff). Needs POST/PATCH methods added for write operations.
 - `../client-dashboards/src/lib/db.ts` — Turso lazy proxy pattern (copy as-is)
-- `../client-onboarding/` — Facebook OAuth flow (expand scope from business_management to ads_management + instagram_manage_insights + pages_manage_ads)
+- `../client-onboarding/` — Facebook OAuth flow (expand scope from business_management to ads_management + pages_manage_ads)
 - `../landing-page/src/lib/stripe.ts` — Stripe lazy proxy (copy as-is)
 - `../attribution-tracker/public/t.js` — Tracking pixel pattern (auto-discovers endpoint from script src)
 - `../attribution-tracker/src/lib/meta-capi.ts` — Meta CAPI (parameterize for per-tenant tokens)
@@ -42,12 +42,12 @@ SuperPulse automatically boosts Instagram posts for local businesses using AI. T
 - `ads_read` (Standard)
 - `pages_manage_ads` (Standard)
 - `pages_read_engagement` (Standard)
-- `instagram_manage_insights` (Advanced — replaces deprecated `instagram_basic` since Jan 2025)
-- `business_management` (Advanced — previously rejected, needs resubmission)
-- `pages_show_list` (Standard — dependency for ads_management and business_management)
+- `instagram_basic` (Standard)
+- `pages_show_list` (Standard — dependency for ads_management)
 - `email` (Standard — user's email for notifications)
 
-**CRITICAL:** `instagram_basic` is DEPRECATED as of Jan 2025. All code must use `instagram_manage_insights` + `pages_read_engagement` instead.
+**REMOVED (9 Apr 2026):** `business_management` — no Business Manager API calls in our code.
+**REMOVED (12 Apr 2026):** `instagram_manage_insights` — deferred to Phase 2. Only `ads_management` requires Advanced Access now.
 
 **LOGIN APPROACH:** Facebook Login (NOT Instagram Business Login). Instagram Business Login does not support the Marketing API — you cannot create ad campaigns with IG Business Login tokens. The onboarding OAuth flow must use Facebook Login, requesting all permissions in a single consent screen.
 
@@ -101,7 +101,7 @@ See `docs/API-FEASIBILITY.md` for the definitive technical assessment (5-agent r
 - **No time-series engagement data** — API returns cumulative totals only. Must build polling + snapshot system for velocity.
 - **Shares unreliable** — DM shares never exposed. Drop from velocity formula. Use: likes + comments×3 + saves×4.
 - **Copyright music: try-and-fail only** — Cannot pre-detect for app-uploaded posts. Create ads in PAUSED state → wait for review → activate if clean.
-- **`instagram_basic` is DEPRECATED** (Jan 2025) — Use `instagram_manage_insights` instead.
+- **`instagram_manage_insights` DEFERRED to Phase 2** (12 Apr 2026) — using `instagram_basic` for now (not deprecated on Facebook Login path).
 - **New signals available (Dec 2025):** `ig_reels_skip_rate`, `ig_reels_avg_watch_time`, `reposts`, `profile_visits` per ad.
 - **Rate limits OK:** ~13% of 200 calls/hr budget at peak. Not a bottleneck.
 
@@ -215,7 +215,7 @@ Ahmed-type: Local restaurant/takeaway owner, 2-5K followers, posts 3-4x/week, £
 - `docs/BUSINESS-PLAN-V1.md` — First draft business plan from agent swarm
 - `docs/ARCHITECTURE.md` — Technical architecture (schema, system flows, build plan). Note: scoring formula in this doc is superseded by API-FEASIBILITY.md.
 - `docs/PRIVACY-POLICY.md` — Privacy policy (written, not deployed yet). Will become /privacy route.
-- `docs/META-APP-REVIEW-JUSTIFICATIONS.md` — 7 permission justification texts ready to paste into Meta submission form.
+- `docs/META-APP-REVIEW-JUSTIFICATIONS.md` — 6 permission justification texts ready to paste into Meta submission form.
 - `docs/BRAND-STRATEGY.md` — Brand strategy document
 - `docs/BRAND-KIT.md` — Brand kit with colours, typography, usage rules
 - `brand/logo-mark.jpg` — **THE master logo** (thick SP-style gold bolt on black). All other brand assets derive from this.
@@ -243,7 +243,7 @@ Ahmed-type: Local restaurant/takeaway owner, 2-5K followers, posts 3-4x/week, £
 - **App Icon:** Uploaded (gold SP bolt on black — from brand/logo-mark.jpg)
 - **Category:** Business and pages
 - **Domain:** superpulse.io (on Cloudflare — zone ID: 462b291abeab6beb2d5373a95f21fec2, NS: cartman.ns.cloudflare.com + jill.ns.cloudflare.com)
-- **Permissions configured:** ads_management, ads_read, business_management, instagram_manage_insights, pages_read_engagement, pages_show_list, pages_manage_ads, email — all "Ready for testing"
+- **Permissions configured:** ads_management, ads_read, instagram_basic, pages_read_engagement, pages_show_list, pages_manage_ads, email — all "Ready for testing"
 - **Test user:** Linda Faegdejcibfjaj Alisonberg (ID: 122098086860816797)
 - **Initial API calls:** All 7 permissions tested via Graph API Explorer (4 Apr 2026)
 
@@ -253,6 +253,6 @@ Ahmed-type: Local restaurant/takeaway owner, 2-5K followers, posts 3-4x/week, £
 - **App icon:** DONE (uploaded)
 - **Category:** DONE (Business and pages)
 - **Privacy policy URL:** NOT DONE (written locally at docs/PRIVACY-POLICY.md, needs deploy to live URL)
-- **Permissions needing Advanced Access (App Review):** ads_management, instagram_manage_insights, business_management
+- **Permissions needing Advanced Access (App Review):** ads_management only
 - **Blockers:** Deploy app + privacy policy to live URL, record screencast, 1,500 API calls in 15 days
 - **Estimated timeline:** 1-2 weeks from deploy to approval

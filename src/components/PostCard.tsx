@@ -26,16 +26,6 @@ interface PostCardProps {
   spend?: number;
 }
 
-interface Insights {
-  views?: number;
-  reach?: number;
-  saved?: number;
-  shares?: number;
-  profile_visits?: number;
-  likes?: number;
-  comments?: number;
-}
-
 function formatNumber(n: number): string {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
   if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
@@ -56,11 +46,6 @@ export default function PostCard({
   const [boostResult, setBoostResult] = useState<string | null>(null);
   const [budget, setBudget] = useState(5);
   const [radius, setRadius] = useState(5);
-
-  // Insights state
-  const [insights, setInsights] = useState<Insights | null>(null);
-  const [insightsOpen, setInsightsOpen] = useState(false);
-  const [insightsLoading, setInsightsLoading] = useState(false);
 
   const imageUrl =
     post.mediaType === "VIDEO" ? post.thumbnailUrl : post.mediaUrl;
@@ -98,28 +83,6 @@ export default function PostCard({
       setBoostResult("Network error — please try again");
     } finally {
       setBoostLoading(false);
-    }
-  }
-
-  async function toggleInsights() {
-    if (insightsOpen) {
-      setInsightsOpen(false);
-      return;
-    }
-    setInsightsOpen(true);
-    if (insights) return; // already fetched
-
-    setInsightsLoading(true);
-    try {
-      const res = await fetch(`/api/instagram/insights/${post.id}?type=${post.mediaType}`);
-      if (res.ok) {
-        const data = await res.json();
-        setInsights(data.metrics ?? {});
-      }
-    } catch {
-      // silently fail — insights are supplementary
-    } finally {
-      setInsightsLoading(false);
     }
   }
 
@@ -175,103 +138,7 @@ export default function PostCard({
         <div className="mt-3 flex items-center gap-4 text-xs text-zinc-500">
           <span>{post.likeCount} likes</span>
           <span>{post.commentsCount} comments</span>
-          <button
-            onClick={toggleInsights}
-            className="ml-auto text-[#1EBA8F] hover:text-[#1EBA8F]/80 transition-colors"
-          >
-            {insightsOpen ? "Hide insights" : "View insights"}
-          </button>
         </div>
-
-        {/* Insights panel */}
-        {insightsOpen && (
-          <div className="mt-3 border-t border-zinc-800 pt-3">
-            {insightsLoading ? (
-              <div className="grid grid-cols-4 gap-2">
-                {[1, 2, 3, 4].map((i) => (
-                  <div key={i} className="h-10 rounded bg-zinc-800 animate-pulse" />
-                ))}
-              </div>
-            ) : insights ? (
-              <div className="grid grid-cols-4 gap-x-2 gap-y-3">
-                <div>
-                  <p className="text-[10px] uppercase tracking-wider text-zinc-500">
-                    Views
-                  </p>
-                  <p className="text-sm font-medium text-white">
-                    {insights.views != null
-                      ? formatNumber(insights.views)
-                      : "-"}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-[10px] uppercase tracking-wider text-zinc-500">
-                    Reach
-                  </p>
-                  <p className="text-sm font-medium text-white">
-                    {insights.reach != null
-                      ? formatNumber(insights.reach)
-                      : "-"}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-[10px] uppercase tracking-wider text-zinc-500">
-                    Saved
-                  </p>
-                  <p className="text-sm font-medium text-white">
-                    {insights.saved != null
-                      ? formatNumber(insights.saved)
-                      : "-"}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-[10px] uppercase tracking-wider text-zinc-500">
-                    Shares
-                  </p>
-                  <p className="text-sm font-medium text-white">
-                    {insights.shares != null
-                      ? formatNumber(insights.shares)
-                      : "-"}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-[10px] uppercase tracking-wider text-zinc-500">
-                    Profile Visits
-                  </p>
-                  <p className="text-sm font-medium text-white">
-                    {insights.profile_visits != null
-                      ? formatNumber(insights.profile_visits)
-                      : "-"}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-[10px] uppercase tracking-wider text-zinc-500">
-                    Likes
-                  </p>
-                  <p className="text-sm font-medium text-white">
-                    {insights.likes != null
-                      ? formatNumber(insights.likes)
-                      : "-"}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-[10px] uppercase tracking-wider text-zinc-500">
-                    Comments
-                  </p>
-                  <p className="text-sm font-medium text-white">
-                    {insights.comments != null
-                      ? formatNumber(insights.comments)
-                      : "-"}
-                  </p>
-                </div>
-              </div>
-            ) : (
-              <p className="text-xs text-zinc-500">
-                Insights unavailable for this post
-              </p>
-            )}
-          </div>
-        )}
 
         {/* Boost metrics (when already boosted) */}
         {isBoosted && (

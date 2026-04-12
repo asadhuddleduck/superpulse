@@ -13,16 +13,17 @@ One permission requires Advanced Access (App Review) before we can serve real cu
 | Permission | Access Level | What it does for us |
 |---|---|---|
 | `ads_management` | **Advanced** | Creates and manages boost campaigns. This IS the product. |
-| `instagram_manage_insights` | Standard | Reads post-level engagement data (views, reach, saves) for scoring |
 | `instagram_basic` | Standard | Fetches IG media list and profile data. NOT deprecated (Facebook Login path). |
 | `pages_read_user_content` | Standard | Dependency of instagram_basic — required for IG media access |
-| `pages_read_engagement` | Standard | Dependency of ads_management + instagram_manage_insights |
+| `pages_read_engagement` | Standard | Dependency of ads_management |
 | `pages_show_list` | Standard | Discovers user's Pages during onboarding |
 | `pages_manage_ads` | Standard | Page-level ad association (kept for safety) |
 | `ads_read` | Standard | Ad Insights API for campaign performance |
 | `email` | Standard | User email for dashboard + notifications |
 
-**REMOVED (9 Apr 2026):** `business_management` — no Business Manager API calls in our code. /me/adaccounts works with ads_management. Removing drops Advanced Access permissions from 3 to 1.
+**REMOVED (9 Apr 2026):** `business_management` — no Business Manager API calls in our code. /me/adaccounts works with ads_management.
+
+**REMOVED (12 Apr 2026):** `instagram_manage_insights` — deferred to Phase 2. Only `ads_management` requires Advanced Access now.
 
 ## App Review Safety Strategy
 
@@ -98,7 +99,6 @@ The Instagram Graph API `/{ig-user-id}/media` endpoint returns error #10 ("Appli
 - [ ] Privacy policy live at superpulse.io/privacy
 - [ ] Your account can log in and see real data (Pages, ad accounts)
 - [x] "Boost Post" flow exists in the UI (for ads_management) — BUILT
-- [x] Post insights UI structure exists (for instagram_manage_insights) — BUILT (data populates after approval)
 - [x] Ad account / business assets shown in the UI (for business_management) — BUILT AND WORKING
 
 ### Screencast 1: ads_management
@@ -113,18 +113,7 @@ The Instagram Graph API `/{ig-user-id}/media` endpoint returns error #10 ("Appli
 
 **What Meta is looking for:** The app creates and manages ad campaigns on behalf of the user who granted permission. Clear consent, clear action, clear result.
 
-### Screencast 2: instagram_manage_insights
-
-**Flow to record:**
-1. Already logged in from screencast 1 (or show quick login)
-2. Dashboard shows connected IG accounts with usernames (profile data works)
-3. Show the insights UI panel on a PostCard — the structure is built (impressions, reach, saved, profile_visits)
-4. Show the "View insights" button and how insights data would inform boost recommendations
-5. Add text annotation: "Post-level insights populate once Advanced Access is granted"
-
-**What Meta is looking for:** The app reads Instagram insights to provide value to the user — not just harvesting data, but displaying it meaningfully. Show the UI is built and the data flow is clear. The written justification explains why Advanced Access is needed.
-
-### Screencast 3: business_management (STRONGEST — FULLY WORKING)
+### Screencast 2: business_management (STRONGEST — FULLY WORKING)
 
 **Flow to record:**
 1. Already logged in (or show quick login)
@@ -145,7 +134,8 @@ The Instagram Graph API `/{ig-user-id}/media` endpoint returns error #10 ("Appli
 | **IG post grid** | ✅ WORKING | Fixed by adding instagram_basic scope. 25 posts load with images + likes |
 | **Post-level insights data** | ✅ WORKING | views + reach + saved + shares showing (impressions deprecated, replaced with views) |
 | **Campaign + AdSet creation** | ✅ WORKING | Fixed: is_adset_budget_sharing_enabled + bid_strategy required params |
-| **Ad Creative (IG post as ad)** | ⚠️ REQUIRES LIVE MODE | source_instagram_media_id blocked in dev mode. Works after app published |
+| **Ad Creative (IG post as ad)** | ✅ WORKING | App now in Live mode. Creative creation works with actor_id + VIEW_INSTAGRAM_PROFILE CTA |
+| **Ad object creation** | ⚠️ BLOCKED BY META SECURITY HOLD | Error 31/3858385 on ALL ad accounts. Bug filed: ID 912378164938739. Code is correct — matches working Test 1. |
 
 ## Pre-Deployment Checklist (added 9 Apr 2026)
 
@@ -164,7 +154,9 @@ Before deploying to superpulse.io:
 - [ ] Add `superpulse.io` to Meta App Dashboard → App Domains
 - [x] Swap default Next.js favicon for SuperPulse bolt logo — DONE
 - [ ] Switch app from Development to Live mode in Meta App Dashboard (REQUIRED for ad creative creation using IG posts)
-- [ ] Clean up orphaned test campaigns in Ads Manager (2-3 PAUSED campaigns from testing)
+- [ ] Clean up orphaned test campaigns in Ads Manager (~10 PAUSED campaigns from testing)
+- [ ] Resolve Meta security hold (error 31/3858385) — bug report filed ID 912378164938739
+- [ ] Workaround: test with new ad account or new IG business account if hold persists
 
 ## After Approval
 
@@ -190,4 +182,4 @@ Once Advanced Access is granted:
 
 ## Justification Texts
 
-See `META-APP-REVIEW-JUSTIFICATIONS.md` for the 7 permission justification texts. These were written for restaurants specifically — **update to say "local businesses" instead of "restaurants"** before submitting.
+See `META-APP-REVIEW-JUSTIFICATIONS.md` for the 6 permission justification texts. These were written for restaurants specifically — **update to say "local businesses" instead of "restaurants"** before submitting.

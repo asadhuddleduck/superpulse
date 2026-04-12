@@ -8,7 +8,6 @@ export const FB_SCOPES = [
   "ads_management",
   "ads_read",
   "instagram_basic",
-  "instagram_manage_insights",
   "pages_read_engagement",
   "pages_show_list",
   "pages_manage_ads",
@@ -186,54 +185,6 @@ export async function fetchIGMedia(
   }
   const data = await res.json();
   return data.data ?? [];
-}
-
-// ---------------------------------------------------------------------------
-// Media Insights
-// ---------------------------------------------------------------------------
-
-export interface MediaInsight {
-  name: string;
-  period: string;
-  values: { value: number }[];
-  title: string;
-  description: string;
-  id: string;
-}
-
-/**
- * Fetch insights for a specific media object.
- * Uses media-type-appropriate metrics (impressions deprecated April 2025, use views).
- */
-export async function fetchMediaInsights(
-  mediaId: string,
-  mediaType: "IMAGE" | "VIDEO" | "CAROUSEL_ALBUM",
-  token: string
-): Promise<MediaInsight[]> {
-  // Different metrics per media type — requesting incompatible metrics causes hard errors
-  const metrics =
-    mediaType === "VIDEO"
-      ? "views,reach,saved,shares,likes,comments"
-      : "views,reach,saved,shares,profile_visits,likes,comments";
-
-  const res = await fetch(
-    `${GRAPH_API}/${mediaId}/insights?metric=${metrics}&access_token=${token}`
-  );
-  if (res.ok) {
-    const data = await res.json();
-    return data.data ?? [];
-  }
-
-  // If the specific set fails, try minimal universal set
-  const fallbackRes = await fetch(
-    `${GRAPH_API}/${mediaId}/insights?metric=reach,saved&access_token=${token}`
-  );
-  if (fallbackRes.ok) {
-    const data = await fallbackRes.json();
-    return data.data ?? [];
-  }
-
-  return [];
 }
 
 // ---------------------------------------------------------------------------
