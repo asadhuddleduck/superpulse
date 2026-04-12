@@ -32,6 +32,8 @@ interface Insights {
   saved?: number;
   shares?: number;
   profile_visits?: number;
+  likes?: number;
+  comments?: number;
 }
 
 function formatNumber(n: number): string {
@@ -191,7 +193,7 @@ export default function PostCard({
                 ))}
               </div>
             ) : insights ? (
-              <div className="grid grid-cols-4 gap-2">
+              <div className="grid grid-cols-4 gap-x-2 gap-y-3">
                 <div>
                   <p className="text-[10px] uppercase tracking-wider text-zinc-500">
                     Views
@@ -229,6 +231,36 @@ export default function PostCard({
                   <p className="text-sm font-medium text-white">
                     {insights.shares != null
                       ? formatNumber(insights.shares)
+                      : "-"}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-[10px] uppercase tracking-wider text-zinc-500">
+                    Profile Visits
+                  </p>
+                  <p className="text-sm font-medium text-white">
+                    {insights.profile_visits != null
+                      ? formatNumber(insights.profile_visits)
+                      : "-"}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-[10px] uppercase tracking-wider text-zinc-500">
+                    Likes
+                  </p>
+                  <p className="text-sm font-medium text-white">
+                    {insights.likes != null
+                      ? formatNumber(insights.likes)
+                      : "-"}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-[10px] uppercase tracking-wider text-zinc-500">
+                    Comments
+                  </p>
+                  <p className="text-sm font-medium text-white">
+                    {insights.comments != null
+                      ? formatNumber(insights.comments)
                       : "-"}
                   </p>
                 </div>
