@@ -83,23 +83,15 @@ This is not deception — it's the MVP flow. The automation layer sits on top of
 - Start from a **logged-out state** — reviewers want the full login flow
 - Show the **full flow** from login to the permission being used
 
-### Known Limitation (9 Apr 2026)
+### Prerequisites (all completed as of 12 Apr 2026)
 
-The Instagram Graph API `/{ig-user-id}/media` endpoint returns error #10 ("Application does not have permission") in development mode even with correct scopes. This blocks: fetching IG posts and post-level insights. This is a known Meta restriction — Instagram API requires App Review completion before accessing live data, unlike the Marketing API which works in dev mode.
-
-**What works without App Review:** Dashboard (Pages, IG accounts, ad accounts), boost campaign creation (PAUSED state), ad insights, IG profile data (username, followers).
-
-**What's blocked:** IG post listing, post-level insights (impressions, reach, saved, profile_visits).
-
-**Screencast strategy:** Show what works. Include a note in the App Review submission explaining the data dependency.
-
-### Prerequisites (before recording)
-
-- [ ] App deployed to superpulse.io (production)
-- [ ] Privacy policy live at superpulse.io/privacy
-- [ ] Your account can log in and see real data (Pages, ad accounts)
-- [x] "Boost Post" flow exists in the UI (for ads_management) — BUILT
-- [x] Ad account / business assets shown in the UI (for business_management) — BUILT AND WORKING
+- [x] App deployed to superpulse.io (production) — LIVE
+- [x] Privacy policy live at superpulse.io/privacy — LIVE
+- [x] App in Live mode (not Development) — DONE
+- [x] Account can log in and see real data (Pages, IG, ad accounts) — WORKING
+- [x] "Boost Post" flow works end-to-end (campaign + ad set + creative + ad) — VERIFIED 11 Apr
+- [x] Meta security hold cleared (error 31/3858385 resolved via Start Authentication) — CLEARED 11 Apr
+- [x] Screencast recorded (2:20, ads_management flow) — DONE 12 Apr
 
 ### Screencast 1: ads_management
 
@@ -113,50 +105,20 @@ The Instagram Graph API `/{ig-user-id}/media` endpoint returns error #10 ("Appli
 
 **What Meta is looking for:** The app creates and manages ad campaigns on behalf of the user who granted permission. Clear consent, clear action, clear result.
 
-### Screencast 2: business_management (STRONGEST — FULLY WORKING)
+## Current Status (updated 12 Apr 2026)
 
-**Flow to record:**
-1. Already logged in (or show quick login)
-2. Dashboard auto-discovers 10+ Pages with linked IG accounts (real data, real names)
-3. Dashboard shows 25 ad accounts with names, IDs, currencies, active/inactive status
-4. Show that the user didn't manually enter any IDs — business_management discovered everything
-5. If possible, show the Settings page with the selected ad account
+| Feature | Status |
+|---|---|
+| **Boost button + form** | ✅ WORKING | 
+| **IG post grid** | ✅ WORKING (25 posts, IG account dropdown selector) |
+| **Dashboard (all pages + ad accounts)** | ✅ WORKING |
+| **Campaign + AdSet + Creative + Ad creation** | ✅ WORKING (verified 11 Apr) |
+| **Meta security hold** | ✅ CLEARED (via Start Authentication 11 Apr) |
+| **App mode** | ✅ LIVE |
+| **Screencast recorded** | ✅ DONE (2:20, ads_management) |
+| **Post insights panel** | REMOVED (instagram_manage_insights deferred to Phase 2) |
 
-**What Meta is looking for:** The app uses business_management to discover and connect the correct business assets (Pages, IG accounts, ad accounts) — making onboarding seamless for business owners who don't know their account IDs.
-
-## UI Gaps (Status as of 9 Apr 2026)
-
-| Gap | Status | Notes |
-|---|---|---|
-| **Boost button + form** | ✅ BUILT | PostCard has "Boost This Post" → inline form → /api/boost/create |
-| **Post insights panel** | ✅ BUILT | "View insights" toggle on PostCard, shows impressions/reach/saved/profile_visits |
-| **Ad account display** | ✅ BUILT | Dashboard shows all ad accounts with name/ID/currency/status |
-| **IG post grid** | ✅ WORKING | Fixed by adding instagram_basic scope. 25 posts load with images + likes |
-| **Post-level insights data** | ✅ WORKING | views + reach + saved + shares showing (impressions deprecated, replaced with views) |
-| **Campaign + AdSet creation** | ✅ WORKING | Fixed: is_adset_budget_sharing_enabled + bid_strategy required params |
-| **Ad Creative (IG post as ad)** | ✅ WORKING | App now in Live mode. Creative creation works with actor_id + VIEW_INSTAGRAM_PROFILE CTA |
-| **Ad object creation** | ⚠️ BLOCKED BY META SECURITY HOLD | Error 31/3858385 on ALL ad accounts. Bug filed: ID 912378164938739. Code is correct — matches working Test 1. |
-
-## Pre-Deployment Checklist (added 9 Apr 2026)
-
-Before deploying to superpulse.io:
-
-- [x] `instagram_basic` added to Meta App permissions AND OAuth scopes
-- [x] Settings page field name mismatch fixed (camelCase throughout)
-- [x] PostCard property name mismatch fixed (camelCase matching API)
-- [x] Insights API handles Reels gracefully (fallback metric set)
-- [x] Dashboard filtered to single business view (Asad Shah Page + SuperPulse ad account)
-- [x] All forbidden language scrubbed from UI
-- [x] Privacy policy duplicate "Last updated" fixed
-- [x] Build passes clean
-- [ ] Set `NEXT_PUBLIC_BASE_URL=https://superpulse.io` in Vercel env vars (BLOCKER — without this, server-side fetches fail)
-- [ ] Add `https://superpulse.io/api/auth/callback/facebook` to Meta App Dashboard → Facebook Login → Valid OAuth Redirect URIs (BLOCKER — login won't work on live domain)
-- [ ] Add `superpulse.io` to Meta App Dashboard → App Domains
-- [x] Swap default Next.js favicon for SuperPulse bolt logo — DONE
-- [ ] Switch app from Development to Live mode in Meta App Dashboard (REQUIRED for ad creative creation using IG posts)
-- [ ] Clean up orphaned test campaigns in Ads Manager (~10 PAUSED campaigns from testing)
-- [ ] Resolve Meta security hold (error 31/3858385) — bug report filed ID 912378164938739
-- [ ] Workaround: test with new ad account or new IG business account if hold persists
+All pre-deployment items from 9 Apr have been completed.
 
 ## After Approval
 

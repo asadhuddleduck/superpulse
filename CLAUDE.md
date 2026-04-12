@@ -247,12 +247,14 @@ Ahmed-type: Local restaurant/takeaway owner, 2-5K followers, posts 3-4x/week, £
 - **Test user:** Linda Faegdejcibfjaj Alisonberg (ID: 122098086860816797)
 - **Initial API calls:** All 7 permissions tested via Graph API Explorer (4 Apr 2026)
 
-## Meta App Review Status
-- **Current state:** App created, code scaffolded with OAuth flow. Not submitted.
+## Meta App Review Status (updated 12 Apr 2026)
+- **Current state:** App LIVE at superpulse.io. Screencast recorded (2:20). Ready to submit.
 - **Business Verification:** DONE (inherited from Huddle Duck portfolio)
 - **App icon:** DONE (uploaded)
 - **Category:** DONE (Business and pages)
-- **Privacy policy URL:** NOT DONE (written locally at docs/PRIVACY-POLICY.md, needs deploy to live URL)
+- **Privacy policy URL:** DONE (live at superpulse.io/privacy)
 - **Permissions needing Advanced Access (App Review):** ads_management only
-- **Blockers:** Deploy app + privacy policy to live URL, record screencast, 1,500 API calls in 15 days
-- **Estimated timeline:** 1-2 weeks from deploy to approval
+- **Screencast:** RECORDED (ads_management, 2:20, needs Loom text overlays + mp4 export)
+- **Security hold:** CLEARED (11 Apr — Start Authentication in Ads Manager)
+- **Next step:** Add Loom annotations → download mp4 → submit in Meta App Dashboard
+- **Estimated timeline:** 1-2 weeks from submission to approval
