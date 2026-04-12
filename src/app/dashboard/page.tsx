@@ -89,23 +89,9 @@ export default async function DashboardPage() {
 
   const stats = await fetchCampaignStats();
 
-  // Show only the user's own Page for a clean single-business view
-  // In production, onboarding would select the active Page
-  const userPage = pages.find(
-    (p) => p.instagram_business_account && p.name === "Asad Shah"
-  );
-  const pagesWithIG = userPage
-    ? [userPage]
-    : pages.filter((p) => p.instagram_business_account).slice(0, 1);
-  const pagesWithoutIG: typeof pages = [];
-
-  // Show only the relevant ad account for a clean single-business view
-  const superpulseAd = adAccounts.find((a) =>
-    a.name.toLowerCase().includes("superpulse")
-  );
-  const filteredAdAccounts = superpulseAd
-    ? [superpulseAd]
-    : adAccounts.filter((a) => a.account_status === 1).slice(0, 2);
+  const pagesWithIG = pages.filter((p) => p.instagram_business_account);
+  const pagesWithoutIG = pages.filter((p) => !p.instagram_business_account);
+  const filteredAdAccounts = adAccounts;
 
   return (
     <>

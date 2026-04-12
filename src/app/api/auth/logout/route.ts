@@ -1,12 +1,29 @@
 import { NextRequest, NextResponse } from "next/server";
-import { clearTokenCookie } from "@/lib/auth";
 
 export async function GET(request: NextRequest) {
-  await clearTokenCookie();
-  return NextResponse.redirect(new URL("/login", request.url));
+  const response = NextResponse.redirect(new URL("/login", request.url));
+  response.cookies.set({
+    name: "fb_access_token",
+    value: "",
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax",
+    path: "/",
+    maxAge: 0,
+  });
+  return response;
 }
 
 export async function POST(request: NextRequest) {
-  await clearTokenCookie();
-  return NextResponse.redirect(new URL("/login", request.url));
+  const response = NextResponse.redirect(new URL("/login", request.url));
+  response.cookies.set({
+    name: "fb_access_token",
+    value: "",
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax",
+    path: "/",
+    maxAge: 0,
+  });
+  return response;
 }

@@ -1,31 +1,35 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { getTokenCookie } from "@/lib/auth";
 import { fetchPagesWithIG, fetchIGMedia } from "@/lib/facebook";
 import type { IGPost } from "@/lib/types";
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   const token = await getTokenCookie();
   if (!token) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   try {
-    // Get the user's pages to find the IG Business Account ID
-    // Prefer the user's own Page (not agency/client Pages) for a cleaner demo
-    const pages = await fetchPagesWithIG(token);
-    const userPage = pages.find(
-      (p) => p.instagram_business_account && p.name === "Asad Shah"
-    );
-    const pageWithIG = userPage ?? pages.find((p) => p.instagram_business_account);
+    // If igUserId is provided as a query param, use it directly
+    const paramIgUserId = request.nextUrl.searchParams.get("igUserId");
 
-    if (!pageWithIG || !pageWithIG.instagram_business_account) {
-      return NextResponse.json(
-        { error: "No Instagram Business Account found" },
-        { status: 404 }
-      );
+    let igUserId: string;
+
+    if (paramIgUserId) {
+      igUserId = paramIgUserId;
+    } else {
+      const pages = await fetchPagesWithIG(token);
+      const pageWithIG = pages.find((p) => p.instagram_business_account);
+
+      if (!pageWithIG || !pageWithIG.instagram_business_account) {
+        return NextResponse.json(
+          { error: "No Instagram Business Account found" },
+          { status: 404 }
+        );
+      }
+
+      igUserId = pageWithIG.instagram_business_account.id;
     }
-
-    const igUserId = pageWithIG.instagram_business_account.id;
     const media = await fetchIGMedia(igUserId, token);
 
     const posts: IGPost[] = media.map((item) => {

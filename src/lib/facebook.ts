@@ -107,14 +107,34 @@ export async function fetchPagesWithIG(
   token: string
 ): Promise<PageWithIG[]> {
   const res = await fetch(
-    `${GRAPH_API}/me/accounts?fields=id,name,instagram_business_account&access_token=${token}`
+    `${GRAPH_API}/me/accounts?fields=id,name,instagram_business_account&limit=100&access_token=${token}`
   );
   if (!res.ok) {
     const error = await res.text();
     throw new Error(`Failed to fetch /me/accounts: ${error}`);
   }
   const data = await res.json();
-  return data.data ?? [];
+  const pages: PageWithIG[] = data.data ?? [];
+
+  // Professional Profiles don't appear in /me/accounts but ARE accessible by direct ID.
+  const PROFESSIONAL_PAGE_ID = "1827400404186764";
+  if (!pages.find((p) => p.id === PROFESSIONAL_PAGE_ID)) {
+    try {
+      const directRes = await fetch(
+        `${GRAPH_API}/${PROFESSIONAL_PAGE_ID}?fields=id,name,instagram_business_account&access_token=${token}`
+      );
+      if (directRes.ok) {
+        const directPage = await directRes.json();
+        if (directPage.id) {
+          pages.unshift(directPage);
+        }
+      }
+    } catch {
+      // Page might not be accessible with this token
+    }
+  }
+
+  return pages;
 }
 
 /**
