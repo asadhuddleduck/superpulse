@@ -14,21 +14,19 @@ const logos = [
   { src: "/logos/tasty-plaice.png", alt: "Tasty Plaice", h: 22 },
 ];
 
-export default function LogoStrip() {
+export default function WaitlistLogoStrip() {
   return (
-    <section className="py-10 px-6 text-center">
-      <p className="text-[10px] font-medium uppercase tracking-[0.15em] text-zinc-500 mb-6">
-        trusted by smart restaurant chains
-      </p>
-      <div className="flex flex-wrap items-center justify-center gap-x-10 gap-y-7 max-w-[480px] mx-auto">
+    <section className="wl-logos">
+      <p className="wl-logos-label">trusted by smart local chains</p>
+      <div className="wl-logos-row">
         {logos.map((logo) => (
           // eslint-disable-next-line @next/next/no-img-element
           <img
             key={logo.alt}
             src={logo.src}
             alt={logo.alt}
-            className="w-auto brightness-0 invert opacity-40"
-            style={{ height: `${logo.h}px` }}
+            className="wl-logos-img"
+            style={{ height: `calc(${logo.h}px * var(--wl-logo-scale, 1))` }}
             loading="lazy"
           />
         ))}
