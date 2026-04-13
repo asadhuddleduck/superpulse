@@ -49,3 +49,11 @@ CREATE TABLE IF NOT EXISTS boost_settings (
   target_radius_miles REAL DEFAULT 5.0,
   auto_boost_enabled INTEGER DEFAULT 1
 );
+
+CREATE TABLE IF NOT EXISTS waitlist (
+  email TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  phone TEXT NOT NULL,
+  source TEXT DEFAULT 'nec-2026',
+  created_at TEXT DEFAULT CURRENT_TIMESTAMP
+);
