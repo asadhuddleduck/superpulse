@@ -227,11 +227,25 @@ Ahmed-type: Local restaurant/takeaway owner, 2-5K followers, posts 3-4x/week, £
 - `src/app/login/page.tsx` — Facebook Login OAuth page
 - `src/app/dashboard/page.tsx` — Protected dashboard (shows user, Pages, linked IG accounts)
 - `src/app/privacy/page.tsx` — Privacy policy page (renders docs/PRIVACY-POLICY.md)
+- `src/app/waitlist/page.tsx` — Password-gated invitation waitlist (NEC 2026 lead capture). Three stages: password → form → success.
+- `src/app/waitlist/layout.tsx` — Sub-layout with Lato font + scoped CSS, wraps children in `.waitlist-root`
+- `src/app/waitlist/waitlist.css` — Scoped landing-page design system (prefixed with `.waitlist-root` to avoid clashes with the rest of the app)
+- `src/app/api/waitlist/route.ts` — POST handler. Password check OR submit (name/email/phone → INSERT OR REPLACE into `waitlist` table)
+- `src/components/waitlist/` — Ported landing-page components (Header, Footer, ConvergenceBackground, SocialProof, CaseStudies, FounderSection, LogoStrip)
 - `src/app/api/auth/callback/facebook/route.ts` — OAuth callback (code → short-lived → long-lived token → cookie)
 - `src/app/api/auth/logout/route.ts` — Clears token cookie
 - `src/lib/auth.ts` — Cookie helpers (httpOnly, secure, sameSite strict, 60-day maxAge)
 - `src/lib/facebook.ts` — Facebook Graph API v25.0 helpers (OAuth URL, token exchange, fetch user/pages/IG)
-- `src/lib/db.ts` — Turso lazy proxy pattern (not connected yet)
+- `src/lib/db.ts` — Turso lazy proxy pattern — USED by the waitlist route
+
+## Waitlist Page (Shipped 13 Apr 2026, NEC 2026 campaign)
+- **URL:** https://superpulse.io/waitlist
+- **Password (env `WAITLIST_PASSWORD` on Vercel prod):** `VIP2026`
+- **Turso table:** `waitlist` (email PK, name, phone, source='nec-2026', created_at)
+- **Query submissions:** `turso db shell superpulse "SELECT * FROM waitlist ORDER BY created_at DESC"` (or use Turso HTTP API with env creds from `.env.local`)
+- **Design:** full port of landing-page aesthetic (Lato font, convergence canvas background, hero with gradient wordmark, logo strip "trusted by smart local chains", animated stats, 9 testimonial case studies, founder section, QR code, footer). No restaurant/food language anywhere — scrubbed for generic "local chains" / "business" copy.
+- **QR code:** static SVG at `public/waitlist-qr.svg` generated once via `qrcode` dev dep, Sandstorm yellow modules on transparent background. Encodes the waitlist URL so Asad can flash his phone at NEC visitors.
+- **Scoping:** all waitlist styles live in `waitlist.css` prefixed with `.waitlist-root`, so the dashboard/login/landing pages are unaffected. Components under `src/components/waitlist/` are deliberately isolated from the main `src/components/` tree.
 
 ## Meta App (Created 3 April 2026)
 - **App Name:** SuperPulse
@@ -247,14 +261,44 @@ Ahmed-type: Local restaurant/takeaway owner, 2-5K followers, posts 3-4x/week, £
 - **Test user:** Linda Faegdejcibfjaj Alisonberg (ID: 122098086860816797)
 - **Initial API calls:** All 7 permissions tested via Graph API Explorer (4 Apr 2026)
 
-## Meta App Review Status (updated 12 Apr 2026)
-- **Current state:** App LIVE at superpulse.io. Screencast recorded (2:20). Ready to submit.
+## Meta App Review Status (updated 13 Apr 2026)
+- **Current state:** ✅ **SUBMITTED — In Review** (submitted 13 Apr 2026)
+- **Submission ID:** 1962215541066852
 - **Business Verification:** DONE (inherited from Huddle Duck portfolio)
 - **App icon:** DONE (uploaded)
 - **Category:** DONE (Business and pages)
 - **Privacy policy URL:** DONE (live at superpulse.io/privacy)
-- **Permissions needing Advanced Access (App Review):** ads_management only
-- **Screencast:** RECORDED (ads_management, 2:20, needs Loom text overlays + mp4 export)
+- **Web Platform:** Site URL https://www.superpulse.io/ (added 13 Apr)
+- **App Domain:** superpulse.io (added 13 Apr)
+- **Screencast:** RECORDED + ANNOTATED — `~/Downloads/superpulse-ads-management-v1-annotated.mp4` (2:20, 18 burned-in text overlays via ffmpeg drawtext, no Loom needed)
 - **Security hold:** CLEARED (11 Apr — Start Authentication in Ads Manager)
-- **Next step:** Add Loom annotations → download mp4 → submit in Meta App Dashboard
 - **Estimated timeline:** 1-2 weeks from submission to approval
+
+### Permissions submitted (8)
+| Permission | Tier | Description in submission |
+|---|---|---|
+| ads_management | **Advanced** | The only one that needs Advanced Access — full Marketing API campaign CRUD |
+| Ads Management Standard Access | Feature | Foundational tier underpinning ads_management |
+| ads_read | Standard | Insights API for performance reporting |
+| pages_read_engagement | Standard | Post engagement metadata for scoring |
+| pages_show_list | Standard | Page picker during onboarding |
+| pages_manage_ads | Standard | Page-level ad association for boost campaigns |
+| instagram_basic | Standard | IG profile + media for post grid |
+| email | Standard | Dashboard greeting + notifications |
+
+### Permissions REMOVED from queue before submission (5)
+- `instagram_content_publish` — we don't publish IG content
+- `instagram_business_manage_insights` — not used
+- `instagram_manage_insights` — deferred to Phase 2 (not used by scoring)
+- `business_management` — no Business Manager API calls in code
+- `public_profile` — auto-granted by Facebook Login, not needed in queue
+
+### Data handling answers submitted
+- Q1 Data processors: **No** (Meta tokens stored in our infrastructure, no third-party processors)
+- Q2 Responsible entity: **Huddle Duck**
+- Q3 Country: **United Kingdom**
+- Q4 National security requests in past 12 months: **No**
+- Q5 Policies regarding requests: **None of the above** (small startup, no formal policies yet)
+
+### Next step
+Wait 1-2 weeks for Meta's verdict. Track via Required Actions / App Review tab in the Meta Dashboard. Email notifications go to asad@huddleduck.co.uk.
