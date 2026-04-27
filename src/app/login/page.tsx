@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
-import { getTokenCookie } from "@/lib/auth";
+import { getTenantCookie } from "@/lib/auth";
 import { buildOAuthURL } from "@/lib/facebook";
 import { headers } from "next/headers";
 import crypto from "crypto";
@@ -11,9 +11,8 @@ export const metadata: Metadata = {
 };
 
 export default async function LoginPage() {
-  // If already logged in, redirect to dashboard
-  const token = await getTokenCookie();
-  if (token) {
+  const tenantId = await getTenantCookie();
+  if (tenantId) {
     redirect("/dashboard");
   }
 

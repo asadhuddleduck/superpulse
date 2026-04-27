@@ -1,5 +1,11 @@
 # Screencast Recording Scripts
 
+✅ **DONE — submitted 13 Apr 2026.** Final mp4 lives at `~/Downloads/superpulse-ads-management-v1-annotated.mp4` (29 MB, 2:20 length).
+
+The annotation step ended up being done with **ffmpeg drawtext** instead of Loom — text overlays are baked into the mp4 at frame-accurate timestamps so no separate video editor was needed. The script that built it is at `/tmp/annotate-superpulse.py`. Below are the recording instructions and shot list, kept for reference if a future re-record is needed.
+
+---
+
 One screencast for Meta App Review submission. Record on the live domain `https://www.superpulse.io`, using Asad Shah's account (not the test user — Linda has no real assets to display).
 
 ## Recording Setup (do this once before recording)
@@ -73,15 +79,30 @@ When submitting, in the "Additional notes for reviewer" field, include:
 ## Final pre-submission checklist
 
 Before recording:
-- [ ] Asad's Facebook account has no active security restriction (visit `adsmanager.facebook.com` — no red banner)
-- [ ] `superpulse.io` loads cleanly with all 25 posts and real insights data
-- [ ] Boost flow works end-to-end on a non-Reel post (already verified 10 Apr)
-- [ ] No forbidden words ("AI", "automated", "auto-boost", "bot", "scrape") visible anywhere in the UI
-- [ ] Dashboard is filtered to one Page + one ad account (no client accounts visible)
+- [x] Asad's Facebook account has no active security restriction (visit `adsmanager.facebook.com` — no red banner)
+- [x] `superpulse.io` loads cleanly with all 25 posts and real insights data
+- [x] Boost flow works end-to-end on a non-Reel post (verified 10 Apr)
+- [x] No forbidden words ("AI", "automated", "auto-boost", "bot", "scrape") visible anywhere in the UI
+- [N/A] Dashboard is filtered to one Page + one ad account — superseded; the dashboard now intentionally shows all the user's connected Pages + ad accounts. The screencast is OK with this because the reviewer sees the user's own multi-business assets.
 
-Before submitting:
-- [ ] Screencast uploaded to App Review form (for ads_management)
-- [ ] Justification text from `META-APP-REVIEW-JUSTIFICATIONS.md` pasted into each permission's field
-- [ ] Submission notes pasted into the additional-notes field
-- [ ] Privacy policy URL set: `https://www.superpulse.io/privacy`
-- [ ] Contact email set: `asad@huddleduck.co.uk`
+Before submitting (all done 13 Apr):
+- [x] Screencast annotated (ffmpeg drawtext, 18 burned-in overlays at frame-accurate timestamps)
+- [x] Web Platform configured (Site URL https://www.superpulse.io/, App Domain superpulse.io)
+- [x] Submission queue cleaned: 5 unused permissions removed (instagram_content_publish, instagram_business_manage_insights, instagram_manage_insights, business_management, public_profile)
+- [x] Screencast uploaded against all 7 permissions that need it
+- [x] Justification text pasted for all 8 permissions (instagram_basic, pages_manage_ads, email, pages_show_list, ads_read, pages_read_engagement, ads_management, Ads Management Standard Access)
+- [x] Reviewer instructions filled with step-by-step access notes
+- [x] Data handling questionnaire completed (Huddle Duck / UK / No / No / None of the above)
+- [x] Privacy policy URL set: `https://www.superpulse.io/privacy`
+- [x] Contact email set: `asad@huddleduck.co.uk`
+- [x] **Submitted** — submission ID `1962215541066852`
+
+## ffmpeg drawtext annotation script
+
+The annotated mp4 was produced with this approach (no Loom needed):
+
+```bash
+ffmpeg -i input.mp4 -vf "drawtext=fontfile=/System/Library/Fonts/Supplemental/Arial.ttf:text='Overlay':fontsize=72:fontcolor=white:box=1:boxcolor=black@0.75:boxborderw=24:x=(w-text_w)/2:y=h-220:enable='between(t,0,4)',drawtext=...,..." -c:v libx264 -preset medium -crf 20 -c:a copy -movflags +faststart output.mp4
+```
+
+The full Python wrapper with the 18-overlay timeline lives at `scripts/annotate-screencast.py`. To re-render after editing the TIMELINE list, just `python3 scripts/annotate-screencast.py` — it reads `~/Downloads/superpulse-ads-management-v1.mp4` and writes `~/Downloads/superpulse-ads-management-v1-annotated.mp4`.

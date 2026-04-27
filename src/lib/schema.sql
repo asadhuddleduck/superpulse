@@ -3,8 +3,55 @@ CREATE TABLE IF NOT EXISTS tenants (
   ig_user_id TEXT,
   ad_account_id TEXT,
   name TEXT,
+  meta_access_token TEXT,
+  meta_pixel_id TEXT,
+  page_id TEXT,
+  ig_username TEXT,
+  status TEXT DEFAULT 'pending_oauth',
+  token_expires_at TEXT,
+  created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+  updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Idempotent column adds for tenants tables that pre-date the new columns.
+-- runSchema() swallows "duplicate column name" errors so these are safe to re-run.
+ALTER TABLE tenants ADD COLUMN meta_access_token TEXT;
+ALTER TABLE tenants ADD COLUMN meta_pixel_id TEXT;
+ALTER TABLE tenants ADD COLUMN page_id TEXT;
+ALTER TABLE tenants ADD COLUMN ig_username TEXT;
+ALTER TABLE tenants ADD COLUMN status TEXT DEFAULT 'pending_oauth';
+ALTER TABLE tenants ADD COLUMN token_expires_at TEXT;
+ALTER TABLE tenants ADD COLUMN updated_at TEXT DEFAULT CURRENT_TIMESTAMP;
+
+CREATE INDEX IF NOT EXISTS idx_tenants_ig_user_id ON tenants(ig_user_id);
+CREATE INDEX IF NOT EXISTS idx_tenants_status ON tenants(status);
+
+CREATE TABLE IF NOT EXISTS locations (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  tenant_id TEXT NOT NULL,
+  name TEXT NOT NULL,
+  address TEXT,
+  latitude REAL NOT NULL,
+  longitude REAL NOT NULL,
+  radius_miles REAL DEFAULT 5.0,
   created_at TEXT DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE INDEX IF NOT EXISTS idx_locations_tenant_id ON locations(tenant_id);
+
+CREATE TABLE IF NOT EXISTS api_call_log (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  tenant_id TEXT,
+  endpoint TEXT NOT NULL,
+  method TEXT NOT NULL,
+  status_code INTEGER,
+  duration_ms INTEGER,
+  error TEXT,
+  created_at TEXT DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_api_call_log_created_at ON api_call_log(created_at);
+CREATE INDEX IF NOT EXISTS idx_api_call_log_tenant_id ON api_call_log(tenant_id);
 
 CREATE TABLE IF NOT EXISTS ig_posts (
   id TEXT PRIMARY KEY,
@@ -16,13 +63,19 @@ CREATE TABLE IF NOT EXISTS ig_posts (
   like_count INTEGER,
   comments_count INTEGER,
   media_type TEXT,
-  engagement_rate REAL
+  engagement_rate REAL,
+  boost_eligible INTEGER DEFAULT 1,
+  ineligible_reason TEXT
 );
+
+ALTER TABLE ig_posts ADD COLUMN boost_eligible INTEGER DEFAULT 1;
+ALTER TABLE ig_posts ADD COLUMN ineligible_reason TEXT;
 
 CREATE TABLE IF NOT EXISTS active_campaigns (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   tenant_id TEXT,
   post_id TEXT,
+  location_id INTEGER,
   ad_account_id TEXT,
   meta_campaign_id TEXT,
   meta_adset_id TEXT,
@@ -31,6 +84,10 @@ CREATE TABLE IF NOT EXISTS active_campaigns (
   daily_budget REAL,
   created_at TEXT DEFAULT CURRENT_TIMESTAMP
 );
+
+ALTER TABLE active_campaigns ADD COLUMN location_id INTEGER;
+
+CREATE INDEX IF NOT EXISTS idx_active_campaigns_tenant_id ON active_campaigns(tenant_id);
 
 CREATE TABLE IF NOT EXISTS performance_data (
   campaign_id TEXT,

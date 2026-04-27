@@ -1,122 +1,104 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getTokenCookie } from "@/lib/auth";
+import { getCurrentTenant } from "@/lib/auth";
 import {
-  fetchPagesWithIG,
-  fetchAdAccounts,
   fetchIGUsername,
   createCampaign,
   createAdSet,
   createAdCreative,
   createAd,
+  checkBoostEligibility,
 } from "@/lib/facebook";
+import { upsertTenant } from "@/lib/queries/tenants";
 
-// Default location: Birmingham city centre (for demo — replaced by tenant location in production)
+// Default location: Birmingham city centre. Used only if neither the
+// caller nor the tenant row provides one.
 const DEFAULT_LAT = 52.4862;
 const DEFAULT_LNG = -1.8904;
 
 export async function POST(request: NextRequest) {
-  const token = await getTokenCookie();
-  if (!token) {
+  const tenant = await getCurrentTenant();
+  if (!tenant || !tenant.metaAccessToken) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
+  const token = tenant.metaAccessToken;
 
   try {
     const body = await request.json();
     const { postId, caption = "", dailyBudget = 5, radiusMiles = 5, lat, lng } = body;
-    const shortCaption = caption.replace(/[^\w\s]/g, "").trim().split(/\s+/).slice(0, 5).join(" ") || postId.slice(-6);
+    const shortCaption =
+      caption.replace(/[^\w\s]/g, "").trim().split(/\s+/).slice(0, 5).join(" ") ||
+      postId.slice(-6);
 
     if (!postId) {
+      return NextResponse.json({ error: "postId is required" }, { status: 400 });
+    }
+
+    if (!tenant.pageId || !tenant.igUserId || !tenant.adAccountId) {
       return NextResponse.json(
-        { error: "postId is required" },
-        { status: 400 }
+        { error: "Tenant is not fully connected. Re-run the onboarding flow to pick a Page." },
+        { status: 412 },
       );
     }
 
-    // Discover page and ad account from the user's connected assets
-    const [pages, adAccounts] = await Promise.all([
-      fetchPagesWithIG(token),
-      fetchAdAccounts(token),
-    ]);
-
-    // Prefer the user's own Page (not agency/client Pages)
-    const userPage = pages.find(
-      (p) => p.instagram_business_account && p.name === "Asad Shah"
-    );
-    const pageWithIG = userPage ?? pages.find((p) => p.instagram_business_account);
-    if (!pageWithIG) {
+    const eligibility = await checkBoostEligibility(postId, token);
+    if (!eligibility.eligible) {
       return NextResponse.json(
-        { error: "No connected Instagram Business Account found" },
-        { status: 404 }
+        { error: `Post not eligible: ${eligibility.reason ?? "unknown"}` },
+        { status: 400 },
       );
     }
 
-    // Prefer the SuperPulse ad account
-    const superpulseAd = adAccounts.find((a) =>
-      a.name.toLowerCase().includes("superpulse")
-    );
-    const orderedAdAccounts = superpulseAd
-      ? [superpulseAd, ...adAccounts.filter((a) => a.id !== superpulseAd.id)]
-      : adAccounts;
+    const pageId = tenant.pageId;
+    const igUserId = tenant.igUserId;
+    const cleanAdAccountId = tenant.adAccountId.startsWith("act_")
+      ? tenant.adAccountId.slice(4)
+      : tenant.adAccountId;
 
-    if (orderedAdAccounts.length === 0) {
-      return NextResponse.json(
-        { error: "No ad account found" },
-        { status: 404 }
-      );
+    let igUsername = tenant.igUsername;
+    if (!igUsername) {
+      igUsername = await fetchIGUsername(igUserId, token);
+      if (igUsername) {
+        await upsertTenant({ id: tenant.id, igUsername });
+      }
     }
-
-    const pageId = pageWithIG.id;
-    const rawAdAccountId = orderedAdAccounts[0].id;
-    const adAccountId = rawAdAccountId.startsWith("act_")
-      ? rawAdAccountId.slice(4)
-      : rawAdAccountId;
 
     const targetLat = lat ?? DEFAULT_LAT;
     const targetLng = lng ?? DEFAULT_LNG;
 
-    // Create campaign → ad set → ad, all in PAUSED state
     const campaign = await createCampaign(
-      adAccountId,
+      cleanAdAccountId,
       `SuperPulse v7 | ${shortCaption}`,
-      token
+      token,
     );
 
     const adSet = await createAdSet(
       campaign.id,
-      adAccountId,
+      cleanAdAccountId,
       `${radiusMiles}mi · £${dailyBudget}/day`,
       dailyBudget,
       radiusMiles,
       targetLat,
       targetLng,
       pageId,
-      token
+      token,
     );
 
-    const igUserId = pageWithIG.instagram_business_account!.id;
-
-    // Fetch IG username for the VIEW_INSTAGRAM_PROFILE CTA link
-    const igUsername = await fetchIGUsername(igUserId, token);
-
-    // 2-step creative flow: create AdCreative first, then Ad referencing it
-    // MUST include call_to_action with VIEW_INSTAGRAM_PROFILE + IG profile link.
-    // Without the CTA, ad creation fails with "website URL required" error.
     const creative = await createAdCreative(
-      adAccountId,
+      cleanAdAccountId,
       `SuperPulse v7 Creative | ${shortCaption}`,
       postId,
       igUserId,
       igUsername,
       pageId,
-      token
+      token,
     );
 
     const ad = await createAd(
       adSet.id,
-      adAccountId,
+      cleanAdAccountId,
       `SP Ad | ${shortCaption}`,
       creative.id,
-      token
+      token,
     );
 
     return NextResponse.json({
@@ -133,7 +115,7 @@ export async function POST(request: NextRequest) {
     const message = err instanceof Error ? err.message : "Unknown error";
     return NextResponse.json(
       { error: `Failed to create boost: ${message}` },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

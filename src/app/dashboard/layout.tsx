@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { getTokenCookie } from "@/lib/auth";
+import { getCurrentTenant } from "@/lib/auth";
 import { fetchMe } from "@/lib/facebook";
 
 export default async function DashboardLayout({
@@ -8,14 +8,17 @@ export default async function DashboardLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const token = await getTokenCookie();
-  if (!token) {
+  const tenant = await getCurrentTenant();
+  if (!tenant || !tenant.metaAccessToken) {
     redirect("/login");
+  }
+  if (tenant.status === "pending_page_selection") {
+    redirect("/onboarding/select-page");
   }
 
   let user: { id: string; name: string; email?: string };
   try {
-    user = await fetchMe(token);
+    user = await fetchMe(tenant.metaAccessToken);
   } catch {
     redirect("/login");
   }
@@ -32,6 +35,7 @@ export default async function DashboardLayout({
           <nav className="hidden sm:flex items-center gap-6">
             <NavLink href="/dashboard">Dashboard</NavLink>
             <NavLink href="/dashboard/posts">Posts</NavLink>
+            <NavLink href="/dashboard/locations">Locations</NavLink>
             <NavLink href="/dashboard/settings">Settings</NavLink>
           </nav>
           <div className="flex items-center gap-4">
@@ -51,6 +55,7 @@ export default async function DashboardLayout({
           <div className="max-w-5xl mx-auto px-6 py-2 flex items-center gap-4">
             <NavLink href="/dashboard">Dashboard</NavLink>
             <NavLink href="/dashboard/posts">Posts</NavLink>
+            <NavLink href="/dashboard/locations">Locations</NavLink>
             <NavLink href="/dashboard/settings">Settings</NavLink>
           </div>
         </div>

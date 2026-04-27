@@ -1,0 +1,21 @@
+{
+  "_README": "Pre-seed for the only two legacy clients still active: PhatBuns + Henny's. Just identity fields — page_id, ig_user_id, ad_account_id, ig_username — so the OAuth callback recognises them by ig_user_id and lands them straight on /dashboard with no picker. They add their own locations via /dashboard/locations after first login (with address geocoding). Fill in the TODO_ fields before running `npm run seed:legacy`.",
+  "tenants": [
+    {
+      "id": "t_phatbuns",
+      "name": "PhatBuns",
+      "ig_user_id": "TODO_PHATBUNS_IG_USER_ID",
+      "page_id": "TODO_PHATBUNS_PAGE_ID",
+      "ad_account_id": "TODO_PHATBUNS_AD_ACCOUNT_ID_NO_act_PREFIX",
+      "ig_username": "TODO_PHATBUNS_IG_USERNAME"
+    },
+    {
+      "id": "t_hennys",
+      "name": "Henny's Chicken",
+      "ig_user_id": "TODO_HENNYS_IG_USER_ID",
+      "page_id": "TODO_HENNYS_PAGE_ID",
+      "ad_account_id": "TODO_HENNYS_AD_ACCOUNT_ID_NO_act_PREFIX",
+      "ig_username": "TODO_HENNYS_IG_USERNAME"
+    }
+  ]
+}

@@ -1,29 +1,27 @@
 import { NextRequest, NextResponse } from "next/server";
 
-export async function GET(request: NextRequest) {
+const COOKIES_TO_CLEAR = ["tenant_id", "fb_access_token"];
+
+function buildLogoutResponse(request: NextRequest): NextResponse {
   const response = NextResponse.redirect(new URL("/login", request.url));
-  response.cookies.set({
-    name: "fb_access_token",
-    value: "",
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "lax",
-    path: "/",
-    maxAge: 0,
-  });
+  for (const name of COOKIES_TO_CLEAR) {
+    response.cookies.set({
+      name,
+      value: "",
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+      path: "/",
+      maxAge: 0,
+    });
+  }
   return response;
 }
 
+export async function GET(request: NextRequest) {
+  return buildLogoutResponse(request);
+}
+
 export async function POST(request: NextRequest) {
-  const response = NextResponse.redirect(new URL("/login", request.url));
-  response.cookies.set({
-    name: "fb_access_token",
-    value: "",
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "lax",
-    path: "/",
-    maxAge: 0,
-  });
-  return response;
+  return buildLogoutResponse(request);
 }

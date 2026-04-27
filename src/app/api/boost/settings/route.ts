@@ -1,17 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getTokenCookie } from "@/lib/auth";
+import { getTenantCookie } from "@/lib/auth";
 import { getSettings, upsertSettings } from "@/lib/queries/settings";
 
-const DEFAULT_TENANT_ID = "default";
-
 export async function GET() {
-  const token = await getTokenCookie();
-  if (!token) {
+  const tenantId = await getTenantCookie();
+  if (!tenantId) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   try {
-    const settings = await getSettings(DEFAULT_TENANT_ID);
+    const settings = await getSettings(tenantId);
     return NextResponse.json(settings);
   } catch (err) {
     console.error("Failed to fetch boost settings:", err);
@@ -23,15 +21,14 @@ export async function GET() {
 }
 
 export async function POST(request: NextRequest) {
-  const token = await getTokenCookie();
-  if (!token) {
+  const tenantId = await getTenantCookie();
+  if (!tenantId) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   try {
     const body = await request.json();
 
-    // Validate required fields
     const dailyBudgetCap =
       typeof body.dailyBudgetCap === "number" ? body.dailyBudgetCap : undefined;
     const targetRadiusMiles =
@@ -54,11 +51,10 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Fetch current settings to merge with updates
-    const current = await getSettings(DEFAULT_TENANT_ID);
+    const current = await getSettings(tenantId);
 
     const updated = {
-      tenantId: DEFAULT_TENANT_ID,
+      tenantId,
       dailyBudgetCap: dailyBudgetCap ?? current.dailyBudgetCap,
       targetRadiusMiles: targetRadiusMiles ?? current.targetRadiusMiles,
       autoBoostEnabled: autoBoostEnabled ?? current.autoBoostEnabled,

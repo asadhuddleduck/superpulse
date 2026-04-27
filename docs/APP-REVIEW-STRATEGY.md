@@ -105,20 +105,27 @@ This is not deception — it's the MVP flow. The automation layer sits on top of
 
 **What Meta is looking for:** The app creates and manages ad campaigns on behalf of the user who granted permission. Clear consent, clear action, clear result.
 
-## Current Status (updated 12 Apr 2026)
+## Current Status (updated 13 Apr 2026)
+
+✅ **SUBMITTED — In Review** (submitted 13 Apr 2026, submission ID 1962215541066852)
 
 | Feature | Status |
 |---|---|
-| **Boost button + form** | ✅ WORKING | 
+| **Boost button + form** | ✅ WORKING |
 | **IG post grid** | ✅ WORKING (25 posts, IG account dropdown selector) |
 | **Dashboard (all pages + ad accounts)** | ✅ WORKING |
 | **Campaign + AdSet + Creative + Ad creation** | ✅ WORKING (verified 11 Apr) |
 | **Meta security hold** | ✅ CLEARED (via Start Authentication 11 Apr) |
 | **App mode** | ✅ LIVE |
-| **Screencast recorded** | ✅ DONE (2:20, ads_management) |
+| **Web Platform configured** | ✅ Site URL https://www.superpulse.io/ + App Domain superpulse.io (added 13 Apr) |
+| **Screencast recorded + annotated** | ✅ `~/Downloads/superpulse-ads-management-v1-annotated.mp4` (2:20, 18 burned-in overlays via ffmpeg drawtext) |
+| **Submission queue cleaned** | ✅ Removed instagram_content_publish, instagram_business_manage_insights, instagram_manage_insights, business_management, public_profile |
+| **All 8 permission justifications** | ✅ Pasted into Meta dashboard |
+| **Data handling questionnaire** | ✅ Completed (Huddle Duck / UK / No / No / None) |
+| **Reviewer instructions** | ✅ Step-by-step access notes pasted |
 | **Post insights panel** | REMOVED (instagram_manage_insights deferred to Phase 2) |
 
-All pre-deployment items from 9 Apr have been completed.
+All pre-deployment items from 9 Apr have been completed. The screencast was annotated using ffmpeg `drawtext` instead of Loom — overlays are baked into the mp4, no separate editor needed.
 
 ## After Approval
 
@@ -144,4 +151,4 @@ Once Advanced Access is granted:
 
 ## Justification Texts
 
-See `META-APP-REVIEW-JUSTIFICATIONS.md` for the 6 permission justification texts. These were written for restaurants specifically — **update to say "local businesses" instead of "restaurants"** before submitting.
+See `META-APP-REVIEW-JUSTIFICATIONS.md` for the 8 permission justification texts that were submitted to Meta on 13 Apr 2026. All texts use "local businesses" rather than "restaurants" and emphasise the human-in-the-loop consent flow.

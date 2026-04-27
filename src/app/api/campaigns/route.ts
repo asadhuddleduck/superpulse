@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getTokenCookie } from "@/lib/auth";
+import { getCurrentTenant } from "@/lib/auth";
 import {
   fetchAdAccounts,
   fetchCampaigns,
@@ -7,23 +7,27 @@ import {
 } from "@/lib/facebook";
 
 export async function GET() {
-  const token = await getTokenCookie();
-  if (!token) {
+  const tenant = await getCurrentTenant();
+  if (!tenant || !tenant.metaAccessToken) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
+  const token = tenant.metaAccessToken;
 
   try {
-    const adAccounts = await fetchAdAccounts(token);
-    if (adAccounts.length === 0) {
-      return NextResponse.json(
-        { error: "No ad accounts found" },
-        { status: 404 }
-      );
+    let adAccountId: string | null = tenant.adAccountId;
+    if (!adAccountId) {
+      const adAccounts = await fetchAdAccounts(token);
+      if (adAccounts.length === 0) {
+        return NextResponse.json(
+          { error: "No ad accounts found" },
+          { status: 404 }
+        );
+      }
+      const rawId = adAccounts[0].id;
+      adAccountId = rawId.startsWith("act_") ? rawId.slice(4) : rawId;
+    } else if (adAccountId.startsWith("act_")) {
+      adAccountId = adAccountId.slice(4);
     }
-
-    // Use the first ad account (strip the "act_" prefix if present)
-    const rawId = adAccounts[0].id;
-    const adAccountId = rawId.startsWith("act_") ? rawId.slice(4) : rawId;
 
     const [campaigns, insights] = await Promise.all([
       fetchCampaigns(adAccountId, token),

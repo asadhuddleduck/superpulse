@@ -52,6 +52,33 @@ export async function getUnboostedPosts(tenantId: string): Promise<IGPost[]> {
   return result.rows.map(rowToPost);
 }
 
+/**
+ * Mark a post as ineligible for boosting (e.g. copyright music). Prevents the
+ * cron from retrying it on every cycle and burning API calls on guaranteed errors.
+ */
+export async function markPostIneligible(
+  postId: string,
+  reason: string,
+): Promise<void> {
+  await db.execute({
+    sql: `
+      UPDATE ig_posts
+      SET boost_eligible = 0, ineligible_reason = ?
+      WHERE id = ?
+    `,
+    args: [reason, postId],
+  });
+}
+
+export async function isPostIneligible(postId: string): Promise<boolean> {
+  const result = await db.execute({
+    sql: `SELECT boost_eligible FROM ig_posts WHERE id = ? LIMIT 1`,
+    args: [postId],
+  });
+  if (result.rows.length === 0) return false;
+  return result.rows[0].boost_eligible === 0;
+}
+
 function rowToPost(row: Record<string, unknown>): IGPost {
   return {
     id: row.id as string,

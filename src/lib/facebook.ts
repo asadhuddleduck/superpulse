@@ -97,7 +97,7 @@ interface FacebookPage {
   instagram_business_account?: IGBusinessAccount;
 }
 
-export interface PageWithIG extends FacebookPage {}
+export type PageWithIG = FacebookPage;
 
 /**
  * Fetch the user's Pages and their linked Instagram Business Accounts.
@@ -352,6 +352,10 @@ export async function createAdSet(
           ],
         },
         publisher_platforms: ["instagram"],
+        // Restrict placements to Reels + Stories on mobile only (per AD-CONFIG-TWEAKS).
+        // profile_reels intentionally omitted — not confirmed valid in v25.0.
+        instagram_positions: ["reels", "story"],
+        device_platforms: ["mobile"],
       },
       status: "PAUSED",
       access_token: token,
@@ -396,6 +400,8 @@ export async function createAdCreative(
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       name,
+      // actor_id (NOT object_id) — empirically verified working 9 Apr 2026.
+      // AD-CONFIG-TWEAKS proposed object_id swap; SKIPPED here to avoid breaking the live config.
       actor_id: pageId,
       instagram_user_id: igUserId,
       source_instagram_media_id: igMediaId,
@@ -403,6 +409,21 @@ export async function createAdCreative(
         type: "VIEW_INSTAGRAM_PROFILE",
         value: {
           link: `https://www.instagram.com/${igUsername}/`,
+        },
+      },
+      // Opt out of every Advantage+ creative enhancement Meta would otherwise auto-apply.
+      // Unknown keys are silently ignored by Meta; safe to include the full list.
+      degrees_of_freedom_spec: {
+        creative_features_spec: {
+          standard_enhancements:         { enroll_status: "OPT_OUT" },
+          image_brightness_and_contrast: { enroll_status: "OPT_OUT" },
+          image_uncrop:                  { enroll_status: "OPT_OUT" },
+          image_touchups:                { enroll_status: "OPT_OUT" },
+          text_optimizations:            { enroll_status: "OPT_OUT" },
+          image_templates:               { enroll_status: "OPT_OUT" },
+          video_auto_crop:               { enroll_status: "OPT_OUT" },
+          audio:                         { enroll_status: "OPT_OUT" },
+          advantage_plus_creative:       { enroll_status: "OPT_OUT" },
         },
       },
       access_token: token,
@@ -433,6 +454,8 @@ export async function createAd(
       adset_id: adSetId,
       creative: { creative_id: creativeId },
       status: "PAUSED",
+      // Hard opt-out of multi-advertiser ad bundling (per AD-CONFIG-TWEAKS).
+      multi_advertiser_ads: { has_opted_out: true },
       access_token: token,
     }),
   });

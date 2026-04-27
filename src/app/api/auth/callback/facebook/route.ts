@@ -1,13 +1,25 @@
 import { NextRequest, NextResponse } from "next/server";
-import { exchangeCodeForToken, exchangeForLongLivedToken } from "@/lib/facebook";
-import { setTokenCookie } from "@/lib/auth";
+import {
+  exchangeCodeForToken,
+  exchangeForLongLivedToken,
+  fetchPagesWithIG,
+  fetchAdAccounts,
+  fetchIGUsername,
+  fetchMe,
+} from "@/lib/facebook";
+import {
+  getTenantByIgUserId,
+  upsertTenant,
+} from "@/lib/queries/tenants";
+
+const COOKIE_TENANT = "tenant_id";
+const SIXTY_DAYS = 60 * 60 * 24 * 60;
 
 export async function GET(request: NextRequest) {
   const { searchParams } = request.nextUrl;
   const code = searchParams.get("code");
   const error = searchParams.get("error");
 
-  // User denied permissions or something went wrong
   if (error || !code) {
     const errorDescription = searchParams.get("error_description") ?? "Login was cancelled.";
     const loginUrl = new URL("/login", request.url);
@@ -15,31 +27,109 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(loginUrl);
   }
 
-  // Build the redirect URI (must match exactly what was sent to Facebook)
   const host = request.headers.get("host") ?? "localhost:3000";
   const protocol = host.startsWith("localhost") ? "http" : "https";
   const redirectUri = `${protocol}://${host}/api/auth/callback/facebook`;
 
   try {
-    // Step 1: Exchange code for short-lived token
     const shortLived = await exchangeCodeForToken(code, redirectUri);
-
-    // Step 2: Exchange short-lived for long-lived token (~60 days)
     const longLived = await exchangeForLongLivedToken(shortLived.access_token);
+    const token = longLived.access_token;
 
-    // Step 3: Redirect to dashboard with cookie set on the SAME response object
-    // (cookies().set() + NextResponse.redirect() are separate responses — cookie gets lost on Vercel)
+    const [me, pages, adAccounts] = await Promise.all([
+      fetchMe(token).catch(() => null),
+      fetchPagesWithIG(token).catch(() => []),
+      fetchAdAccounts(token).catch(() => []),
+    ]);
+
+    const pagesWithIG = pages.filter((p) => p.instagram_business_account);
+    const expiresAt = new Date(
+      Date.now() + (longLived.expires_in ?? SIXTY_DAYS) * 1000,
+    ).toISOString();
+
+    const setTenantCookie = (response: NextResponse, tenantId: string) => {
+      response.cookies.set({
+        name: COOKIE_TENANT,
+        value: tenantId,
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "lax",
+        path: "/",
+        maxAge: SIXTY_DAYS,
+      });
+    };
+
+    // Multi-Page accounts route through the picker so the user chooses which
+    // Page+IG to wire up. We persist the token immediately (encrypted at rest)
+    // under a stable fb-id-keyed tenant so the picker has it available.
+    if (pagesWithIG.length > 1) {
+      const tenantId = me?.id ? `t_fb_${me.id}` : `t_pending_${Date.now()}`;
+      await upsertTenant({
+        id: tenantId,
+        name: me?.name ?? null,
+        metaAccessToken: token,
+        status: "pending_page_selection",
+        tokenExpiresAt: expiresAt,
+      });
+      const pickerUrl = new URL("/onboarding/select-page", request.url);
+      const response = NextResponse.redirect(pickerUrl);
+      setTenantCookie(response, tenantId);
+      return response;
+    }
+
+    const pageWithIG = pagesWithIG[0] ?? null;
+    const igUserId = pageWithIG?.instagram_business_account?.id ?? null;
+    const pageId = pageWithIG?.id ?? null;
+    const pageName = pageWithIG?.name ?? null;
+
+    let igUsername: string | null = null;
+    if (igUserId) {
+      try {
+        igUsername = await fetchIGUsername(igUserId, token);
+      } catch {
+        // Username fetch is best-effort; cron can backfill later.
+      }
+    }
+
+    const rawAdAccountId = adAccounts[0]?.id ?? null;
+    const adAccountId = rawAdAccountId
+      ? rawAdAccountId.startsWith("act_")
+        ? rawAdAccountId.slice(4)
+        : rawAdAccountId
+      : null;
+
+    // Match against existing tenant by ig_user_id (lets us pre-seed PhatBuns
+    // and Henny's so they slide straight into 'active' without a picker).
+    let tenantId: string;
+    let tenantName: string | null = pageName ?? me?.name ?? null;
+
+    if (igUserId) {
+      const existing = await getTenantByIgUserId(igUserId);
+      if (existing) {
+        tenantId = existing.id;
+        tenantName = existing.name ?? tenantName;
+      } else {
+        tenantId = `t_${igUserId}`;
+      }
+    } else {
+      tenantId = me?.id ? `t_fb_${me.id}` : `t_${Date.now()}`;
+    }
+
+    await upsertTenant({
+      id: tenantId,
+      igUserId,
+      adAccountId,
+      pageId,
+      igUsername,
+      name: tenantName,
+      metaAccessToken: token,
+      status: "active",
+      tokenExpiresAt: expiresAt,
+    });
+
     const dashboardUrl = new URL("/dashboard", request.url);
     const response = NextResponse.redirect(dashboardUrl);
-    response.cookies.set({
-      name: "fb_access_token",
-      value: longLived.access_token,
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
-      path: "/",
-      maxAge: 60 * 60 * 24 * 60, // 60 days
-    });
+    setTenantCookie(response, tenantId);
     return response;
   } catch (err) {
     console.error("Facebook OAuth callback error:", err);

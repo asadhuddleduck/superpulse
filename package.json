@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "seed:legacy": "node --env-file=.env.local --import tsx scripts/seed-legacy-tenants.ts"
   },
   "dependencies": {
     "@libsql/client": "^0.17.2",
@@ -23,6 +24,7 @@
     "eslint-config-next": "16.2.2",
     "qrcode": "^1.5.4",
     "tailwindcss": "^4",
+    "tsx": "^4.21.0",
     "typescript": "^5"
   }
 }

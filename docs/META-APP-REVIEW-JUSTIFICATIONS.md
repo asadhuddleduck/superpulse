@@ -1,8 +1,8 @@
 # Meta App Review — Permission Justifications
 
-These are the 6 permission justification texts for Superpulse's Meta App Review submission. Paste each one into the corresponding permission's "Tell us how you'll use this permission" field on the App Review form.
+✅ **SUBMITTED 13 Apr 2026** — these 8 permission justifications were pasted into Meta's App Review form (Allowed Usage section). One screencast (`~/Downloads/superpulse-ads-management-v1-annotated.mp4`) was uploaded against each permission.
 
-Each justification is self-contained and written for Meta's review team. They should be submitted alongside the screencast demo.
+The first 6 sections below were pre-written before submission. Sections 7 (instagram_basic) and 8 (Ads Management Standard Access) were drafted on submission day to match the actual permissions in the queue. Section 7 below is the legacy `pages_read_user_content` text which was NOT submitted (we removed that permission from the queue) — it is kept here for reference only.
 
 ---
 
@@ -63,3 +63,43 @@ Superpulse reads the business owner's own Page content so they can see their Ins
 Without this permission, the dashboard cannot show the business owner their own posts, and the entire content-selection step of the product breaks down. The owner would have no way to review what they have published, compare recent posts, or pick a candidate to boost — they would be forced to flip back and forth between Instagram and Superpulse, defeating the purpose of a single dashboard built for non-technical local business owners who do not want to navigate Meta's native tools.
 
 Superpulse only reads content that belongs to the authenticated user's own Page. The app does not read Page content belonging to other users, and the boost flow keeps the business owner in full control — they select which of their own posts to promote, set budget and targeting, and each campaign is created in a paused state before the owner reviews and activates it.
+
+⚠️ **NOT SUBMITTED.** `pages_read_user_content` was not in the final submission queue — the equivalent functionality is covered by `pages_read_engagement` + `instagram_basic`, both of which were submitted.
+
+---
+
+## 7. `instagram_basic` (Standard) — SUBMITTED
+
+SuperPulse uses instagram_basic to read the business owner's own Instagram Business Account profile and media, so they can see their own published Instagram posts inside the SuperPulse dashboard and choose which ones to promote as ads. When the business owner connects their Facebook Page and linked Instagram Business account during onboarding, the app fetches the IG user ID, username, and recent media (caption, timestamp, like_count, comments_count, media_type) via the /{ig-user-id}/media endpoint. The dashboard then displays a grid of the owner's recent posts so they can review their own content in one place and pick a candidate to boost as a local ad.
+
+Without instagram_basic, the dashboard cannot show the business owner their own posts, and the entire content-selection step of the product breaks down — they would have no way to review what they have published, compare recent posts, or pick a candidate to boost. They would be forced to flip back and forth between Instagram and SuperPulse, defeating the purpose of a single dashboard built for non-technical local business owners (restaurants, salons, gyms, cafes, barbers, mechanics, clinics, and similar walk-in businesses) who do not want to navigate Meta's native tools.
+
+SuperPulse only reads content that belongs to the authenticated user's own Instagram Business account. The app does not read media belonging to other users, and the boost flow keeps the business owner in full control — they select which of their own posts to promote, set budget and targeting, and each campaign is created in PAUSED state before it goes live.
+
+---
+
+## 8. `Ads Management Standard Access` (Feature) — SUBMITTED
+
+Ads Management Standard Access is required as the foundational tier underpinning SuperPulse's Marketing API usage. SuperPulse uses the Marketing API to programmatically create and manage Instagram post boost campaigns on behalf of business owners who have explicitly granted the app access to their ad account via Facebook Login. Ads Management Standard Access enables the app to operate against the user's connected ad account by removing the development-mode restrictions that would otherwise limit calls to internal app users.
+
+Specifically, Standard Access allows the app to call /act_{ad-account-id}/campaigns, /adsets, /adcreatives, /ads and /insights for the live ad account that the business owner has authorised — on behalf of multiple distinct local businesses (restaurants, salons, gyms, cafes, barbers, mechanics, clinics, and similar walk-in businesses) at the same time. This is the standard tier of access the Marketing API requires for any production app that helps third-party advertisers manage their campaigns, and it is requested in conjunction with the ads_management permission, which contains the actual capabilities the app exercises.
+
+Without Ads Management Standard Access, SuperPulse would be limited to development-mode usage and could not serve real customers. Every paying customer relies on this access tier for every boost the app creates on their behalf. Each campaign is created in PAUSED state and the business owner retains full control before any ad goes live in their own Ads Manager.
+
+---
+
+## Submission summary (13 Apr 2026)
+
+8 permissions were submitted. ads_management is the only one needing **Advanced Access**; the other 7 are Standard. The same screencast was uploaded against each.
+
+| # | Permission | Tier | Notes |
+|---|---|---|---|
+| 1 | ads_management | **Advanced** | The big one — full Marketing API CRUD |
+| 2 | ads_read | Standard | Insights API |
+| 3 | pages_read_engagement | Standard | Post engagement metadata |
+| 4 | pages_show_list | Standard | Page picker during onboarding |
+| 5 | pages_manage_ads | Standard | Page-level ad association |
+| 6 | (pages_read_user_content) | NOT SUBMITTED | covered by pages_read_engagement + instagram_basic |
+| 7 | instagram_basic | Standard | IG profile + media for post grid |
+| 8 | Ads Management Standard Access | Feature | Foundational tier under ads_management |
+| + | email | Standard | Single agreement only — no description needed |

@@ -1,10 +1,12 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { cookies } from "next/headers";
-import { getTokenCookie } from "@/lib/auth";
+import { redirect } from "next/navigation";
+import { getCurrentTenant } from "@/lib/auth";
 import { fetchMe, fetchPagesWithIG, fetchAdAccounts } from "@/lib/facebook";
 import type { PageWithIG, AdAccount } from "@/lib/facebook";
 import SummaryCard from "@/components/SummaryCard";
+import { getLocationsForTenant } from "@/lib/queries/locations";
 
 export const metadata: Metadata = {
   title: "Dashboard — SuperPulse",
@@ -67,27 +69,30 @@ function formatNumber(n: number): string {
 }
 
 export default async function DashboardPage() {
-  const token = await getTokenCookie();
+  const tenant = await getCurrentTenant();
+  if (!tenant || !tenant.metaAccessToken) redirect("/login");
+  const token = tenant.metaAccessToken;
 
   let user: { id: string; name: string; email?: string } | null = null;
   let pages: PageWithIG[] = [];
   let adAccounts: AdAccount[] = [];
 
   try {
-    user = await fetchMe(token!);
+    user = await fetchMe(token);
   } catch {
     return null;
   }
 
-  // Fetch pages and ad accounts independently — don't crash if one fails
   const [pagesResult, adAccountsResult] = await Promise.allSettled([
-    fetchPagesWithIG(token!),
-    fetchAdAccounts(token!),
+    fetchPagesWithIG(token),
+    fetchAdAccounts(token),
   ]);
   if (pagesResult.status === "fulfilled") pages = pagesResult.value;
   if (adAccountsResult.status === "fulfilled") adAccounts = adAccountsResult.value;
 
   const stats = await fetchCampaignStats();
+
+  const locationCount = (await getLocationsForTenant(tenant.id)).length;
 
   const pagesWithIG = pages.filter((p) => p.instagram_business_account);
   const pagesWithoutIG = pages.filter((p) => !p.instagram_business_account);
@@ -104,6 +109,28 @@ export default async function DashboardPage() {
           <p className="text-zinc-500 mt-1">{user.email}</p>
         )}
       </div>
+
+      {/* Locations onboarding banner — only when none added yet */}
+      {locationCount === 0 && (
+        <div className="mb-10 rounded-xl border border-sandstorm/40 bg-sandstorm/5 p-5 flex items-start justify-between gap-4">
+          <div>
+            <p className="font-semibold text-sandstorm">
+              Add your locations to start boosting
+            </p>
+            <p className="text-sm text-zinc-300 mt-1 max-w-xl">
+              SuperPulse targets each Instagram boost to a radius around a
+              physical location. Add at least one address so your boosts know
+              where to run.
+            </p>
+          </div>
+          <Link
+            href="/dashboard/locations"
+            className="shrink-0 rounded-lg bg-sandstorm px-4 py-2 text-sm font-semibold text-black hover:bg-sandstorm/90 transition"
+          >
+            Add locations
+          </Link>
+        </div>
+      )}
 
       {/* Summary Cards */}
       <section className="mb-10">

@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { cookies } from "next/headers";
-import { getTokenCookie } from "@/lib/auth";
+import { redirect } from "next/navigation";
+import { getCurrentTenant } from "@/lib/auth";
 import { fetchPagesWithIG } from "@/lib/facebook";
 import IGPostsView from "@/components/IGPostsView";
 import type { IGPost } from "@/components/PostCard";
@@ -68,10 +69,10 @@ async function fetchCampaigns(): Promise<Campaign[]> {
 }
 
 export default async function PostsPage() {
-  const token = await getTokenCookie();
-  if (!token) return null;
+  const tenant = await getCurrentTenant();
+  if (!tenant || !tenant.metaAccessToken) redirect("/login");
+  const token = tenant.metaAccessToken;
 
-  // Get all pages with IG to build the account selector
   const pages = await fetchPagesWithIG(token);
   const pagesWithIG = pages.filter((p) => p.instagram_business_account);
 
@@ -81,8 +82,8 @@ export default async function PostsPage() {
     igUserId: p.instagram_business_account!.id,
   }));
 
-  // Fetch initial posts for the first IG account
-  const firstIgUserId = igAccounts[0]?.igUserId ?? "";
+  // Default to the tenant's chosen IG account when present, else the first.
+  const firstIgUserId = tenant.igUserId ?? igAccounts[0]?.igUserId ?? "";
   const [initialPosts, campaigns] = await Promise.all([
     firstIgUserId ? fetchPosts(firstIgUserId) : Promise.resolve([]),
     fetchCampaigns(),

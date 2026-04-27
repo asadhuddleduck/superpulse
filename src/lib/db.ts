@@ -1,4 +1,4 @@
-import { createClient, type Client } from "@libsql/client";
+import { createClient, type Client } from "@libsql/client/web";
 import { readFileSync } from "fs";
 import { join } from "path";
 
@@ -22,27 +22,43 @@ export const db = new Proxy({} as Client, {
     const client = getDb();
     const value = (client as unknown as Record<string | symbol, unknown>)[prop];
     if (typeof value === "function") {
-      return (value as Function).bind(client);
+      return (value as (...args: unknown[]) => unknown).bind(client);
     }
     return value;
   },
 });
 
+// Errors libSQL throws when re-running idempotent ALTER TABLE / CREATE INDEX statements.
+// We swallow these so the schema file can be re-applied on every cold start.
+const IDEMPOTENT_ERROR_PATTERNS = [
+  /duplicate column name/i,
+  /already exists/i,
+];
+
+function isIdempotentError(err: unknown): boolean {
+  const msg = err instanceof Error ? err.message : String(err);
+  return IDEMPOTENT_ERROR_PATTERNS.some((rx) => rx.test(msg));
+}
+
 /**
- * Reads schema.sql and executes each CREATE TABLE IF NOT EXISTS statement.
- * Idempotent — safe to call on every startup.
+ * Reads schema.sql and executes each statement. Idempotent — safe to call on
+ * every startup. Swallows "duplicate column" / "already exists" errors so the
+ * inline ALTER TABLE migrations don't fail on re-runs.
  */
 export async function runSchema(): Promise<void> {
   const schemaPath = join(process.cwd(), "src", "lib", "schema.sql");
   const sql = readFileSync(schemaPath, "utf-8");
 
-  // Split on semicolons, filter out empty statements
   const statements = sql
     .split(";")
     .map((s) => s.trim())
     .filter((s) => s.length > 0);
 
   for (const statement of statements) {
-    await db.execute(statement);
+    try {
+      await db.execute(statement);
+    } catch (err) {
+      if (!isIdempotentError(err)) throw err;
+    }
   }
 }
