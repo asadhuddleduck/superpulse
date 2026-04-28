@@ -12,7 +12,7 @@ import {
 import { upsertTenant } from "@/lib/queries/tenants";
 import { getLocationsForTenant } from "@/lib/queries/locations";
 import { upsertCampaign, getCampaignsByTenant } from "@/lib/queries/campaigns";
-import { markPostIneligible } from "@/lib/queries/posts";
+import { isPostIneligible, markPostIneligible } from "@/lib/queries/posts";
 import { logApiCall } from "@/lib/queries/api-calls";
 
 interface CreatedCampaign {
@@ -34,9 +34,6 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     const { postId, caption = "", dailyBudget = 5 } = body;
-    const shortCaption =
-      caption.replace(/[^\w\s]/g, "").trim().split(/\s+/).slice(0, 5).join(" ") ||
-      postId.slice(-6);
 
     if (!postId) {
       return NextResponse.json({ error: "postId is required" }, { status: 400 });
@@ -46,6 +43,20 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         { error: "Tenant is not fully connected. Re-run the onboarding flow to pick a Page." },
         { status: 412 },
+      );
+    }
+
+    const shortCaption =
+      caption.replace(/[^\w\s]/g, "").trim().split(/\s+/).slice(0, 5).join(" ") ||
+      postId.slice(-6);
+
+    // Cheap local check first — saves a Meta API call (and the resulting error
+    // count against the App Review 15% threshold) for posts the cron has
+    // already flagged ineligible.
+    if (await isPostIneligible(postId)) {
+      return NextResponse.json(
+        { error: "This post was previously flagged as not boostable (e.g. copyright music). Re-upload without the issue and try again." },
+        { status: 400 },
       );
     }
 

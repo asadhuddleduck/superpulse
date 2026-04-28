@@ -2,10 +2,27 @@ import { db } from "@/lib/db";
 import type { IGPost } from "@/lib/types";
 
 export async function upsertPost(post: IGPost, tenantId: string): Promise<void> {
+  // ON CONFLICT (not INSERT OR REPLACE) is critical: `boost_eligible` and
+  // `copyright_music` get set by markPostIneligible() and must survive every
+  // scan-posts cycle. INSERT OR REPLACE is DELETE+INSERT in SQLite — it would
+  // silently reset those flags on every cycle, causing every copyright Reel to
+  // be re-submitted to Meta every 2h and tanking the App Review error rate.
   await db.execute({
-    sql: `INSERT OR REPLACE INTO ig_posts
+    sql: `INSERT INTO ig_posts
       (id, tenant_id, media_url, thumbnail_url, caption, timestamp, like_count, comments_count, media_type, engagement_rate)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(id) DO UPDATE SET
+        tenant_id        = excluded.tenant_id,
+        media_url        = excluded.media_url,
+        thumbnail_url    = excluded.thumbnail_url,
+        caption          = excluded.caption,
+        timestamp        = excluded.timestamp,
+        like_count       = excluded.like_count,
+        comments_count   = excluded.comments_count,
+        media_type       = excluded.media_type,
+        engagement_rate  = excluded.engagement_rate
+        -- boost_eligible, ineligible_reason, copyright_music intentionally NOT touched
+    `,
     args: [
       post.id,
       tenantId,

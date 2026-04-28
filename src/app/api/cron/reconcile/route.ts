@@ -1,14 +1,7 @@
 import { NextResponse } from "next/server";
-import {
-  exchangeForLongLivedToken,
-  fetchAdInsights,
-} from "@/lib/facebook";
+import { fetchAdInsights, fetchMe } from "@/lib/facebook";
 import { checkCronAuth } from "@/lib/cron-auth";
-import {
-  getActiveTenants,
-  updateTenantToken,
-  type Tenant,
-} from "@/lib/queries/tenants";
+import { getActiveTenants, type Tenant } from "@/lib/queries/tenants";
 import { getActiveCampaigns } from "@/lib/queries/campaigns";
 import { upsertPerformance } from "@/lib/queries/performance";
 import { logApiCall } from "@/lib/queries/api-calls";
@@ -17,9 +10,13 @@ import { db } from "@/lib/db";
 /**
  * Daily 4am UTC reconcile. Three jobs per active tenant:
  *
- *   1. Token refresh — if `token_expires_at` is within 7 days, exchange the
- *      current long-lived token for a fresh 60-day one. Without this every
- *      tenant disconnects on day 60.
+ *   1. Token health check — call /me with the stored token. 200 = healthy,
+ *      anything else = log the failure so a human can re-run the OAuth flow.
+ *      We do NOT attempt to auto-refresh: the fb_exchange_token endpoint is
+ *      for short→long, not long→long. Marketing API Standard Access tokens
+ *      may not expire on a fixed schedule anyway. Reactive replacement via
+ *      OAuth is more reliable than proactive auto-refresh until we have
+ *      data on real-world expiry behaviour.
  *   2. Yesterday's perf snapshot — fetch `date_preset=yesterday` insights and
  *      upsert into `performance_data`. The 6-hourly monitor cron writes today's
  *      running totals; this locks in yesterday's *final* numbers in case the
@@ -31,13 +28,12 @@ import { db } from "@/lib/db";
  * volume predictable per tick.
  */
 
-const TOKEN_REFRESH_THRESHOLD_DAYS = 7;
 const STALE_PAUSED_THRESHOLD_DAYS = 14;
 const TENANT_CONCURRENCY = 5;
 
 interface TenantReconcileResult {
   tenantId: string;
-  tokenRefreshed: boolean;
+  tokenHealthy: boolean;
   perfSnapshotted: number;
   error?: string;
 }
@@ -51,20 +47,14 @@ function yesterdayISODate(): string {
   return yesterdayUTC.toISOString().split("T")[0];
 }
 
-async function refreshTokenIfExpiring(tenant: Tenant): Promise<boolean> {
-  if (!tenant.metaAccessToken || !tenant.tokenExpiresAt) return false;
-
-  const expiresAt = new Date(tenant.tokenExpiresAt).getTime();
-  const threshold = Date.now() + TOKEN_REFRESH_THRESHOLD_DAYS * 24 * 60 * 60 * 1000;
-  if (expiresAt > threshold) return false;
-
+async function checkTokenHealth(tenant: Tenant): Promise<boolean> {
+  if (!tenant.metaAccessToken) return false;
   const start = Date.now();
   try {
-    const refreshed = await exchangeForLongLivedToken(tenant.metaAccessToken);
-    await updateTenantToken(tenant.id, refreshed.access_token, refreshed.expires_in);
+    await fetchMe(tenant.metaAccessToken);
     await logApiCall({
       tenantId: tenant.id,
-      endpoint: `/oauth/access_token (fb_exchange_token)`,
+      endpoint: `/me (token health)`,
       method: "GET",
       statusCode: 200,
       durationMs: Date.now() - start,
@@ -73,13 +63,13 @@ async function refreshTokenIfExpiring(tenant: Tenant): Promise<boolean> {
   } catch (err) {
     await logApiCall({
       tenantId: tenant.id,
-      endpoint: `/oauth/access_token (fb_exchange_token)`,
+      endpoint: `/me (token health)`,
       method: "GET",
-      statusCode: 500,
+      statusCode: 401,
       durationMs: Date.now() - start,
       error: err instanceof Error ? err.message : String(err),
     });
-    throw err;
+    return false;
   }
 }
 
@@ -144,22 +134,21 @@ async function snapshotYesterday(tenant: Tenant, yesterday: string): Promise<num
 async function processTenant(tenant: Tenant, yesterday: string): Promise<TenantReconcileResult> {
   const result: TenantReconcileResult = {
     tenantId: tenant.id,
-    tokenRefreshed: false,
+    tokenHealthy: false,
     perfSnapshotted: 0,
   };
 
-  try {
-    result.tokenRefreshed = await refreshTokenIfExpiring(tenant);
-  } catch (err) {
-    result.error = `Token refresh failed: ${err instanceof Error ? err.message : err}`;
-    // Don't return early — try perf snapshot with the old token if it's still valid.
+  result.tokenHealthy = await checkTokenHealth(tenant);
+  if (!result.tokenHealthy) {
+    result.error = "Token health check failed — token is dead, tenant needs to re-OAuth";
+    // Skip the perf snapshot — it would fail with the same dead token.
+    return result;
   }
 
   try {
     result.perfSnapshotted = await snapshotYesterday(tenant, yesterday);
   } catch (err) {
-    const msg = `Perf snapshot failed: ${err instanceof Error ? err.message : err}`;
-    result.error = result.error ? `${result.error}; ${msg}` : msg;
+    result.error = `Perf snapshot failed: ${err instanceof Error ? err.message : err}`;
   }
 
   return result;
@@ -194,7 +183,7 @@ async function runReconcile() {
       } catch (err) {
         results[i] = {
           tenantId: tenant.id,
-          tokenRefreshed: false,
+          tokenHealthy: false,
           perfSnapshotted: 0,
           error: err instanceof Error ? err.message : String(err),
         };
@@ -210,10 +199,28 @@ async function runReconcile() {
 
   const stale = await countStalePaused();
 
+  const unhealthyTokens = results
+    .filter((r) => r && !r.tokenHealthy)
+    .map((r) => r.tenantId);
+
+  if (unhealthyTokens.length > 0) {
+    console.error(
+      `[reconcile] Tenants with dead tokens (need OAuth re-auth):`,
+      unhealthyTokens,
+    );
+  }
+  if (stale.count > 0) {
+    console.warn(
+      `[reconcile] ${stale.count} stale-paused campaigns (>14d):`,
+      stale.ids,
+    );
+  }
+
   return {
     yesterday,
     tenantsProcessed: tenants.length,
-    tokensRefreshed: results.filter((r) => r?.tokenRefreshed).length,
+    tokensHealthy: results.filter((r) => r?.tokenHealthy).length,
+    unhealthyTokens,
     perfSnapshotted: results.reduce((sum, r) => sum + (r?.perfSnapshotted ?? 0), 0),
     stalePausedCount: stale.count,
     stalePausedIds: stale.ids,
