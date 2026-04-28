@@ -551,14 +551,18 @@ export interface AdInsightEntry {
 }
 
 /**
- * Fetch ad account insights at the campaign level for the last 7 days.
+ * Fetch ad account insights at the campaign level. Default `last_7d`; pass
+ * `{ datePreset: 'yesterday' }` from the daily reconcile cron to lock in a
+ * post-midnight final snapshot.
  */
 export async function fetchAdInsights(
   adAccountId: string,
-  token: string
+  token: string,
+  options: { datePreset?: "last_7d" | "yesterday" | "today" } = {},
 ): Promise<AdInsightEntry[]> {
+  const datePreset = options.datePreset ?? "last_7d";
   const res = await fetch(
-    `${GRAPH_API}/act_${adAccountId}/insights?fields=impressions,reach,clicks,spend,actions&date_preset=last_7d&level=campaign&access_token=${token}`
+    `${GRAPH_API}/act_${adAccountId}/insights?fields=impressions,reach,clicks,spend,actions&date_preset=${datePreset}&level=campaign&access_token=${token}`
   );
   if (!res.ok) {
     const error = await res.text();

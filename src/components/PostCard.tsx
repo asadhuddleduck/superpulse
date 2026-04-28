@@ -45,7 +45,6 @@ export default function PostCard({
   const [boostLoading, setBoostLoading] = useState(false);
   const [boostResult, setBoostResult] = useState<string | null>(null);
   const [budget, setBudget] = useState(5);
-  const [radius, setRadius] = useState(5);
 
   const imageUrl =
     post.mediaType === "VIDEO" ? post.thumbnailUrl : post.mediaUrl;
@@ -68,13 +67,23 @@ export default function PostCard({
           postId: post.id,
           caption: post.caption,
           dailyBudget: budget,
-          radiusMiles: radius,
         }),
       });
       const data = await res.json();
       if (res.ok) {
         setStatus("PAUSED");
-        setBoostResult("Campaign created in review state");
+        const created = data.totalCreated ?? 0;
+        const total = data.totalLocations ?? 0;
+        const errorCount = Array.isArray(data.errors) ? data.errors.length : 0;
+        let msg: string;
+        if (created === 0 && errorCount === 0) {
+          msg = "Already boosted at all your locations";
+        } else if (created === total) {
+          msg = `Created ${created} campaign${created === 1 ? "" : "s"} across your locations`;
+        } else {
+          msg = `Created ${created} of ${total} campaigns${errorCount ? ` (${errorCount} failed)` : ""}`;
+        }
+        setBoostResult(msg);
         setShowBoostForm(false);
       } else {
         setBoostResult(data.error || "Failed to create boost");
@@ -224,25 +233,10 @@ export default function PostCard({
               </div>
             </div>
 
-            <div>
-              <label className="text-xs text-zinc-400">
-                Target radius
-              </label>
-              <div className="mt-1 relative">
-                <input
-                  type="number"
-                  min={1}
-                  max={50}
-                  step={1}
-                  value={radius}
-                  onChange={(e) => setRadius(parseInt(e.target.value) || 5)}
-                  className="w-full rounded border border-zinc-600 bg-zinc-900 px-3 py-1.5 text-sm text-white focus:border-[#1EBA8F] focus:outline-none"
-                />
-                <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-zinc-500 text-xs">
-                  miles
-                </span>
-              </div>
-            </div>
+            <p className="text-xs text-zinc-500 leading-relaxed">
+              Targets each of your locations using its own radius. Manage
+              locations and radii in Settings.
+            </p>
 
             <button
               onClick={handleBoost}

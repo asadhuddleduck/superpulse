@@ -65,11 +65,13 @@ CREATE TABLE IF NOT EXISTS ig_posts (
   media_type TEXT,
   engagement_rate REAL,
   boost_eligible INTEGER DEFAULT 1,
-  ineligible_reason TEXT
+  ineligible_reason TEXT,
+  copyright_music INTEGER DEFAULT 0
 );
 
 ALTER TABLE ig_posts ADD COLUMN boost_eligible INTEGER DEFAULT 1;
 ALTER TABLE ig_posts ADD COLUMN ineligible_reason TEXT;
+ALTER TABLE ig_posts ADD COLUMN copyright_music INTEGER DEFAULT 0;
 
 CREATE TABLE IF NOT EXISTS active_campaigns (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
