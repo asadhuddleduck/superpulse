@@ -17,6 +17,7 @@ TABLE OF CONTENTS
 8. Infrastructure & Costs
 9. Scalability Analysis
 10. Risk Register
+11. Live Ad QA Checklist
 
 
 ================================================================================
@@ -1324,6 +1325,128 @@ WEEK 8: Testing, Polish & Launch Prep
   (separate from Ads API)                               tenant per cycle.
                                                         Exponential backoff
                                                         already implemented.
+
+
+================================================================================
+11. LIVE AD QA CHECKLIST
+================================================================================
+
+  Run this checklist EVERY TIME we go live on a new ad account — Asad's own
+  IG first (currently pending, 28 Apr 2026), then each of the 6 legacy clients
+  during Phase 1 onboarding.
+
+  This checklist exists because the Meta API silently accepts unknown fields,
+  so a payload that returns 200 from the API can still produce an ad with the
+  WRONG placements, multi-advertiser bundling ON, or Advantage+ enhancements
+  applied. The only way to be sure is to inspect the resulting campaign in
+  Ads Manager.
+
+  Origin: AD-CONFIG-TWEAKS spec (10 Apr 2026), implemented in commit 9f004a5
+  (27 Apr 2026). Replaces the per-deploy verification steps in that doc once
+  it's deleted.
+
+11.1 PRE-FLIGHT (LOCAL)
+-----------------------
+
+  [ ] cd superpulse && npx tsc --noEmit       # no type errors
+  [ ] cd superpulse && npm run build          # clean build
+  [ ] ENCRYPTION_KEY env present in .env.local AND on Vercel prod
+  [ ] FB_APP_ID + FB_APP_SECRET present in both
+  [ ] Tenant row exists for the test IG, status = active, FB token decrypts
+      cleanly via getCurrentToken()
+
+11.2 LIVE BOOST (TEST RUN)
+--------------------------
+
+  Use a NON-Reel post (image post or carousel) on the test IG so we don't get
+  blocked by the copyright try-and-fail loop on the first run. Reels can be
+  tested separately once the basic config is verified.
+
+  [ ] Sign in as the test tenant via /login
+  [ ] Confirm the post grid renders with the test IG's posts
+  [ ] Trigger boost on a chosen post via the live dashboard (or POST
+      /api/boost/create with the post ID)
+  [ ] API returns 200 with { campaignId, adSetId, creativeId, adId }
+  [ ] Campaign appears in Ads Manager within 60s (status = PAUSED)
+
+11.3 ADS MANAGER CHECKS (THE FIVE)
+----------------------------------
+
+  Open the new campaign in Ads Manager and verify EACH of the following.
+  All five must pass before flipping the originating Notion task to Done.
+
+  [ ] CHECK 1 — Placements
+      Edit the ad set → Placements section.
+      EXPECTED: Manual Placements selected. Only "Instagram" platform
+      checked. Within Instagram, ONLY "Reels" and "Stories" enabled.
+      All other surfaces (Feed, Explore, Search, Profile Feed) UNCHECKED.
+      No Facebook surfaces. No Audience Network. No Messenger.
+      Device: Mobile only.
+      If a check fails: re-verify src/lib/facebook.ts:343-359 targeting
+      payload. Most likely cause: a new Meta default placement was added
+      after our v25.0 verification.
+
+  [ ] CHECK 2 — Multi-advertiser ads toggle
+      Edit the ad → bottom of Ad Setup.
+      EXPECTED: "Multi-advertiser ads" toggle is OFF.
+      If a check fails: re-verify src/lib/facebook.ts:455-460. The opt-out
+      field is multi_advertiser_ads.has_opted_out = true at the Ad level
+      (NOT AdSet, NOT Campaign).
+
+  [ ] CHECK 3 — Advantage+ creative enhancements
+      Edit the ad → "Optimization & delivery" / "Advantage+ creative"
+      section. EXPECTED: every enhancement listed shows as OFF or
+      "Opted out". The current opt-out keys (src/lib/facebook.ts:417-427):
+        - standard_enhancements
+        - image_brightness_and_contrast
+        - image_uncrop
+        - image_touchups
+        - text_optimizations
+        - image_templates
+        - video_auto_crop
+        - audio
+        - advantage_plus_creative
+      Meta silently ignores unknown keys, so it's safe to include the full
+      list. If Meta has added new enhancement keys since v25.0, this
+      checklist should be updated to add them.
+
+  [ ] CHECK 4 — Ad identity (actor_id verification)
+      View the live ad preview in Ads Manager. EXPECTED: the ad shows the
+      linked Facebook Page name as the advertiser identity, and the ad
+      surfaces the IG post (caption, media) correctly.
+      KEY DECISION: this codebase uses actor_id (NOT object_id) at
+      src/lib/facebook.ts:405. Meta's IG Reels adcreatives example uses
+      object_id, and the fbts-code-auditor recommended switching, but
+      actor_id was empirically verified working on 9 Apr 2026 against
+      act_1059094086326037.
+      If this check FAILS (identity is missing, blank, or shows the wrong
+      page): the documented fallback is to swap actor_id → object_id in
+      createAdCreative. If swapping fixes it, update this checklist + the
+      code comment to record that object_id is now canonical.
+
+  [ ] CHECK 5 — Call-to-action link
+      Click into the ad creative preview. The CTA button should read
+      "View Instagram profile" and link to https://www.instagram.com/
+      {test-ig-username}/. If the CTA is missing OR links to a generic
+      website URL, re-verify src/lib/facebook.ts:408-413.
+
+11.4 OUTCOME
+------------
+
+  All 5 pass:
+    1. Tick the corresponding boxes in docs/AD-CONFIG-TWEAKS.md
+    2. Flip Notion task 33e84fd7bc4e81569027ed8ba0539b17 to Done
+    3. In a follow-up commit, delete docs/AD-CONFIG-TWEAKS.md (this
+       checklist persists in ARCHITECTURE.md and supersedes it)
+    4. Activate the test campaign and let it run with a small budget
+       to confirm Meta ad review approves it
+
+  Any check fails:
+    1. Capture a screenshot of the failing surface in Ads Manager
+    2. DO NOT activate the test campaign — leave it PAUSED
+    3. Fix the payload in src/lib/facebook.ts, redeploy, re-run from
+       section 11.2 with a fresh post
+    4. Repeat until all 5 pass
 
 
 ================================================================================

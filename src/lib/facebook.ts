@@ -353,7 +353,9 @@ export async function createAdSet(
         },
         publisher_platforms: ["instagram"],
         // Restrict placements to Reels + Stories on mobile only (per AD-CONFIG-TWEAKS).
-        // profile_reels intentionally omitted — not confirmed valid in v25.0.
+        // profile_reels omitted: verified against Meta v25.0 targeting-spec docs on
+        // 28 Apr 2026 — not in the documented enum (stream, story, reels, explore,
+        // explore_home, ig_search). The "reels" position covers profile-reel surfaces.
         instagram_positions: ["reels", "story"],
         device_platforms: ["mobile"],
       },
@@ -400,8 +402,12 @@ export async function createAdCreative(
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       name,
-      // actor_id (NOT object_id) — empirically verified working 9 Apr 2026.
-      // AD-CONFIG-TWEAKS proposed object_id swap; SKIPPED here to avoid breaking the live config.
+      // actor_id is the canonical field for source_instagram_media_id-based creatives
+      // in this codebase — empirically verified working 9 Apr 2026 on act_1059094086326037.
+      // The fbts-code-auditor proposed swapping to object_id (and Meta's IG Reels
+      // adcreatives example uses object_id), but the live-verified config wins.
+      // If this ever fails in production, see ARCHITECTURE.md → Live Ad QA Checklist
+      // for the object_id fallback procedure.
       actor_id: pageId,
       instagram_user_id: igUserId,
       source_instagram_media_id: igMediaId,

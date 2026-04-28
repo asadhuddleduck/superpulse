@@ -212,6 +212,8 @@ Ahmed-type: Local restaurant/takeaway owner, 2-5K followers, posts 3-4x/week, £
 
 ## Project Files
 - `docs/API-FEASIBILITY.md` — **DEFINITIVE** technical assessment of Meta API capabilities for scoring formula (5-agent research). Read this first for any technical work.
+- `docs/ARCHITECTURE.md` → §11 Live Ad QA Checklist — run before going live on any new ad account (Asad's own IG first, then each legacy client). 5 mandatory Ads Manager checks. Code comment in `src/lib/facebook.ts:405` notes `actor_id` is canonical (not `object_id`); the QA checklist describes the `object_id` fallback if identity ever fails.
+- `docs/AD-CONFIG-TWEAKS.md` — spec for the 3 Apr-10 ad config tweaks (placements, multi-advertiser off, Advantage+ off). All 3 shipped in commit `9f004a5` (27 Apr). Delete this file after the live QA pass (§11 of ARCHITECTURE.md) succeeds.
 - `docs/BUSINESS-PLAN-V1.md` — First draft business plan from agent swarm
 - `docs/ARCHITECTURE.md` — Technical architecture (schema, system flows, build plan). Note: scoring formula in this doc is superseded by API-FEASIBILITY.md.
 - `docs/PRIVACY-POLICY.md` — Privacy policy (written, not deployed yet). Will become /privacy route.
@@ -302,3 +304,9 @@ Ahmed-type: Local restaurant/takeaway owner, 2-5K followers, posts 3-4x/week, £
 
 ### Next step
 Wait 1-2 weeks for Meta's verdict. Track via Required Actions / App Review tab in the Meta Dashboard. Email notifications go to asad@huddleduck.co.uk.
+
+### Ad config conventions (locked in 28 Apr 2026)
+- Placements: `instagram_positions: ["reels", "story"]`, `device_platforms: ["mobile"]`. `profile_reels` is NOT a valid v25.0 enum value — confirmed against Meta targeting-spec docs.
+- Multi-advertiser ads: hard opt-out at the Ad level (`multi_advertiser_ads: { has_opted_out: true }`).
+- Advantage+ creative: full opt-out via `degrees_of_freedom_spec.creative_features_spec` (9 enhancement keys, see `src/lib/facebook.ts:417-427`).
+- Ad creative identity: **`actor_id` is canonical** in this codebase (NOT `object_id`). Empirically verified working 9 Apr 2026 on `act_1059094086326037`. Meta's IG Reels adcreatives example uses `object_id`, and the fbts-code-auditor recommended that swap, but the live-verified config wins. Fallback procedure (if identity ever breaks): swap to `object_id` per `docs/ARCHITECTURE.md` §11 Check 4.
