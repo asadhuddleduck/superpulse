@@ -27,6 +27,7 @@ import {
   isPostIneligible,
 } from "@/lib/queries/posts";
 import { logApiCall } from "@/lib/queries/api-calls";
+import { writeAuditEvent } from "@/lib/queries/audit-events";
 
 interface ScoredPost {
   media: IGMediaItem;
@@ -313,6 +314,13 @@ async function processTenant(tenant: Tenant): Promise<TenantResult> {
 
         existingKeys.add(`${post.id}::${location.id}`);
         result.campaignsCreated++;
+
+        await writeAuditEvent(
+          tenant.id,
+          "boost_activated",
+          `Boost live for "${captionLabel}" in ${location.name}`,
+          { postId: post.id, locationId: location.id, metaCampaignId: campaign.id },
+        );
       } catch (err) {
         await logApiCall({
           tenantId: tenant.id,
@@ -329,6 +337,15 @@ async function processTenant(tenant: Tenant): Promise<TenantResult> {
     // Boost one post per cron tick to keep call volume predictable.
     break;
   }
+
+  await writeAuditEvent(
+    tenant.id,
+    "scan_completed",
+    result.campaignsCreated > 0
+      ? `Scanned ${result.postsScanned} posts, created ${result.campaignsCreated} boost(s)`
+      : `Scanned ${result.postsScanned} posts`,
+    { campaignsCreated: result.campaignsCreated, skippedIneligible: result.skippedIneligible },
+  );
 
   return result;
 }

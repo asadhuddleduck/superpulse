@@ -12,6 +12,12 @@ export interface Tenant {
   igUsername: string | null;
   status: string;
   tokenExpiresAt: string | null;
+  // Phase 4 — Stripe billing
+  subscriptionStatus: string;
+  stripeCustomerId: string | null;
+  stripeSubscriptionId: string | null;
+  email: string | null;
+  legacy: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -28,6 +34,11 @@ function rowToTenant(row: Record<string, unknown>): Tenant {
     igUsername: (row.ig_username as string | null) ?? null,
     status: ((row.status as string | null) ?? "pending_oauth") as string,
     tokenExpiresAt: (row.token_expires_at as string | null) ?? null,
+    subscriptionStatus: ((row.subscription_status as string | null) ?? "pending") as string,
+    stripeCustomerId: (row.stripe_customer_id as string | null) ?? null,
+    stripeSubscriptionId: (row.stripe_subscription_id as string | null) ?? null,
+    email: (row.email as string | null) ?? null,
+    legacy: Number(row.legacy ?? 0) === 1,
     createdAt: row.created_at as string,
     updatedAt: (row.updated_at as string) ?? (row.created_at as string),
   };
@@ -88,10 +99,21 @@ export async function upsertTenant(t: TenantUpsert): Promise<void> {
   });
 }
 
-/** All tenants whose status === 'active' (i.e. ready for cron processing). */
+/**
+ * Tenants ready for cron processing: status === 'active', token present, and
+ * either subscription active/trialing OR flagged legacy (grandfathered).
+ */
 export async function getActiveTenants(): Promise<Tenant[]> {
   const result = await db.execute({
-    sql: `SELECT * FROM tenants WHERE status = 'active' AND meta_access_token IS NOT NULL`,
+    sql: `
+      SELECT * FROM tenants
+      WHERE status = 'active'
+        AND meta_access_token IS NOT NULL
+        AND (
+          legacy = 1
+          OR subscription_status IN ('active', 'trialing')
+        )
+    `,
     args: [],
   });
   return result.rows.map(rowToTenant);
@@ -136,5 +158,97 @@ export async function updateTenantStatus(id: string, status: string): Promise<vo
   await db.execute({
     sql: `UPDATE tenants SET status = ?, updated_at = ? WHERE id = ?`,
     args: [status, new Date().toISOString(), id],
+  });
+}
+
+/** Stripe webhook lookup: find a tenant by their Stripe customer ID. */
+export async function getTenantByStripeCustomerId(
+  stripeCustomerId: string,
+): Promise<Tenant | null> {
+  const result = await db.execute({
+    sql: `SELECT * FROM tenants WHERE stripe_customer_id = ? LIMIT 1`,
+    args: [stripeCustomerId],
+  });
+  return result.rows.length ? rowToTenant(result.rows[0]) : null;
+}
+
+/** Stripe webhook lookup: find a tenant by email (used pre-OAuth before tenant_id is known). */
+export async function getTenantByEmail(email: string): Promise<Tenant | null> {
+  const result = await db.execute({
+    sql: `SELECT * FROM tenants WHERE email = ? LIMIT 1`,
+    args: [email],
+  });
+  return result.rows.length ? rowToTenant(result.rows[0]) : null;
+}
+
+/**
+ * Set or update Stripe-related fields on a tenant. All args optional — the
+ * tenant row must already exist (created by Stripe webhook on
+ * checkout.session.completed).
+ */
+export async function setTenantStripeFields(
+  id: string,
+  fields: {
+    subscriptionStatus?: string;
+    stripeCustomerId?: string | null;
+    stripeSubscriptionId?: string | null;
+    email?: string | null;
+  },
+): Promise<void> {
+  const now = new Date().toISOString();
+  await db.execute({
+    sql: `
+      UPDATE tenants
+      SET subscription_status     = COALESCE(?, subscription_status),
+          stripe_customer_id      = COALESCE(?, stripe_customer_id),
+          stripe_subscription_id  = COALESCE(?, stripe_subscription_id),
+          email                   = COALESCE(?, email),
+          updated_at              = ?
+      WHERE id = ?
+    `,
+    args: [
+      fields.subscriptionStatus ?? null,
+      fields.stripeCustomerId ?? null,
+      fields.stripeSubscriptionId ?? null,
+      fields.email ?? null,
+      now,
+      id,
+    ],
+  });
+}
+
+/** Insert a tenant with only Stripe info — used pre-OAuth from the webhook. */
+export async function createPendingTenant(
+  id: string,
+  fields: {
+    email: string;
+    stripeCustomerId: string;
+    stripeSubscriptionId: string | null;
+    subscriptionStatus: string;
+  },
+): Promise<void> {
+  const now = new Date().toISOString();
+  await db.execute({
+    sql: `
+      INSERT INTO tenants (
+        id, email, stripe_customer_id, stripe_subscription_id,
+        subscription_status, status, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, 'pending_oauth', ?, ?)
+      ON CONFLICT(id) DO UPDATE SET
+        email                   = excluded.email,
+        stripe_customer_id      = excluded.stripe_customer_id,
+        stripe_subscription_id  = excluded.stripe_subscription_id,
+        subscription_status     = excluded.subscription_status,
+        updated_at              = excluded.updated_at
+    `,
+    args: [
+      id,
+      fields.email,
+      fields.stripeCustomerId,
+      fields.stripeSubscriptionId,
+      fields.subscriptionStatus,
+      now,
+      now,
+    ],
   });
 }

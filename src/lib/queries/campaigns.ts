@@ -58,6 +58,34 @@ export async function updateLocalCampaignStatus(
   });
 }
 
+/**
+ * StatusPanel-flavoured counts for a tenant: distinct posts boosted, total
+ * campaigns ACTIVE, total campaigns PAUSED. Single round-trip.
+ */
+export async function getCampaignCounts(tenantId: string): Promise<{
+  postsBoosted: number;
+  campaignsLive: number;
+  campaignsPaused: number;
+}> {
+  const result = await db.execute({
+    sql: `
+      SELECT
+        COUNT(DISTINCT post_id) AS posts_boosted,
+        SUM(CASE WHEN status = 'ACTIVE' THEN 1 ELSE 0 END) AS campaigns_live,
+        SUM(CASE WHEN status = 'PAUSED' THEN 1 ELSE 0 END) AS campaigns_paused
+      FROM active_campaigns
+      WHERE tenant_id = ?
+    `,
+    args: [tenantId],
+  });
+  const row = result.rows[0] ?? {};
+  return {
+    postsBoosted: Number(row.posts_boosted ?? 0),
+    campaignsLive: Number(row.campaigns_live ?? 0),
+    campaignsPaused: Number(row.campaigns_paused ?? 0),
+  };
+}
+
 function rowToCampaign(row: Record<string, unknown>): CampaignWithLocation {
   return {
     id: String(row.id),

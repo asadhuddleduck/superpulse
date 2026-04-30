@@ -14,6 +14,7 @@ import { getLocationsForTenant } from "@/lib/queries/locations";
 import { upsertCampaign, getCampaignsByTenant } from "@/lib/queries/campaigns";
 import { isPostIneligible, markPostIneligible } from "@/lib/queries/posts";
 import { logApiCall } from "@/lib/queries/api-calls";
+import { writeAuditEvent } from "@/lib/queries/audit-events";
 
 interface CreatedCampaign {
   locationId: number;
@@ -213,6 +214,13 @@ export async function POST(request: NextRequest) {
           status: "ACTIVE",
         });
         existingKeys.add(dedupeKey);
+
+        await writeAuditEvent(
+          tenant.id,
+          "boost_activated",
+          `Manual boost live for "${(caption || postId).toString().slice(0, 40)}" in ${location.name}`,
+          { postId, locationId: location.id, metaCampaignId: campaign.id },
+        );
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         await logApiCall({

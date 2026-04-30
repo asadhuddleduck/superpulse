@@ -9,8 +9,27 @@ export default async function DashboardLayout({
   children: React.ReactNode;
 }) {
   const tenant = await getCurrentTenant();
-  if (!tenant || !tenant.metaAccessToken) {
+  if (!tenant) {
     redirect("/login");
+  }
+
+  // Pre-OAuth flow gate — paid customers come through Stripe before connecting.
+  // Legacy tenants (legacy=1) bypass billing entirely and render dashboard.
+  if (!tenant.legacy) {
+    if (
+      !tenant.subscriptionStatus ||
+      tenant.subscriptionStatus === "pending" ||
+      tenant.subscriptionStatus === "canceled"
+    ) {
+      redirect("/pricing");
+    }
+    if (tenant.subscriptionStatus === "past_due") {
+      redirect("/pricing?reason=past_due");
+    }
+  }
+
+  if (!tenant.metaAccessToken) {
+    redirect("/onboarding/connect");
   }
   if (tenant.status === "pending_page_selection") {
     redirect("/onboarding/select-page");

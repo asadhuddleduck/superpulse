@@ -305,6 +305,59 @@ Ahmed-type: Local restaurant/takeaway owner, 2-5K followers, posts 3-4x/week, £
 ### Next step
 Wait 1-2 weeks for Meta's verdict. Track via Required Actions / App Review tab in the Meta Dashboard. Email notifications go to asad@huddleduck.co.uk.
 
+## Onboarding Flow (April 2026)
+
+The product target: **log in → approve budget → give locations → done.** Everything after is automated; the client sees only what's been launched and how it's performing.
+
+### Tenant status state machine
+
+`tenants.subscription_status` and `tenants.status` together drive the redirect gate in `src/app/dashboard/layout.tsx`:
+
+```
+pending_payment        → /pricing
+pending_oauth          → /onboarding/connect
+pending_page_selection → /onboarding/select-page
+pending_locations      → /onboarding/locations
+active                 → render dashboard
+legacy=1               → bypass all gates, render dashboard
+```
+
+### Screen map
+
+```
+/                     landing
+/pricing              flat £300/mo + VAT, FIRSTMONTHFREE promo code
+/api/checkout         Stripe Checkout subscription session
+/onboarding/connect   Facebook Login button + "Stuck?" link → /onboarding/support
+/onboarding/select-page   multi-page picker (only if user has 2+ Pages with IG)
+/onboarding/locations     free-form intake — postcodes.io + Nominatim + Haiku 4.5 fallback
+/onboarding/scanning      30s interstitial: "first boosts in ~15 min, we'll email you"
+/dashboard            StatusPanel hero + recent activity feed
+/onboarding/support   Meta access fork — free resources / Meta support contact / £90 paid handhold
+```
+
+### Pricing posture
+
+- **Today:** flat £300/mo + VAT (UK). One tier. `FIRSTMONTHFREE` Stripe coupon zeroes the first month.
+- **Legacy clients:** flagged `legacy=1`, bypass all gates. Six tenants grandfathered (PhatBuns, Burger & Sauce, Boo Burger, Henny's Chicken, Drip Chicken, Halal Editions).
+- **Multi-tier (Starter/Growth/Pro + addons):** deferred. See `docs/ONBOARDING-AUTOMATION.md` §Multi-tier roadmap.
+
+### Visibility surface (StatusPanel)
+
+`/dashboard` hero strip polls `/api/status` every 30s. Reads `audit_events`, `api_call_log`, `active_campaigns`, `performance_data`. Shows:
+
+- Last scan timestamp (with health dot: green <3h, yellow 3-12h, red >12h)
+- Posts detected, posts boosted, campaigns live, spend to date
+
+Recent activity feed below shows last 10 `audit_events` rows in human-readable form.
+
+### Doc index for this onboarding work
+
+- `docs/ONBOARDING-AUTOMATION.md` — full vision + architecture
+- `docs/STATUS-PANEL.md` — payload spec, polling cadence, audit_events write sites
+- `docs/LOCATION-PARSER.md` — regex/Nominatim/Haiku stack with fixtures
+- `docs/STRIPE-INTEGRATION.md` — single-tier wiring, webhook events, legacy bypass
+
 ### Ad config conventions (locked in 28 Apr 2026)
 - Placements: `instagram_positions: ["reels", "story"]`, `device_platforms: ["mobile"]`. `profile_reels` is NOT a valid v25.0 enum value — confirmed against Meta targeting-spec docs.
 - Multi-advertiser ads: hard opt-out at the Ad level (`multi_advertiser_ads: { has_opted_out: true }`).

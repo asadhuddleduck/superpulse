@@ -1,72 +1,16 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { getCurrentTenant } from "@/lib/auth";
 import { fetchMe, fetchPagesWithIG, fetchAdAccounts } from "@/lib/facebook";
 import type { PageWithIG, AdAccount } from "@/lib/facebook";
-import SummaryCard from "@/components/SummaryCard";
+import StatusPanel from "@/components/StatusPanel";
 import { getLocationsForTenant } from "@/lib/queries/locations";
 
 export const metadata: Metadata = {
   title: "Dashboard — SuperPulse",
   description: "Your SuperPulse dashboard — manage your Instagram ad boosting.",
 };
-
-interface CampaignPerformance {
-  total_spend: number;
-  total_impressions: number;
-  total_profile_visits: number;
-  active_campaigns: number;
-}
-
-async function fetchCampaignStats(): Promise<CampaignPerformance | null> {
-  try {
-    const cookieStore = await cookies();
-    const allCookies = cookieStore.getAll();
-    const cookieHeader = allCookies
-      .map((c) => `${c.name}=${c.value}`)
-      .join("; ");
-
-    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000";
-    const res = await fetch(`${baseUrl}/api/campaigns`, {
-      headers: { cookie: cookieHeader },
-      cache: "no-store",
-    });
-
-    if (!res.ok) return null;
-
-    const campaigns = await res.json();
-    if (!Array.isArray(campaigns)) return null;
-
-    let totalSpend = 0;
-    let totalImpressions = 0;
-    let totalProfileVisits = 0;
-    let activeCampaigns = 0;
-
-    for (const c of campaigns) {
-      totalSpend += c.spend ?? 0;
-      totalImpressions += c.impressions ?? 0;
-      totalProfileVisits += c.profile_visits ?? 0;
-      if (c.status === "ACTIVE") activeCampaigns++;
-    }
-
-    return {
-      total_spend: totalSpend,
-      total_impressions: totalImpressions,
-      total_profile_visits: totalProfileVisits,
-      active_campaigns: activeCampaigns,
-    };
-  } catch {
-    return null;
-  }
-}
-
-function formatNumber(n: number): string {
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
-  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
-  return n.toLocaleString();
-}
 
 export default async function DashboardPage() {
   const tenant = await getCurrentTenant();
@@ -89,8 +33,6 @@ export default async function DashboardPage() {
   ]);
   if (pagesResult.status === "fulfilled") pages = pagesResult.value;
   if (adAccountsResult.status === "fulfilled") adAccounts = adAccountsResult.value;
-
-  const stats = await fetchCampaignStats();
 
   const locationCount = (await getLocationsForTenant(tenant.id)).length;
 
@@ -132,36 +74,8 @@ export default async function DashboardPage() {
         </div>
       )}
 
-      {/* Summary Cards */}
-      <section className="mb-10">
-        <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">
-          <SummaryCard
-            label="Total Spend"
-            value={stats ? stats.total_spend.toFixed(2) : "0.00"}
-            prefix="£"
-            trend={stats && stats.total_spend > 0 ? "up" : "neutral"}
-          />
-          <SummaryCard
-            label="Total Impressions"
-            value={stats ? formatNumber(stats.total_impressions) : "0"}
-            trend={stats && stats.total_impressions > 0 ? "up" : "neutral"}
-          />
-          <SummaryCard
-            label="Profile Visits"
-            value={stats ? formatNumber(stats.total_profile_visits) : "0"}
-            trend={stats && stats.total_profile_visits > 0 ? "up" : "neutral"}
-          />
-          <SummaryCard
-            label="Active Campaigns"
-            value={stats ? stats.active_campaigns.toString() : "0"}
-            trend={
-              stats && stats.active_campaigns > 0
-                ? "up"
-                : "neutral"
-            }
-          />
-        </div>
-      </section>
+      {/* Live status — replaces stats cards. Polls /api/status every 30s. */}
+      <StatusPanel />
 
       {/* Quick Nav */}
       <section className="mb-10">

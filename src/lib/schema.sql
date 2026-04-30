@@ -116,3 +116,27 @@ CREATE TABLE IF NOT EXISTS waitlist (
   source TEXT DEFAULT 'nec-2026',
   created_at TEXT DEFAULT CURRENT_TIMESTAMP
 );
+
+-- Audit events: human-readable activity feed for the dashboard StatusPanel.
+-- Distinct from api_call_log, which is machine-facing (App Review quota tracking).
+-- Write sites: end of every cron processTenant(), every campaign create/activate, Stripe webhook events.
+CREATE TABLE IF NOT EXISTS audit_events (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  tenant_id TEXT NOT NULL,
+  event_type TEXT NOT NULL,
+  message TEXT NOT NULL,
+  metadata TEXT,
+  created_at TEXT DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_audit_events_tenant
+  ON audit_events(tenant_id, created_at DESC);
+
+-- Phase 4 (Stripe billing) — additive columns on tenants.
+ALTER TABLE tenants ADD COLUMN subscription_status TEXT DEFAULT 'pending';
+ALTER TABLE tenants ADD COLUMN stripe_customer_id TEXT;
+ALTER TABLE tenants ADD COLUMN stripe_subscription_id TEXT;
+ALTER TABLE tenants ADD COLUMN email TEXT;
+ALTER TABLE tenants ADD COLUMN legacy INTEGER DEFAULT 0;
+
+CREATE INDEX IF NOT EXISTS idx_tenants_stripe_customer_id ON tenants(stripe_customer_id);

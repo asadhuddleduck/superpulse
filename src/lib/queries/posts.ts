@@ -47,6 +47,15 @@ export async function getPostsByTenant(tenantId: string): Promise<IGPost[]> {
   return result.rows.map(rowToPost);
 }
 
+/** Total ig_posts rows for a tenant — used by StatusPanel "posts detected". */
+export async function countPostsByTenant(tenantId: string): Promise<number> {
+  const result = await db.execute({
+    sql: "SELECT COUNT(*) AS n FROM ig_posts WHERE tenant_id = ?",
+    args: [tenantId],
+  });
+  return Number(result.rows[0]?.n ?? 0);
+}
+
 export async function getPostById(id: string): Promise<IGPost | null> {
   const result = await db.execute({
     sql: "SELECT * FROM ig_posts WHERE id = ?",

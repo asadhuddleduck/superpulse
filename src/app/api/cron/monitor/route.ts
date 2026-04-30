@@ -11,6 +11,7 @@ import {
 } from "@/lib/queries/campaigns";
 import { upsertPerformance } from "@/lib/queries/performance";
 import { logApiCall } from "@/lib/queries/api-calls";
+import { writeAuditEvent } from "@/lib/queries/audit-events";
 
 interface TenantMonitorResult {
   tenantId: string;
@@ -113,6 +114,12 @@ async function processTenant(tenant: Tenant): Promise<TenantMonitorResult> {
         });
         await updateLocalCampaignStatus(campaign.metaCampaignId, "PAUSED");
         result.paused.push(campaign.metaCampaignId);
+        await writeAuditEvent(
+          tenant.id,
+          "spend_threshold",
+          `Paused underperforming campaign — spent £${perf.spend.toFixed(2)} with low CTR`,
+          { metaCampaignId: campaign.metaCampaignId, spend: perf.spend, ctr },
+        );
       } catch (err) {
         await logApiCall({
           tenantId: tenant.id,
