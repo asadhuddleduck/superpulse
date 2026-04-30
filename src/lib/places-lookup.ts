@@ -40,6 +40,13 @@ interface PostcodesIOResponse {
     admin_ward: string | null;
     region: string | null;
   } | null;
+  terminated?: {
+    postcode: string;
+    latitude: number;
+    longitude: number;
+    year_terminated: number;
+    month_terminated: number;
+  };
 }
 
 interface NominatimItem {
@@ -59,8 +66,15 @@ interface NominatimItem {
 }
 
 /**
- * Look up a UK postcode via postcodes.io. Returns null on any error or
- * non-200/404. Postcodes are space-tolerant — `B100RX` and `B10 0RX` both work.
+ * Look up a UK postcode via postcodes.io. Postcodes are space-tolerant —
+ * `B100RX` and `B10 0RX` both work.
+ *
+ * Handles 3 cases:
+ *   1. Active postcode (200) → full record
+ *   2. Terminated postcode (404 with `terminated` block) → use last known
+ *      lat/lon. Real-world postcodes get retired regularly; we don't want to
+ *      hard-fail when a user types an old one.
+ *   3. Genuine not-found / network error → null
  */
 export async function lookupPostcode(
   postcode: string,
@@ -70,17 +84,37 @@ export async function lookupPostcode(
     const res = await fetch(`${POSTCODES_IO}/${encodeURIComponent(cleaned)}`, {
       headers: { Accept: "application/json" },
     });
-    if (!res.ok) return null;
-    const data = (await res.json()) as PostcodesIOResponse;
-    if (data.status !== 200 || !data.result) return null;
-    return {
-      postcode: data.result.postcode,
-      latitude: data.result.latitude,
-      longitude: data.result.longitude,
-      district: data.result.admin_district,
-      ward: data.result.admin_ward,
-      region: data.result.region,
-    };
+    // Both 200 (active) and 404-with-terminated parse as JSON.
+    let data: PostcodesIOResponse;
+    try {
+      data = (await res.json()) as PostcodesIOResponse;
+    } catch {
+      return null;
+    }
+
+    if (data.status === 200 && data.result) {
+      return {
+        postcode: data.result.postcode,
+        latitude: data.result.latitude,
+        longitude: data.result.longitude,
+        district: data.result.admin_district,
+        ward: data.result.admin_ward,
+        region: data.result.region,
+      };
+    }
+
+    if (data.terminated) {
+      return {
+        postcode: data.terminated.postcode,
+        latitude: data.terminated.latitude,
+        longitude: data.terminated.longitude,
+        district: "",
+        ward: null,
+        region: null,
+      };
+    }
+
+    return null;
   } catch {
     return null;
   }
@@ -190,10 +224,14 @@ export function postcodeAsCandidate(
   pc: PostcodeInfo,
   bizName: string,
 ): Candidate {
+  // District is empty for terminated postcodes — render only what we have.
+  const areaTokens = [pc.district, pc.postcode].filter(Boolean);
+  const area = areaTokens.join(" ");
+  const address = areaTokens.join(", ");
   return {
-    display: `${bizName} • ${pc.district} ${pc.postcode}`,
+    display: `${bizName} • ${area}`,
     name: bizName,
-    address: `${pc.district}, ${pc.postcode}`,
+    address: address || pc.postcode,
     latitude: pc.latitude,
     longitude: pc.longitude,
     postcode: pc.postcode,

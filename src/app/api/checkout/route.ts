@@ -41,7 +41,6 @@ export async function POST(request: NextRequest) {
       success_url: `${baseUrl}/onboarding/connect?session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${baseUrl}/pricing`,
       automatic_tax: { enabled: true },
-      customer_creation: "always",
       customer_email: body.email,
       subscription_data: {
         metadata: { source: "superpulse-direct" },
