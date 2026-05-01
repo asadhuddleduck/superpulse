@@ -7,9 +7,11 @@ import {
   createAdCreative,
   createAd,
   updateCampaignStatus,
+  deleteCampaign,
   checkBoostEligibility,
   type IGMediaItem,
 } from "@/lib/facebook";
+import { classifyMetaError } from "@/lib/meta-errors";
 import { checkCronAuth } from "@/lib/cron-auth";
 import { getActiveTenants, upsertTenant, type Tenant } from "@/lib/queries/tenants";
 import {
@@ -220,11 +222,19 @@ async function processTenant(tenant: Tenant): Promise<TenantResult> {
 
     const captionLabel = shortCaption(post.caption ?? "", post.id.slice(-6));
 
+    let postRejected = false;
+
     for (const location of uncoveredLocations) {
+      // Hoisted so the catch block can clean up the orphan campaign if a
+      // downstream step (createAdCreative / createAd) fails after
+      // createCampaign already succeeded on Meta's side.
+      let createdCampaignId: string | null = null;
+
       try {
         const campaignName = `SuperPulse v7 | ${location.name} | ${captionLabel}`;
         const campaignStart = Date.now();
         const campaign = await createCampaign(cleanAdAccountId, campaignName, token);
+        createdCampaignId = campaign.id;
         await logApiCall({
           tenantId: tenant.id,
           endpoint: `/act_${cleanAdAccountId}/campaigns`,
@@ -322,19 +332,48 @@ async function processTenant(tenant: Tenant): Promise<TenantResult> {
           { postId: post.id, locationId: location.id, metaCampaignId: campaign.id },
         );
       } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
         await logApiCall({
           tenantId: tenant.id,
           endpoint: `/act_${cleanAdAccountId}/* (boost flow)`,
           method: "POST",
           statusCode: 500,
           durationMs: 0,
-          error: err instanceof Error ? err.message : String(err),
+          error: message,
         });
-        // Move on to the next location; one failure shouldn't break the rest.
+
+        // Best-effort: delete the orphan campaign+adset that Meta created
+        // before the failure point. Silent on failure — cleanup matters less
+        // than not crashing the cron.
+        if (createdCampaignId) {
+          await deleteCampaign(createdCampaignId, token);
+        }
+
+        // If Meta rejected this post for a permanent product-policy reason
+        // (e.g. copyright music), mark it ineligible so we don't retry it
+        // every 2h cron tick. Break out of the per-location loop too — the
+        // same post will fail in every location.
+        const rejection = classifyMetaError(err);
+        if (rejection?.permanent) {
+          await markPostIneligible(post.id, rejection.reason);
+          await writeAuditEvent(
+            tenant.id,
+            "review_failed",
+            `Post "${captionLabel}" marked ineligible: ${rejection.reason}`,
+            { postId: post.id, reason: rejection.reason },
+          );
+          postRejected = true;
+          break;
+        }
+        // Otherwise it's a transient error — move to the next location.
       }
     }
 
-    // Boost one post per cron tick to keep call volume predictable.
+    // If the post hit a permanent rejection, try the next-highest-scoring
+    // post in this cron tick instead of stopping entirely.
+    if (postRejected) continue;
+
+    // Boost one successful post per cron tick to keep call volume predictable.
     break;
   }
 

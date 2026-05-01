@@ -302,6 +302,27 @@ export async function updateCampaignStatus(
   return res.json();
 }
 
+/**
+ * Hard-delete a campaign on Meta's side. Used to clean up orphan campaigns
+ * left behind when a downstream step (createAdCreative / createAd) fails after
+ * the campaign was already created. Best-effort — failures are swallowed so
+ * the caller can continue with the more important error path.
+ */
+export async function deleteCampaign(
+  campaignId: string,
+  token: string,
+): Promise<boolean> {
+  try {
+    const res = await fetch(
+      `${GRAPH_API}/${campaignId}?access_token=${encodeURIComponent(token)}`,
+      { method: "DELETE" },
+    );
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Ad Set
 // ---------------------------------------------------------------------------

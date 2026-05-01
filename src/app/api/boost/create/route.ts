@@ -7,8 +7,10 @@ import {
   createAdCreative,
   createAd,
   updateCampaignStatus,
+  deleteCampaign,
   checkBoostEligibility,
 } from "@/lib/facebook";
+import { classifyMetaError } from "@/lib/meta-errors";
 import { upsertTenant } from "@/lib/queries/tenants";
 import { getLocationsForTenant } from "@/lib/queries/locations";
 import { upsertCampaign, getCampaignsByTenant } from "@/lib/queries/campaigns";
@@ -115,9 +117,13 @@ export async function POST(request: NextRequest) {
       }
 
       const campaignName = `SuperPulse v7 | ${location.name} | ${shortCaption}`;
+      // Hoisted for orphan cleanup if a downstream step fails after Meta has
+      // already accepted the campaign create.
+      let createdCampaignId: string | null = null;
       try {
         const campaignStart = Date.now();
         const campaign = await createCampaign(cleanAdAccountId, campaignName, token);
+        createdCampaignId = campaign.id;
         await logApiCall({
           tenantId: tenant.id,
           endpoint: `/act_${cleanAdAccountId}/campaigns`,
@@ -231,7 +237,25 @@ export async function POST(request: NextRequest) {
           durationMs: 0,
           error: message,
         });
+
+        // Best-effort orphan cleanup before classifying the error.
+        if (createdCampaignId) {
+          await deleteCampaign(createdCampaignId, token);
+        }
+
+        // Permanent Meta product rejections (e.g. copyright music) → mark
+        // the post ineligible so it never gets boosted again, by this manual
+        // call or by the cron.
+        const rejection = classifyMetaError(err);
+        if (rejection?.permanent) {
+          await markPostIneligible(postId, rejection.reason);
+        }
+
         errors.push({ locationName: location.name, error: message });
+
+        // Same post will fail in every location for permanent rejections —
+        // no point trying the rest.
+        if (rejection?.permanent) break;
       }
     }
 

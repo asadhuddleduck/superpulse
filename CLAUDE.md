@@ -120,6 +120,24 @@ BOOST, DON'T_BOOST, INCREASE_BUDGET, DECREASE_BUDGET, PAUSE, EXPAND_RADIUS, REDU
 4. Wait for Meta ad review (poll `ad_review_feedback` every 5 min for first hour)
 5. If approved: activate. If rejected (copyright/policy): mark post non-boostable, try next.
 
+### Failure → Ineligible Pipeline (added 2026-05-01)
+Meta’s `boost_eligibility_info` pre-check is unreliable for copyright music —
+it returns `eligible: true` for posts that `createAdCreative` later rejects
+with `error_subcode: 2875030`. To prevent every-2h retry loops on the same
+broken post:
+
+- `src/lib/meta-errors.ts` exports `classifyMetaError(err)` — maps known Meta
+  `error_subcode` values to a `{ reason, permanent }` rule.
+- The catch blocks in `src/app/api/cron/scan-posts/route.ts` and
+  `src/app/api/boost/create/route.ts` call `classifyMetaError` and, on any
+  permanent rejection, call `markPostIneligible(post.id, reason)`.
+- They also call `deleteCampaign(metaCampaignId, token)` (best-effort) so the
+  orphan campaign+adset Meta accepted before the failure point doesn’t
+  accumulate under the ad account.
+
+Add new `error_subcode` rules to `src/lib/meta-errors.ts` whenever a new
+permanent rejection pattern shows up in `api_call_log`.
+
 ### MVP Build Priority
 1. Recency + Content Type (trivial, ship day 1)
 2. Basic engagement (likes + comments + saves, normalized by age — no polling needed)

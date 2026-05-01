@@ -135,6 +135,42 @@ Today: flat £300/mo + VAT. After hitting 20+ paying customers, expand to 3 tier
 
 Migration path for existing £300 flat-tier customers: grandfather at current price, or move up/down to nearest new tier. Decision deferred until we have signal on willingness-to-pay.
 
+## Permanent Meta rejection handling (added 2026-05-01)
+
+Meta's `boost_eligibility_info` pre-check is unreliable — it returns
+`eligible: true` for posts that `createAdCreative` later rejects with
+`error_subcode: 2875030` (copyright music in a Reel). The first 24h soak on
+prod showed all errors were a single bad post being retried every 2h cron
+tick, with orphan PAUSED campaigns piling up under `act_1059094086326037`.
+
+### Fix shipped
+
+- New module `src/lib/meta-errors.ts` exports `classifyMetaError(err)` →
+  `{ reason, permanent } | null`. Inspects the thrown error message for
+  known Meta `error_subcode` values. The list is intentionally small — only
+  subcodes we have actually seen in production. Add new rules as they
+  surface in `api_call_log`.
+- `src/lib/facebook.ts` exports `deleteCampaign(metaCampaignId, token)` —
+  hard-deletes a campaign on Meta. Best-effort, swallows failures.
+- The catch blocks in `src/app/api/cron/scan-posts/route.ts` and
+  `src/app/api/boost/create/route.ts`:
+  1. Log the failure to `api_call_log` (unchanged).
+  2. Best-effort delete the orphan campaign Meta already accepted before the
+     failure point.
+  3. If `classifyMetaError` returns `permanent: true`, call
+     `markPostIneligible(postId, reason)` so the cron stops retrying.
+  4. Write a `review_failed` audit_event so the dashboard recent-activity
+     feed surfaces the rejection visibly.
+  5. (cron only) Move on to the next-highest-scoring post in the same tick
+     instead of stopping outright — the `for…break` was replaced with a
+     `postRejected` flag + `continue`.
+
+### Verification
+
+After the fix lands, re-run the soak SQL on `api_call_log` — error_pct
+should drop to near 0%. Pull live insights via `GET /act_.../campaigns?effective_status=["PAUSED"]`
+to confirm orphan count stops growing.
+
 ## App Review traffic plan [follow-up subtask 11]
 
 Current Meta App Review state (23 Apr 2026): 7/8 perms approved. Standard Access Feature **rejected**. Need 1500 calls / 15 days with <15% error rate to re-approve.
