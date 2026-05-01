@@ -127,7 +127,7 @@ export default function StatusPanel() {
           <Stat label="Spend this month" value={`£${data.spendToDate.toFixed(2)}`} />
         </div>
         {data.lastError && (
-          <div className="mt-5 rounded-lg border border-red-500/30 bg-red-500/5 p-3 text-sm text-red-300">
+          <div className="mt-5 rounded-lg border border-red-500/30 bg-red-500/5 p-3 text-sm text-red-300 break-all">
             <span className="font-semibold">Recent error:</span> {data.lastError.error}{" "}
             <span className="text-red-400/60">({formatRelative(data.lastError.at)})</span>
           </div>
@@ -151,7 +151,7 @@ export default function StatusPanel() {
                 <span className="shrink-0 inline-block rounded bg-zinc-800 px-2 py-0.5 text-xs text-zinc-300 w-28">
                   {eventLabel(event.eventType)}
                 </span>
-                <span className="text-zinc-200 flex-1">{event.message}</span>
+                <span className="text-zinc-200 flex-1 min-w-0 break-words">{event.message}</span>
               </li>
             ))}
           </ul>

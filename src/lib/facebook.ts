@@ -439,10 +439,11 @@ export async function createAdCreative(
         },
       },
       // Opt out of every Advantage+ creative enhancement Meta would otherwise auto-apply.
-      // Unknown keys are silently ignored by Meta; safe to include the full list.
+      // `standard_enhancements` was the bundled opt-out — Meta deprecated it 2026-05-01
+      // ("standard enhancements field in creative has been deprecated. Please choose to
+      // set individual features instead"). The 8 individual feature keys below replace it.
       degrees_of_freedom_spec: {
         creative_features_spec: {
-          standard_enhancements:         { enroll_status: "OPT_OUT" },
           image_brightness_and_contrast: { enroll_status: "OPT_OUT" },
           image_uncrop:                  { enroll_status: "OPT_OUT" },
           image_touchups:                { enroll_status: "OPT_OUT" },
