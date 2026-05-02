@@ -5,7 +5,6 @@ import { useState } from "react";
 interface Choice {
   adAccountId: string;
   name: string;
-  businessName: string;
   currency: string;
 }
 
@@ -61,7 +60,7 @@ export function SelectAdAccountForm({ choices }: { choices: Choice[] }) {
                 {choice.name}
               </div>
               <div className="text-xs text-zinc-500 mt-0.5 truncate">
-                {choice.businessName} · {choice.currency}
+                {choice.currency}
               </div>
             </div>
             <span

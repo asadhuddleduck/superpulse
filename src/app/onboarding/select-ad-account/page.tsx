@@ -60,7 +60,6 @@ export default async function SelectAdAccountPage() {
     return {
       adAccountId: rawId,
       name: a.name,
-      businessName: a.business?.name ?? "(personal)",
       currency: a.currency,
     };
   });

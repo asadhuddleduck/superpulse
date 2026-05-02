@@ -224,16 +224,21 @@ export interface AdAccount {
   name: string;
   account_status: number;
   currency: string;
-  business?: { id: string; name: string };
 }
 
 /**
  * Fetch ad accounts for the authenticated user.
+ *
+ * NOTE: do NOT request `business{id,name}` here — that field requires the
+ * `business_management` permission which we deliberately don't ask for (see
+ * CLAUDE.md, removed 2026-04-09). Adding it makes the entire call 500 with
+ * "(#100) Requires business_management permission" — broke the picker for
+ * ~10 minutes on 2026-05-02 before being reverted.
  */
 export async function fetchAdAccounts(
   token: string
 ): Promise<AdAccount[]> {
-  const url = `${GRAPH_API}/me/adaccounts?fields=id,name,account_status,currency,business&limit=200&access_token=${token}`;
+  const url = `${GRAPH_API}/me/adaccounts?fields=id,name,account_status,currency&limit=200&access_token=${token}`;
   const res = await fetch(url);
   await captureRateLimits(res, url);
   if (!res.ok) {

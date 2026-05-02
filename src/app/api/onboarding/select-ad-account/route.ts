@@ -61,8 +61,6 @@ async function selectAdAccount(adAccountId: string) {
     {
       adAccountId,
       adAccountName: matched.name,
-      businessId: matched.business?.id ?? null,
-      businessName: matched.business?.name ?? null,
       previousAdAccountId,
     },
   );
