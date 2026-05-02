@@ -29,13 +29,29 @@ import {
   markPostIneligible,
   isPostIneligible,
 } from "@/lib/queries/posts";
-import { logApiCall } from "@/lib/queries/api-calls";
+import { logApiCall, hasRecentFailureForPost } from "@/lib/queries/api-calls";
 import { writeAuditEvent } from "@/lib/queries/audit-events";
 
 interface ScoredPost {
   media: IGMediaItem;
   score: number;
 }
+
+/**
+ * Cap on how many (post, location) boost flows a single tenant can run per
+ * cron tick. Each flow is ~5 Meta API calls (campaign+adset+creative+ad+activate),
+ * so 3 = ~15 calls/tenant/tick, keeping us safe under the 200 calls/hr/user budget
+ * even with 5-tenant concurrency.
+ */
+const MAX_LOCATIONS_PER_TENANT_PER_TICK = 3;
+
+/**
+ * Inter-call delay between location boost flows to spread load on Meta. Tiny
+ * but non-zero — looks more human than a hot loop hammering 5 calls in 200ms.
+ */
+const INTER_LOCATION_DELAY_MS = 500;
+
+const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
 function scorePost(post: IGMediaItem): number {
   const likeCount = post.like_count ?? 0;
@@ -206,6 +222,10 @@ async function processTenant(tenant: Tenant): Promise<TenantResult> {
     // Skip posts marked ineligible from a prior cycle (e.g. copyright music).
     if (await isPostIneligible(post.id)) continue;
 
+    // 24h retry cooldown: if Meta 5xx'd this post in the last day, skip it.
+    // Stops the 32-retry-on-dead-post pattern from the May 2026 incident.
+    if (await hasRecentFailureForPost(tenant.id, post.id)) continue;
+
     const uncoveredLocations = locations.filter(
       (loc) => loc && !existingKeys.has(`${post.id}::${loc.id}`),
     ) as Location[];
@@ -244,8 +264,13 @@ async function processTenant(tenant: Tenant): Promise<TenantResult> {
     const captionLabel = shortCaption(post.caption ?? "", post.id.slice(-6));
 
     let postRejected = false;
+    // Velocity stagger: trim to MAX_LOCATIONS_PER_TENANT_PER_TICK and sleep
+    // INTER_LOCATION_DELAY_MS between flows. Caps API burst per tenant.
+    const cappedLocations = uncoveredLocations.slice(0, MAX_LOCATIONS_PER_TENANT_PER_TICK);
 
-    for (const location of uncoveredLocations) {
+    for (let locIdx = 0; locIdx < cappedLocations.length; locIdx++) {
+      const location = cappedLocations[locIdx];
+      if (locIdx > 0) await sleep(INTER_LOCATION_DELAY_MS);
       // Hoisted so the catch block can clean up the orphan campaign if a
       // downstream step (createAdCreative / createAd) fails after
       // createCampaign already succeeded on Meta's side.
@@ -352,22 +377,47 @@ async function processTenant(tenant: Tenant): Promise<TenantResult> {
           `Boost live for "${captionLabel}" in ${location.name}`,
           { postId: post.id, locationId: location.id, metaCampaignId: campaign.id },
         );
+        // Distinct from boost_activated (status flip): this fires only after
+        // the full pipeline (campaign+adset+creative+ad+activate) lands clean.
+        // Lets us alert on "no boost_succeeded in 24h despite >0 attempts".
+        await writeAuditEvent(
+          tenant.id,
+          "boost_succeeded",
+          `Full boost flow succeeded for "${captionLabel}" in ${location.name}`,
+          { postId: post.id, locationId: location.id, metaCampaignId: campaign.id, metaAdId: ad.id },
+        );
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
+        // Permanent rejections get their own review_failed event below; this
+        // covers transient failures and pre-classification errors so the
+        // dashboard activity feed shows that we tried and failed.
+        await writeAuditEvent(
+          tenant.id,
+          "boost_failed",
+          `Boost flow failed for "${captionLabel}" in ${location.name}`,
+          {
+            postId: post.id,
+            locationId: location.id,
+            metaCampaignId: createdCampaignId,
+            error: message.slice(0, 500),
+          },
+        );
         await logApiCall({
           tenantId: tenant.id,
           endpoint: `/act_${cleanAdAccountId}/* (boost flow)`,
           method: "POST",
           statusCode: 500,
           durationMs: 0,
-          error: message,
+          // `post:<id>` prefix is the stable key that hasRecentFailureForPost
+          // grep against to enforce the 24h retry cooldown.
+          error: `post:${post.id} ${message}`,
         });
 
         // Best-effort: delete the orphan campaign+adset that Meta created
         // before the failure point. Silent on failure — cleanup matters less
         // than not crashing the cron.
         if (createdCampaignId) {
-          await deleteCampaign(createdCampaignId, token);
+          await deleteCampaign(createdCampaignId, token, tenant.id);
         }
 
         // If Meta rejected this post for a permanent product-policy reason

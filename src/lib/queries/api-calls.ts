@@ -89,6 +89,37 @@ export async function getLastSuccessfulCallByEndpoint(
 }
 
 /**
+ * Returns true if any 5xx (or network-error) row exists in api_call_log
+ * within the last `windowHours` whose `error` text mentions the given post id.
+ *
+ * Used by scan-posts to skip a (post, location) pair when Meta has been
+ * rejecting that post recently — stops the 32-retry-on-dead-post pattern that
+ * accumulated during the 2026-05 deprecation incident. The match is on the
+ * raw error text because that's where the post id surfaces (Meta echoes the
+ * id back inside `error_user_msg` and our own thrown messages include it).
+ */
+export async function hasRecentFailureForPost(
+  tenantId: string,
+  postId: string,
+  windowHours = 24,
+): Promise<boolean> {
+  const since = new Date(Date.now() - windowHours * 60 * 60 * 1000).toISOString();
+  const result = await db.execute({
+    sql: `
+      SELECT 1
+      FROM api_call_log
+      WHERE tenant_id = ?
+        AND created_at >= ?
+        AND status_code >= 500
+        AND error LIKE ?
+      LIMIT 1
+    `,
+    args: [tenantId, since, `%${postId}%`],
+  });
+  return result.rows.length > 0;
+}
+
+/**
  * Most recent error row (status>=400 or error not null) for a tenant in the
  * last 24 hours. Drives the StatusPanel "lastError" surface.
  */

@@ -4,6 +4,79 @@ Running record of production incidents, root causes, and runbook patterns. Newes
 
 ---
 
+## 2026-05-02 — Hardening pass: 6 of 7 outstanding action items shipped (cron still OFF)
+
+Shipped items 1–6 from the 2026-05-01 → 2026-05-02 incident's action list. Cron remains disabled until item 7 (re-enable) — gated on user testing the picker post-token-clear.
+
+### Item 1 — Class-of-bug deprecation classifier (`src/lib/meta-errors.ts`)
+
+The classifier had ONE rule (`copyright_music`, subcode 2875030). The 2026-05 standard_enhancements deprecation (subcode 3858504) fell through to "transient" → 3-day retry storm. Now:
+
+- Two new rules added:
+  - `subcode 3858504 → standard_enhancements_deprecated, permanent`
+  - regex `/has been deprecated|is deprecated|no longer supported/i → deprecated_field, permanent`
+- `classifyMetaError` now also matches against the parsed `error_user_msg` and `message` JSON fields, not just the raw thrown string.
+- Future Meta deprecations should match the regex even if Meta picks a fresh subcode — class-of-bug recurrence-safe.
+
+### Item 2 — `deleteCampaign` observability (`src/lib/facebook.ts`)
+
+Was a bare-fetch with double-swallowed errors → 0 DELETE rows in `api_call_log` lifetime. db-forensic inferred ~38% silent success rate. Now:
+
+- `deleteCampaign(campaignId, token, tenantId?)` writes a row to `api_call_log` on every attempt (status code, duration, error text).
+- On success: writes a `cleanup_deleted` `audit_events` row.
+- On failure: writes a `cleanup_failed` `audit_events` row with status code + error.
+- Both call sites updated (`scan-posts:370`, `boost-create:243`) to pass `tenant.id`.
+- Still best-effort — the function never throws, just records.
+
+### Item 3 — Meta rate-limit telemetry (new table `rate_limit_log`)
+
+Zero observability before this. meta-api-auditor hit `error 17 / subcode 2446079` mid-audit and we'd never have known. Now:
+
+- New table `rate_limit_log` (id, ad_account_id, endpoint, app_usage_json, buc_usage_json, captured_at). Stores raw header JSON so the schema doesn't have to track Meta's evolving structure — query with `json_extract()` at read time.
+- New helper `captureRateLimits(res, url)` in `src/lib/facebook.ts` parses `X-App-Usage` + `X-Business-Use-Case-Usage` from every response, extracts `act_NNN` from the URL when present, and writes a row only when at least one header is set (Meta omits them on cached responses — keeps the table small).
+- Wired into every Meta fetch in `facebook.ts` (12 call sites: fetchMe, fetchPagesWithIG ×2, fetchIGUsername, fetchIGMedia, fetchAdAccounts, getAdAccountStatus, createCampaign, fetchCampaigns, updateCampaignStatus, deleteCampaign, createAdSet, createAdCreative, createAd, verifyAd, checkBoostEligibility, fetchAdInsights).
+- New helper `getLatestAppUsage()` in `src/lib/queries/rate-limits.ts` returns the most recent `call_count`/`cpu_time`/`total_time` percentages for dashboarding.
+- **Why a separate table over a column on `api_call_log`:** lets us query "what's our utilisation trajectory on `act_X` over the last 24h" without scanning every API call. Cheaper indexed reads. Documented in the schema comment.
+
+### Item 4 — Per-post 24h retry cooldown (`scan-posts`)
+
+`ig_post 18058050788204553` was retried 32 times in 3 days. Now:
+
+- Boost-flow catch blocks (cron + boost-create) prefix the logged error string with `post:<postId> `, giving us a stable LIKE key.
+- New `hasRecentFailureForPost(tenantId, postId, windowHours=24)` in `src/lib/queries/api-calls.ts` returns `true` if any 5xx row in the last 24h mentions that post id.
+- `scan-posts` calls this before adding (post, location) pairs to `uncoveredLocations`. Hit → skip, move to the next-highest-scoring post.
+
+### Item 5 — Velocity stagger (`scan-posts`)
+
+Old code attempted EVERY uncovered location in one tick — could be 5-10 boost flows × 5 calls each = 50 Meta calls in <1s. Now:
+
+- `MAX_LOCATIONS_PER_TENANT_PER_TICK = 3` cap (slice the location list).
+- `INTER_LOCATION_DELAY_MS = 500` `await sleep(500)` between flows (skipped on the first iteration).
+- Net: ~15 calls/tenant/tick spread over ~1.5s. Comfortably under the 200 calls/hr/user budget.
+
+### Item 6 — 4 boost-lifecycle `audit_events`
+
+`audit_events` had only `scan_completed` rows for boost flows. Future incidents would be invisible until orphans piled up on Meta. Now:
+
+- Type union extended: `boost_succeeded`, `boost_failed`, `cleanup_deleted`, `cleanup_failed`.
+- `boost_succeeded` written after the full 5-step pipeline lands clean (cron + manual boost-create).
+- `boost_failed` written on every caught error in the boost flow (cron + manual). Includes truncated error text in metadata.
+- `cleanup_deleted` / `cleanup_failed` written from inside `deleteCampaign` (item 2) — every orphan-cleanup attempt now leaves an audit trail.
+- This unlocks the alerting from the previous incident's "Detection" section: "no `boost_succeeded` in 24h despite >0 attempts" is now queryable.
+
+### Verification
+
+- `npx tsc --noEmit` clean
+- `npm run build` clean (37 routes built, no warnings)
+- Cron still OFF (`vercel.json` only has `monitor` + `reconcile`).
+
+### What's left
+
+- **Item 7** — re-enable `scan-posts` cron at `0 */6 * * *` in `vercel.json`. Gated on Asad clearing tokens + testing the picker, then 24h of clean ticks observed.
+- Items 4 (logApiCall tenant_id audit), 8 (`/api/status` filter), 9 (OAuth dedupe), 10 (active_campaigns rollup), 11 (tenant-2 root cause) from the prior log section remain — none are blockers for re-enabling the cron, just polish.
+
+---
+
 ## 2026-05-02 — Ad-account picker + runtime status guard shipped
 
 Two preventive shipped on top of the previous incident:

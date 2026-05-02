@@ -227,20 +227,39 @@ export async function POST(request: NextRequest) {
           `Manual boost live for "${(caption || postId).toString().slice(0, 40)}" in ${location.name}`,
           { postId, locationId: location.id, metaCampaignId: campaign.id },
         );
+        await writeAuditEvent(
+          tenant.id,
+          "boost_succeeded",
+          `Manual boost flow succeeded for "${(caption || postId).toString().slice(0, 40)}" in ${location.name}`,
+          { postId, locationId: location.id, metaCampaignId: campaign.id, metaAdId: ad.id },
+        );
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
+        await writeAuditEvent(
+          tenant.id,
+          "boost_failed",
+          `Manual boost flow failed for "${(caption || postId).toString().slice(0, 40)}" in ${location.name}`,
+          {
+            postId,
+            locationId: location.id,
+            metaCampaignId: createdCampaignId,
+            error: message.slice(0, 500),
+          },
+        );
         await logApiCall({
           tenantId: tenant.id,
           endpoint: `/act_${cleanAdAccountId}/* (boost flow)`,
           method: "POST",
           statusCode: 500,
           durationMs: 0,
-          error: message,
+          // `post:<id>` prefix is the stable key that hasRecentFailureForPost
+          // greps against to enforce the 24h retry cooldown.
+          error: `post:${postId} ${message}`,
         });
 
         // Best-effort orphan cleanup before classifying the error.
         if (createdCampaignId) {
-          await deleteCampaign(createdCampaignId, token);
+          await deleteCampaign(createdCampaignId, token, tenant.id);
         }
 
         // Permanent Meta product rejections (e.g. copyright music) → mark

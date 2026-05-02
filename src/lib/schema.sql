@@ -140,3 +140,34 @@ ALTER TABLE tenants ADD COLUMN email TEXT;
 ALTER TABLE tenants ADD COLUMN legacy INTEGER DEFAULT 0;
 
 CREATE INDEX IF NOT EXISTS idx_tenants_stripe_customer_id ON tenants(stripe_customer_id);
+
+-- Meta rate-limit telemetry (added 2026-05-02 after the deprecation incident).
+-- Captures `X-App-Usage` and `X-Business-Use-Case-Usage` from every Meta
+-- response. Before this table existed we had ZERO visibility into rate limits —
+-- the meta-api-auditor agent hit subcode 2446079 mid-audit and we'd never have
+-- known. Now every Marketing API call leaves a row here whenever Meta sends
+-- the headers. Non-fatal: rows are skipped when both headers are absent.
+--
+-- Query examples:
+--   "trailing-24h app utilisation":
+--     SELECT json_extract(app_usage_json, '$.call_count') AS pct
+--     FROM rate_limit_log
+--     WHERE captured_at >= datetime('now', '-1 day')
+--     ORDER BY captured_at DESC LIMIT 1;
+--
+--   "highest BUC % per ad account today":
+--     SELECT ad_account_id, MAX(json_extract(buc_usage_json, '$')) AS buc
+--     FROM rate_limit_log
+--     WHERE captured_at >= datetime('now', '-1 day')
+--     GROUP BY ad_account_id;
+CREATE TABLE IF NOT EXISTS rate_limit_log (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  ad_account_id TEXT,
+  endpoint TEXT NOT NULL,
+  app_usage_json TEXT,
+  buc_usage_json TEXT,
+  captured_at TEXT DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_rate_limit_log_captured_at ON rate_limit_log(captured_at);
+CREATE INDEX IF NOT EXISTS idx_rate_limit_log_account ON rate_limit_log(ad_account_id, captured_at DESC);

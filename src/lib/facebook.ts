@@ -3,6 +3,34 @@ const GRAPH_API = "https://graph.facebook.com/v25.0";
 const FB_APP_ID = process.env.NEXT_PUBLIC_FB_APP_ID!;
 const FB_APP_SECRET = process.env.FB_APP_SECRET!;
 
+/**
+ * Best-effort rate-limit telemetry capture. Reads the two headers Meta returns
+ * (`x-app-usage`, `x-business-use-case-usage`), parses the ad-account ID out of
+ * the URL when present, and writes a row to `rate_limit_log` if either header
+ * is set. Silent on any failure — never breaks the caller.
+ */
+async function captureRateLimits(res: Response, url: string): Promise<void> {
+  const appUsage = res.headers.get("x-app-usage");
+  const bucUsage = res.headers.get("x-business-use-case-usage");
+  if (!appUsage && !bucUsage) return;
+
+  // Pull `act_NNNNNNNNN` out of the URL when the call is account-scoped.
+  const m = url.match(/act_(\d+)/);
+  const adAccountId = m ? m[1] : null;
+
+  try {
+    const { logRateLimits } = await import("@/lib/queries/rate-limits");
+    await logRateLimits({
+      adAccountId,
+      endpoint: new URL(url).pathname,
+      appUsage,
+      bucUsage,
+    });
+  } catch {
+    // Telemetry must never break the caller.
+  }
+}
+
 /** Scopes required for SuperPulse — Facebook Login (NOT IG Business Login). */
 export const FB_SCOPES = [
   "ads_management",
@@ -77,9 +105,9 @@ export async function exchangeForLongLivedToken(
 export async function fetchMe(
   token: string
 ): Promise<{ id: string; name: string; email?: string }> {
-  const res = await fetch(
-    `${GRAPH_API}/me?fields=id,name,email&access_token=${token}`
-  );
+  const url = `${GRAPH_API}/me?fields=id,name,email&access_token=${token}`;
+  const res = await fetch(url);
+  await captureRateLimits(res, url);
   if (!res.ok) {
     const error = await res.text();
     throw new Error(`Failed to fetch /me: ${error}`);
@@ -105,9 +133,9 @@ export type PageWithIG = FacebookPage;
 export async function fetchPagesWithIG(
   token: string
 ): Promise<PageWithIG[]> {
-  const res = await fetch(
-    `${GRAPH_API}/me/accounts?fields=id,name,instagram_business_account&limit=100&access_token=${token}`
-  );
+  const url = `${GRAPH_API}/me/accounts?fields=id,name,instagram_business_account&limit=100&access_token=${token}`;
+  const res = await fetch(url);
+  await captureRateLimits(res, url);
   if (!res.ok) {
     const error = await res.text();
     throw new Error(`Failed to fetch /me/accounts: ${error}`);
@@ -119,9 +147,9 @@ export async function fetchPagesWithIG(
   const PROFESSIONAL_PAGE_ID = "1827400404186764";
   if (!pages.find((p) => p.id === PROFESSIONAL_PAGE_ID)) {
     try {
-      const directRes = await fetch(
-        `${GRAPH_API}/${PROFESSIONAL_PAGE_ID}?fields=id,name,instagram_business_account&access_token=${token}`
-      );
+      const directUrl = `${GRAPH_API}/${PROFESSIONAL_PAGE_ID}?fields=id,name,instagram_business_account&access_token=${token}`;
+      const directRes = await fetch(directUrl);
+      await captureRateLimits(directRes, directUrl);
       if (directRes.ok) {
         const directPage = await directRes.json();
         if (directPage.id) {
@@ -143,9 +171,9 @@ export async function fetchIGUsername(
   igUserId: string,
   token: string
 ): Promise<string> {
-  const res = await fetch(
-    `${GRAPH_API}/${igUserId}?fields=username&access_token=${token}`
-  );
+  const url = `${GRAPH_API}/${igUserId}?fields=username&access_token=${token}`;
+  const res = await fetch(url);
+  await captureRateLimits(res, url);
   if (!res.ok) {
     const error = await res.text();
     throw new Error(`Failed to fetch IG username: ${error}`);
@@ -176,9 +204,9 @@ export async function fetchIGMedia(
   igUserId: string,
   token: string
 ): Promise<IGMediaItem[]> {
-  const res = await fetch(
-    `${GRAPH_API}/${igUserId}/media?fields=id,caption,media_type,media_url,thumbnail_url,timestamp,like_count,comments_count&limit=25&access_token=${token}`
-  );
+  const url = `${GRAPH_API}/${igUserId}/media?fields=id,caption,media_type,media_url,thumbnail_url,timestamp,like_count,comments_count&limit=25&access_token=${token}`;
+  const res = await fetch(url);
+  await captureRateLimits(res, url);
   if (!res.ok) {
     const error = await res.text();
     throw new Error(`Failed to fetch IG media: ${error}`);
@@ -205,9 +233,9 @@ export interface AdAccount {
 export async function fetchAdAccounts(
   token: string
 ): Promise<AdAccount[]> {
-  const res = await fetch(
-    `${GRAPH_API}/me/adaccounts?fields=id,name,account_status,currency,business&limit=200&access_token=${token}`
-  );
+  const url = `${GRAPH_API}/me/adaccounts?fields=id,name,account_status,currency,business&limit=200&access_token=${token}`;
+  const res = await fetch(url);
+  await captureRateLimits(res, url);
   if (!res.ok) {
     const error = await res.text();
     throw new Error(`Failed to fetch ad accounts: ${error}`);
@@ -226,9 +254,9 @@ export async function getAdAccountStatus(
   token: string,
 ): Promise<{ accountStatus: number; disableReason: number } | null> {
   try {
-    const res = await fetch(
-      `${GRAPH_API}/act_${adAccountId}?fields=account_status,disable_reason&access_token=${encodeURIComponent(token)}`
-    );
+    const url = `${GRAPH_API}/act_${adAccountId}?fields=account_status,disable_reason&access_token=${encodeURIComponent(token)}`;
+    const res = await fetch(url);
+    await captureRateLimits(res, url);
     if (!res.ok) return null;
     const data = await res.json();
     return {
@@ -259,7 +287,8 @@ export async function createCampaign(
   name: string,
   token: string
 ): Promise<{ id: string }> {
-  const res = await fetch(`${GRAPH_API}/act_${adAccountId}/campaigns`, {
+  const url = `${GRAPH_API}/act_${adAccountId}/campaigns`;
+  const res = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -271,6 +300,7 @@ export async function createCampaign(
       access_token: token,
     }),
   });
+  await captureRateLimits(res, url);
   if (!res.ok) {
     const error = await res.text();
     throw new Error(`Failed to create campaign: ${error}`);
@@ -293,9 +323,9 @@ export async function fetchCampaigns(
     created_time: string;
   }[]
 > {
-  const res = await fetch(
-    `${GRAPH_API}/act_${adAccountId}/campaigns?fields=id,name,status,daily_budget,created_time&effective_status=['ACTIVE','PAUSED']&access_token=${token}`
-  );
+  const url = `${GRAPH_API}/act_${adAccountId}/campaigns?fields=id,name,status,daily_budget,created_time&effective_status=['ACTIVE','PAUSED']&access_token=${token}`;
+  const res = await fetch(url);
+  await captureRateLimits(res, url);
   if (!res.ok) {
     const error = await res.text();
     throw new Error(`Failed to fetch campaigns: ${error}`);
@@ -312,7 +342,8 @@ export async function updateCampaignStatus(
   status: string,
   token: string
 ): Promise<{ success: boolean }> {
-  const res = await fetch(`${GRAPH_API}/${campaignId}`, {
+  const url = `${GRAPH_API}/${campaignId}`;
+  const res = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -320,6 +351,7 @@ export async function updateCampaignStatus(
       access_token: token,
     }),
   });
+  await captureRateLimits(res, url);
   if (!res.ok) {
     const error = await res.text();
     throw new Error(`Failed to update campaign status: ${error}`);
@@ -332,20 +364,72 @@ export async function updateCampaignStatus(
  * left behind when a downstream step (createAdCreative / createAd) fails after
  * the campaign was already created. Best-effort — failures are swallowed so
  * the caller can continue with the more important error path.
+ *
+ * Logs every attempt to api_call_log + writes a cleanup_deleted/cleanup_failed
+ * audit_event. Before 2026-05-02 this was a bare-fetch with double-swallowed
+ * errors, leaving zero DELETE rows in api_call_log lifetime — db-forensic
+ * inferred a ~38% silent success rate. Now every attempt is observable.
+ *
+ * `tenantId` is optional only because legacy callers pre-date this signature;
+ * pass it whenever you have it (every cron + boost-create path does).
  */
 export async function deleteCampaign(
   campaignId: string,
   token: string,
+  tenantId: string | null = null,
 ): Promise<boolean> {
+  // Lazy-imported here so this lib stays free of DB deps for non-cron callers.
+  const { logApiCall } = await import("@/lib/queries/api-calls");
+  const { writeAuditEvent } = await import("@/lib/queries/audit-events");
+
+  const start = Date.now();
+  let statusCode = 0;
+  let errorMsg: string | null = null;
+  let ok = false;
+
   try {
-    const res = await fetch(
-      `${GRAPH_API}/${campaignId}?access_token=${encodeURIComponent(token)}`,
-      { method: "DELETE" },
-    );
-    return res.ok;
-  } catch {
-    return false;
+    const url = `${GRAPH_API}/${campaignId}?access_token=${encodeURIComponent(token)}`;
+    const res = await fetch(url, { method: "DELETE" });
+    await captureRateLimits(res, url);
+    statusCode = res.status;
+    ok = res.ok;
+    if (!res.ok) {
+      errorMsg = await res.text().catch(() => `HTTP ${res.status}`);
+    }
+  } catch (err) {
+    errorMsg = err instanceof Error ? err.message : String(err);
+    statusCode = 0;
+    ok = false;
   }
+
+  await logApiCall({
+    tenantId,
+    endpoint: `/${campaignId} (DELETE campaign)`,
+    method: "DELETE",
+    statusCode,
+    durationMs: Date.now() - start,
+    error: errorMsg,
+  });
+
+  if (tenantId) {
+    if (ok) {
+      await writeAuditEvent(
+        tenantId,
+        "cleanup_deleted",
+        `Orphan campaign ${campaignId} deleted on Meta`,
+        { metaCampaignId: campaignId, durationMs: Date.now() - start },
+      );
+    } else {
+      await writeAuditEvent(
+        tenantId,
+        "cleanup_failed",
+        `Orphan campaign ${campaignId} delete failed (${statusCode || "network"})`,
+        { metaCampaignId: campaignId, statusCode, error: errorMsg },
+      );
+    }
+  }
+
+  return ok;
 }
 
 // ---------------------------------------------------------------------------
@@ -374,7 +458,8 @@ export async function createAdSet(
   pageId: string,
   token: string
 ): Promise<{ id: string }> {
-  const res = await fetch(`${GRAPH_API}/act_${adAccountId}/adsets`, {
+  const url = `${GRAPH_API}/act_${adAccountId}/adsets`;
+  const res = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -409,6 +494,7 @@ export async function createAdSet(
       access_token: token,
     }),
   });
+  await captureRateLimits(res, url);
   if (!res.ok) {
     const error = await res.text();
     throw new Error(`Failed to create ad set: ${error}`);
@@ -443,7 +529,8 @@ export async function createAdCreative(
   pageId: string,
   token: string
 ): Promise<{ id: string }> {
-  const res = await fetch(`${GRAPH_API}/act_${adAccountId}/adcreatives`, {
+  const url = `${GRAPH_API}/act_${adAccountId}/adcreatives`;
+  const res = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -482,6 +569,7 @@ export async function createAdCreative(
       access_token: token,
     }),
   });
+  await captureRateLimits(res, url);
   if (!res.ok) {
     const error = await res.text();
     throw new Error(`Failed to create ad creative: ${error}`);
@@ -499,7 +587,8 @@ export async function createAd(
   creativeId: string,
   token: string
 ): Promise<{ id: string }> {
-  const res = await fetch(`${GRAPH_API}/act_${adAccountId}/ads`, {
+  const url = `${GRAPH_API}/act_${adAccountId}/ads`;
+  const res = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -512,6 +601,7 @@ export async function createAd(
       access_token: token,
     }),
   });
+  await captureRateLimits(res, url);
   if (!res.ok) {
     const error = await res.text();
     throw new Error(`Failed to create ad: ${error}`);
@@ -545,9 +635,9 @@ export async function verifyAd(
   adId: string,
   token: string
 ): Promise<AdVerification> {
-  const res = await fetch(
-    `${GRAPH_API}/${adId}?fields=id,name,status,effective_status,ad_review_feedback,creative{id,source_instagram_media_id,effective_instagram_media_id,call_to_action_type}&access_token=${token}`
-  );
+  const url = `${GRAPH_API}/${adId}?fields=id,name,status,effective_status,ad_review_feedback,creative{id,source_instagram_media_id,effective_instagram_media_id,call_to_action_type}&access_token=${token}`;
+  const res = await fetch(url);
+  await captureRateLimits(res, url);
   if (!res.ok) {
     const error = await res.text();
     throw new Error(`Failed to verify ad: ${error}`);
@@ -563,9 +653,9 @@ export async function checkBoostEligibility(
   igMediaId: string,
   token: string
 ): Promise<{ eligible: boolean; reason?: string }> {
-  const res = await fetch(
-    `${GRAPH_API}/${igMediaId}?fields=boost_eligibility_info&access_token=${token}`
-  );
+  const url = `${GRAPH_API}/${igMediaId}?fields=boost_eligibility_info&access_token=${token}`;
+  const res = await fetch(url);
+  await captureRateLimits(res, url);
   if (!res.ok) {
     return { eligible: false, reason: "Failed to check eligibility" };
   }
@@ -614,9 +704,9 @@ export async function fetchAdInsights(
   options: { datePreset?: "last_7d" | "yesterday" | "today" } = {},
 ): Promise<AdInsightEntry[]> {
   const datePreset = options.datePreset ?? "last_7d";
-  const res = await fetch(
-    `${GRAPH_API}/act_${adAccountId}/insights?fields=impressions,reach,clicks,spend,actions&date_preset=${datePreset}&level=campaign&access_token=${token}`
-  );
+  const url = `${GRAPH_API}/act_${adAccountId}/insights?fields=impressions,reach,clicks,spend,actions&date_preset=${datePreset}&level=campaign&access_token=${token}`;
+  const res = await fetch(url);
+  await captureRateLimits(res, url);
   if (!res.ok) {
     const error = await res.text();
     throw new Error(`Failed to fetch ad insights: ${error}`);
