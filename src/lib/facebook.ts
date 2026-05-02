@@ -196,6 +196,7 @@ export interface AdAccount {
   name: string;
   account_status: number;
   currency: string;
+  business?: { id: string; name: string };
 }
 
 /**
@@ -205,7 +206,7 @@ export async function fetchAdAccounts(
   token: string
 ): Promise<AdAccount[]> {
   const res = await fetch(
-    `${GRAPH_API}/me/adaccounts?fields=id,name,account_status,currency&access_token=${token}`
+    `${GRAPH_API}/me/adaccounts?fields=id,name,account_status,currency,business&limit=200&access_token=${token}`
   );
   if (!res.ok) {
     const error = await res.text();
@@ -213,6 +214,30 @@ export async function fetchAdAccounts(
   }
   const data = await res.json();
   return data.data ?? [];
+}
+
+/**
+ * Lightweight runtime status check on a single ad account.
+ * Returns the numeric account_status (1 = ACTIVE, anything else is non-spendable),
+ * or null on error.
+ */
+export async function getAdAccountStatus(
+  adAccountId: string,
+  token: string,
+): Promise<{ accountStatus: number; disableReason: number } | null> {
+  try {
+    const res = await fetch(
+      `${GRAPH_API}/act_${adAccountId}?fields=account_status,disable_reason&access_token=${encodeURIComponent(token)}`
+    );
+    if (!res.ok) return null;
+    const data = await res.json();
+    return {
+      accountStatus: Number(data.account_status),
+      disableReason: Number(data.disable_reason ?? 0),
+    };
+  } catch {
+    return null;
+  }
 }
 
 // ---------------------------------------------------------------------------

@@ -34,6 +34,9 @@ export default async function DashboardLayout({
   if (tenant.status === "pending_page_selection") {
     redirect("/onboarding/select-page");
   }
+  if (tenant.status === "pending_ad_account") {
+    redirect("/onboarding/select-ad-account");
+  }
 
   let user: { id: string; name: string; email?: string };
   try {

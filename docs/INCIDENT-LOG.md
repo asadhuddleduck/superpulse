@@ -4,6 +4,27 @@ Running record of production incidents, root causes, and runbook patterns. Newes
 
 ---
 
+## 2026-05-02 — Ad-account picker + runtime status guard shipped
+
+Two preventive shipped on top of the previous incident:
+
+1. **Ad-account picker** (`/onboarding/select-ad-account`). The Facebook OAuth callback no longer auto-binds `adAccounts[0]`. Instead, every new tenant is set to `pending_ad_account` and goes through an explicit picker showing all ACTIVE ad accounts on the user's token, with name + Business Manager + currency. Existing tenants with an `ad_account_id` already set are grandfathered. The picker server-validates the chosen ID against the user's token (anti-tamper) and writes an `audit_events` row on every binding for traceability. Affected files:
+   - `src/app/api/auth/callback/facebook/route.ts` — drops `fetchAdAccounts(...)[0]` auto-bind
+   - `src/app/api/onboarding/select-page/route.ts` — drops same auto-bind, sets `pending_ad_account` if no existing ad account
+   - `src/app/onboarding/select-ad-account/page.tsx` (new)
+   - `src/app/onboarding/select-ad-account/select-ad-account-form.tsx` (new)
+   - `src/app/api/onboarding/select-ad-account/route.ts` (new)
+   - `src/app/dashboard/layout.tsx` — redirect on `pending_ad_account`
+   - `src/lib/facebook.ts` — `AdAccount` type now carries `business{id,name}`; `fetchAdAccounts` requests `business` field
+
+2. **Runtime ad-account status guard in `scan-posts` cron.** Before doing any work for a tenant, calls `getAdAccountStatus(adAccountId, token)`. If `account_status !== 1`, the cron skips the tenant and writes an `error`-type `audit_events` row. Stops the closed-account orphan-creation loop (the exact pattern that bit tenant 2 — 12 orphans overnight). One ~50ms Graph call per tenant per tick replaces the 4 doomed Meta calls per failed orphan. Affected files:
+   - `src/lib/facebook.ts` — new `getAdAccountStatus` helper
+   - `src/app/api/cron/scan-posts/route.ts` — gate at the top of `processTenant`
+
+Outstanding from the original incident (still owed before re-enabling `scan-posts` cron): classifier `/has been deprecated/i` rule, `deleteCampaign` callsite logging, rate-limit header capture, per-post 24h retry cooldown, velocity stagger, boost-flow audit_events.
+
+---
+
 ## 2026-05-01 → 2026-05-02 — Standard_enhancements deprecation retry storm + tenant 2 permissions failure
 
 ### TL;DR

@@ -9,6 +9,7 @@ import {
   updateCampaignStatus,
   deleteCampaign,
   checkBoostEligibility,
+  getAdAccountStatus,
   type IGMediaItem,
 } from "@/lib/facebook";
 import { classifyMetaError } from "@/lib/meta-errors";
@@ -99,6 +100,26 @@ async function processTenant(tenant: Tenant): Promise<TenantResult> {
   const cleanAdAccountId = adAccountId.startsWith("act_")
     ? adAccountId.slice(4)
     : adAccountId;
+
+  // Runtime ad-account health check: skip the tenant if Meta no longer
+  // reports the ad account as ACTIVE (status=1). Catches mid-flight closures,
+  // disablements, billing settlements, risk reviews — all of which would
+  // otherwise produce orphan campaign+adset pairs every 2h. One Graph call,
+  // ~50ms, far cheaper than the 4-call orphan trail of a single failed boost.
+  const accountHealth = await getAdAccountStatus(cleanAdAccountId, token);
+  if (!accountHealth || accountHealth.accountStatus !== 1) {
+    const detail = accountHealth
+      ? `account_status=${accountHealth.accountStatus}, disable_reason=${accountHealth.disableReason}`
+      : "fetch failed";
+    result.error = `Ad account ${cleanAdAccountId} not spendable (${detail}); skipping tenant`;
+    await writeAuditEvent(
+      tenant.id,
+      "error",
+      `Skipped scan: ad account ${cleanAdAccountId} not spendable (${detail})`,
+      { adAccountId: cleanAdAccountId, ...accountHealth },
+    );
+    return result;
+  }
 
   // Fetch tenant's recent IG media. One call per tenant per cycle.
   const mediaStart = Date.now();

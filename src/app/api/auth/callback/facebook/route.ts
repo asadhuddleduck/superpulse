@@ -3,7 +3,6 @@ import {
   exchangeCodeForToken,
   exchangeForLongLivedToken,
   fetchPagesWithIG,
-  fetchAdAccounts,
   fetchIGUsername,
   fetchMe,
 } from "@/lib/facebook";
@@ -36,10 +35,9 @@ export async function GET(request: NextRequest) {
     const longLived = await exchangeForLongLivedToken(shortLived.access_token);
     const token = longLived.access_token;
 
-    const [me, pages, adAccounts] = await Promise.all([
+    const [me, pages] = await Promise.all([
       fetchMe(token).catch(() => null),
       fetchPagesWithIG(token).catch(() => []),
-      fetchAdAccounts(token).catch(() => []),
     ]);
 
     const pagesWithIG = pages.filter((p) => p.instagram_business_account);
@@ -91,23 +89,18 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    const rawAdAccountId = adAccounts[0]?.id ?? null;
-    const adAccountId = rawAdAccountId
-      ? rawAdAccountId.startsWith("act_")
-        ? rawAdAccountId.slice(4)
-        : rawAdAccountId
-      : null;
-
     // Match against existing tenant by ig_user_id (lets us pre-seed PhatBuns
     // and Henny's so they slide straight into 'active' without a picker).
     let tenantId: string;
     let tenantName: string | null = pageName ?? me?.name ?? null;
+    let existingHasAdAccount = false;
 
     if (igUserId) {
       const existing = await getTenantByIgUserId(igUserId);
       if (existing) {
         tenantId = existing.id;
         tenantName = existing.name ?? tenantName;
+        existingHasAdAccount = !!existing.adAccountId;
       } else {
         tenantId = `t_${igUserId}`;
       }
@@ -115,20 +108,27 @@ export async function GET(request: NextRequest) {
       tenantId = me?.id ? `t_fb_${me.id}` : `t_${Date.now()}`;
     }
 
+    // Existing tenants that already have an ad_account_id are grandfathered —
+    // we trust their prior pick and do NOT force them through the picker on
+    // every refresh. Brand-new tenants always go to /onboarding/select-ad-account
+    // so an explicit choice is recorded (no more silent adAccounts[0] binding).
+    const nextStatus = existingHasAdAccount ? "active" : "pending_ad_account";
+
     await upsertTenant({
       id: tenantId,
       igUserId,
-      adAccountId,
       pageId,
       igUsername,
       name: tenantName,
       metaAccessToken: token,
-      status: "active",
+      status: nextStatus,
       tokenExpiresAt: expiresAt,
     });
 
-    const dashboardUrl = new URL("/dashboard", request.url);
-    const response = NextResponse.redirect(dashboardUrl);
+    const nextUrl = nextStatus === "active"
+      ? new URL("/dashboard", request.url)
+      : new URL("/onboarding/select-ad-account", request.url);
+    const response = NextResponse.redirect(nextUrl);
     setTenantCookie(response, tenantId);
     return response;
   } catch (err) {

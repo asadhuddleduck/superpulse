@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { getTenantCookie } from "@/lib/auth";
 import { getTenantById, upsertTenant } from "@/lib/queries/tenants";
 import {
-  fetchAdAccounts,
   fetchIGUsername,
   fetchPagesWithIG,
 } from "@/lib/facebook";
@@ -27,10 +26,7 @@ async function selectPage(pageId: string) {
     return NextResponse.json({ error: "Token expired — please log in again" }, { status: 401 });
   }
 
-  const [pages, adAccounts] = await Promise.all([
-    fetchPagesWithIG(token),
-    fetchAdAccounts(token).catch(() => []),
-  ]);
+  const pages = await fetchPagesWithIG(token);
 
   const chosen = pages.find((p) => p.id === pageId);
   if (!chosen || !chosen.instagram_business_account) {
@@ -48,24 +44,21 @@ async function selectPage(pageId: string) {
     // Username is best-effort; cron will backfill on next scan.
   }
 
-  const rawAdAccountId = adAccounts[0]?.id ?? null;
-  const adAccountId = rawAdAccountId
-    ? rawAdAccountId.startsWith("act_")
-      ? rawAdAccountId.slice(4)
-      : rawAdAccountId
-    : null;
+  // Pre-existing ad_account_id (e.g. seeded legacy tenants) is preserved and
+  // skips straight to active. Otherwise the user MUST go through the
+  // ad-account picker — no more silent adAccounts[0] auto-bind.
+  const nextStatus = tenant.adAccountId ? "active" : "pending_ad_account";
 
   await upsertTenant({
     id: tenantId,
     igUserId,
-    adAccountId,
     pageId: chosen.id,
     igUsername,
     name: chosen.name,
-    status: "active",
+    status: nextStatus,
   });
 
-  return NextResponse.json({ ok: true });
+  return NextResponse.json({ ok: true, nextStatus });
 }
 
 export async function POST(request: NextRequest) {
@@ -85,5 +78,7 @@ export async function GET(request: NextRequest) {
   }
   const result = await selectPage(pageId);
   if (result.status >= 400) return result;
-  return NextResponse.redirect(new URL("/dashboard", request.url));
+  const body = await result.json();
+  const next = body.nextStatus === "active" ? "/dashboard" : "/onboarding/select-ad-account";
+  return NextResponse.redirect(new URL(next, request.url));
 }
