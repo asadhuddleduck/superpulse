@@ -130,7 +130,15 @@ The campaign goes ACTIVE; the adset and ad stay PAUSED. Meta's effective_status 
 
 Both `scan-posts` and `boost/create` patched. Two existing call sites (Stripe webhook pause flow, monitor cron auto-pause) renamed in lockstep.
 
-**What about the existing 10 zombies?** Left as-is. Auto-activating them now would turn on £30+/day of unintended spend on posts that the user never deliberately approved for live spend. The right cleanup is manual: pick the campaigns Asad still wants live in Ads Manager, activate the adset+ad layers there, delete the rest.
+**What about the existing 10 zombies?** Cleaned up via Graph API DELETE on each campaign id (10/10 success). Local `active_campaigns` rows for those 10 marked `status='DELETED'` so the dashboard reflects reality. The 2 keepers (£3.02 + £3.03 lifetime spend on the "If you want to work" campaign across Home + London) preserved untouched — those were the only ones actually delivering.
+
+### Item 7 — `scan-posts` cron re-enabled at 6h cadence
+
+`vercel.json` now schedules `/api/cron/scan-posts` at `0 */6 * * *`. First post-fix tick will fire at the next 6h UTC boundary. Watch:
+
+- New `boost_succeeded` audit_events (item 6) — should appear after each successful boost flow.
+- `rate_limit_log` rows growing (item 3) — confirms telemetry stays live across cron runs.
+- No `subcode 1487194` errors against `act_1059094086326037` — the closed account `act_277920759052795` is on the disabled tenant `t_fb_3426122537565919`... wait, that's wrong. The OAuth dedupe re-bound `t_fb_3426122537565919` to `act_1059094086326037` during the picker test, and the closed account is NOT in any tenant's `ad_account_id` field anymore. The tenant on `act_277920759052795` was the ORIGINAL `t_fb_3426122537565919`, but post-picker it now points at the working account. Net: only `act_1059094086326037` will see traffic from the cron, which is correct.
 
 ---
 
