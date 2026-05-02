@@ -145,8 +145,8 @@ CREATE INDEX IF NOT EXISTS idx_tenants_stripe_customer_id ON tenants(stripe_cust
 -- Captures `X-App-Usage` and `X-Business-Use-Case-Usage` from every Meta
 -- response. Before this table existed we had ZERO visibility into rate limits.
 -- Non-fatal: rows are skipped when both headers are absent. Query examples
--- live in docs/INCIDENT-LOG.md (kept out of this file because the schema
--- splitter naively splits on ; and breaks on semicolons in SQL examples).
+-- live in docs/INCIDENT-LOG.md (kept out of this file because runSchema
+-- splits on a single character and would mis-parse semicolons in comments).
 CREATE TABLE IF NOT EXISTS rate_limit_log (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   ad_account_id TEXT,

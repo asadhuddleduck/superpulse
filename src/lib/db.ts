@@ -49,7 +49,16 @@ export async function runSchema(): Promise<void> {
   const schemaPath = join(process.cwd(), "src", "lib", "schema.sql");
   const sql = readFileSync(schemaPath, "utf-8");
 
-  const statements = sql
+  // Strip `-- ...` line comments BEFORE splitting on `;`. A bare split on `;`
+  // mis-parses any semicolon that happens to live inside a comment (which
+  // bit us once already — see commit fb6896f). Stripping comments first
+  // means future schema authors can write whatever they want in `--` lines.
+  const stripped = sql
+    .split("\n")
+    .map((line) => line.replace(/--.*$/, ""))
+    .join("\n");
+
+  const statements = stripped
     .split(";")
     .map((s) => s.trim())
     .filter((s) => s.length > 0);
