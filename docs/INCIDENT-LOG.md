@@ -75,6 +75,35 @@ Old code attempted EVERY uncovered location in one tick — could be 5-10 boost 
 - **Item 7** — re-enable `scan-posts` cron at `0 */6 * * *` in `vercel.json`. Gated on Asad clearing tokens + testing the picker, then 24h of clean ticks observed.
 - Items 4 (logApiCall tenant_id audit), 8 (`/api/status` filter), 9 (OAuth dedupe), 10 (active_campaigns rollup), 11 (tenant-2 root cause) from the prior log section remain — none are blockers for re-enabling the cron, just polish.
 
+### Post-deploy verification (Playwright, 2026-05-02 ~10:11 UTC)
+
+Tested the full clear-tokens → re-OAuth → picker flow end-to-end via Playwright on prod (Asad's FB browser session was already authenticated).
+
+**Caught one bug:** `fetchAdAccounts` in commit `4503c3f` was requesting `business{id,name}` to populate the picker's "Business Manager" subline. That field requires `business_management` permission, which we deliberately removed on 2026-04-09. The picker page 500'd with `(#100) Requires business_management permission to access the field`. Fix: drop `business` from the fields list, drop the BM column from the picker UI, drop `businessId/businessName` from the `onboarding_complete` audit metadata. Shipped as commit `7814874`.
+
+**Surfaced an existing issue (not introduced by this work):** the duplicate-tenant bug from incident root cause #3 — both `t_17841400702538222` (legacy, IG Login origin) and `t_fb_3426122537565919` (FB Login origin from 29 Apr) share the same `ig_user_id`. `getTenantByIgUserId` returns whichever sorts first, which made OAuth re-attach to `t_fb_*` instead of the legacy `t_17841400702538222`. Net result during testing: the picker re-bound `t_fb_3426122537565919` to the correct `act_1059094086326037` (which it should have been pointing at all along; the 12 ACTIVE `active_campaigns` rows tagged to it were always physically on `act_1059094086326037`, just mis-labelled). After binding, dashboard renders correctly. The legacy `t_17841400702538222` is now an orphan — safe to delete on a future cleanup but kept for now so audit trail is preserved.
+
+**Confirmed working in production:**
+
+- ✅ Picker renders 21 ACTIVE accounts alphabetically. Closed `act_277920759052795` (Nasheed Club) is correctly hidden.
+- ✅ Picker server-validates the chosen ID against the user's token (anti-tamper).
+- ✅ `onboarding_complete` audit row written: "Ad account bound: @mr.asadshah - SuperPulse (act_1059094086326037)".
+- ✅ Dashboard layout's redirect chain works: `/dashboard` → `/onboarding/connect` (no token) → FB OAuth → `/onboarding/select-page` (3 pages) → `/onboarding/select-ad-account` (no ad_account_id yet) → `/dashboard`.
+- ✅ **Item 3 verified live: `rate_limit_log` has 44 rows after the test flow, capturing every Meta call** (`/me`, `/me/accounts`, `/me/adaccounts`, `/{page_id}` etc).
+- ✅ Schema migration ran cleanly via `/api/setup` after the `runSchema` comment-stripping fix (commit `41be530`).
+
+**Deploy timeline:**
+
+| UTC | Event |
+|---|---|
+| 09:53 | Commit `17e5f76` deployed — items 1-6 |
+| 09:55 | `/api/setup` returned 500 (semicolons-in-comments parser bug) |
+| 09:57 | Commit `fb6896f` — strip SQL examples from schema. Still failed because the bug-comment text contained `;` |
+| 09:59 | Commit `41be530` — make `runSchema` strip `--` comments before splitting. `/api/setup` returned 200 |
+| 10:08 | Picker page 500'd: business_management permission missing |
+| 10:09 | Commit `7814874` — drop `business{id,name}` from `fetchAdAccounts` |
+| 10:11 | Picker rendered cleanly. Asad's binding restored to `act_1059094086326037` via picker |
+
 ---
 
 ## 2026-05-02 — Ad-account picker + runtime status guard shipped
