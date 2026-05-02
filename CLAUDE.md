@@ -229,6 +229,7 @@ Ahmed-type: Local restaurant/takeaway owner, 2-5K followers, posts 3-4x/week, £
 - Decisions DB: multiple SuperPulse decisions logged
 
 ## Project Files
+- `docs/INCIDENT-LOG.md` — **PRODUCTION INCIDENT POSTMORTEMS.** Read this before debugging anything that smells like prior pain. Newest first. As of 2 May 2026: standard_enhancements deprecation + tenant 2 permissions failure. scan-posts cron is currently DISABLED; tenant `t_fb_3426122537565919` is soft-disabled (status='disabled'). Re-enabling requires patching the class-of-bug classifier rule, wrapping `deleteCampaign` in `logApiCall`, and adding rate-limit header capture — full action list in the incident log.
 - `docs/API-FEASIBILITY.md` — **DEFINITIVE** technical assessment of Meta API capabilities for scoring formula (5-agent research). Read this first for any technical work.
 - `docs/ARCHITECTURE.md` → §11 Live Ad QA Checklist — run before going live on any new ad account (Asad's own IG first, then each legacy client). 5 mandatory Ads Manager checks. Code comment in `src/lib/facebook.ts:405` notes `actor_id` is canonical (not `object_id`); the QA checklist describes the `object_id` fallback if identity ever fails.
 - `docs/AD-CONFIG-TWEAKS.md` — spec for the 3 Apr-10 ad config tweaks (placements, multi-advertiser off, Advantage+ off). All 3 shipped in commit `9f004a5` (27 Apr). Delete this file after the live QA pass (§11 of ARCHITECTURE.md) succeeds.
