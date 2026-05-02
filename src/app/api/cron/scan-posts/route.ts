@@ -6,7 +6,7 @@ import {
   createAdSet,
   createAdCreative,
   createAd,
-  updateCampaignStatus,
+  updateNodeStatus,
   deleteCampaign,
   checkBoostEligibility,
   getAdAccountStatus,
@@ -343,11 +343,19 @@ async function processTenant(tenant: Tenant): Promise<TenantResult> {
           durationMs: Date.now() - adStart,
         });
 
+        // Activate ALL THREE layers — campaign, adset, ad. Activating just
+        // the campaign leaves the adset+ad PAUSED (which is how they were
+        // created by createAdSet/createAd) and the campaign delivers nothing.
+        // 10 of 12 "live" campaigns on 2 May 2026 were zombies because of
+        // this bug. Sequenced campaign → adset → ad because Meta validates
+        // each level against its parent's status.
         const activateStart = Date.now();
-        await updateCampaignStatus(campaign.id, "ACTIVE", token);
+        await updateNodeStatus(campaign.id, "ACTIVE", token);
+        await updateNodeStatus(adSet.id, "ACTIVE", token);
+        await updateNodeStatus(ad.id, "ACTIVE", token);
         await logApiCall({
           tenantId: tenant.id,
-          endpoint: `/${campaign.id}`,
+          endpoint: `/${campaign.id} (+adset+ad activate)`,
           method: "POST",
           statusCode: 200,
           durationMs: Date.now() - activateStart,

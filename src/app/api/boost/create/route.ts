@@ -6,7 +6,7 @@ import {
   createAdSet,
   createAdCreative,
   createAd,
-  updateCampaignStatus,
+  updateNodeStatus,
   deleteCampaign,
   checkBoostEligibility,
 } from "@/lib/facebook";
@@ -186,11 +186,18 @@ export async function POST(request: NextRequest) {
           durationMs: Date.now() - adStart,
         });
 
+        // Activate ALL THREE layers — campaign, adset, ad. Activating just
+        // the campaign leaves the adset+ad PAUSED (which is how they were
+        // created above) and the campaign delivers nothing. Sequenced
+        // campaign → adset → ad because Meta validates each level against
+        // its parent's status. Caught 2 May 2026 — see INCIDENT-LOG.md.
         const activateStart = Date.now();
-        await updateCampaignStatus(campaign.id, "ACTIVE", token);
+        await updateNodeStatus(campaign.id, "ACTIVE", token);
+        await updateNodeStatus(adSet.id, "ACTIVE", token);
+        await updateNodeStatus(ad.id, "ACTIVE", token);
         await logApiCall({
           tenantId: tenant.id,
-          endpoint: `/${campaign.id}`,
+          endpoint: `/${campaign.id} (+adset+ad activate)`,
           method: "POST",
           statusCode: 200,
           durationMs: Date.now() - activateStart,

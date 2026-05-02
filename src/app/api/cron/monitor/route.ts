@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import {
   fetchAdInsights,
-  updateCampaignStatus as updateMetaCampaignStatus,
+  updateNodeStatus as updateMetaCampaignStatus,
 } from "@/lib/facebook";
 import { checkCronAuth } from "@/lib/cron-auth";
 import { getActiveTenants, type Tenant } from "@/lib/queries/tenants";

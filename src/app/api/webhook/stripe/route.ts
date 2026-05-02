@@ -8,7 +8,7 @@ import {
 } from "@/lib/queries/tenants";
 import { writeAuditEvent } from "@/lib/queries/audit-events";
 import { updateLocalCampaignStatus, getActiveCampaigns } from "@/lib/queries/campaigns";
-import { updateCampaignStatus } from "@/lib/facebook";
+import { updateNodeStatus } from "@/lib/facebook";
 import { decryptIfNeeded } from "@/lib/crypto";
 import { db } from "@/lib/db";
 
@@ -165,7 +165,7 @@ async function handleSubscriptionDeleted(sub: Stripe.Subscription) {
   if (token) {
     for (const c of campaigns) {
       try {
-        await updateCampaignStatus(c.metaCampaignId, "PAUSED", token);
+        await updateNodeStatus(c.metaCampaignId, "PAUSED", token);
         await updateLocalCampaignStatus(c.metaCampaignId, "PAUSED");
       } catch {
         // Skip — operator will pick up via audit_events.

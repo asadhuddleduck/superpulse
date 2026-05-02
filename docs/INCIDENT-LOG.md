@@ -103,6 +103,34 @@ Tested the full clear-tokens → re-OAuth → picker flow end-to-end via Playwri
 | 10:08 | Picker page 500'd: business_management permission missing |
 | 10:09 | Commit `7814874` — drop `business{id,name}` from `fetchAdAccounts` |
 | 10:11 | Picker rendered cleanly. Asad's binding restored to `act_1059094086326037` via picker |
+| 10:30 | Asad spotted that "12 campaigns live" with £0 spend was inconsistent. Graph API confirmed: only 2 of 12 ACTIVE campaigns had any spend (£3.01 + £3.03 = £6.04 total) — the other 10 were zombies |
+
+### Item 8 (post-test) — Activate adset+ad, not just campaign
+
+scan-posts and boost-create both ran:
+
+```
+createCampaign({ status: "PAUSED" })   // PAUSED
+createAdSet({ status: "PAUSED" })      // PAUSED
+createAdCreative(...)                  // (no status)
+createAd({ status: "PAUSED" })         // PAUSED
+updateCampaignStatus(campaign.id, "ACTIVE")   // ← only flips campaign
+```
+
+The campaign goes ACTIVE; the adset and ad stay PAUSED. Meta's effective_status rolls up from the leaf, so the campaign delivers nothing. The dashboard's "Campaigns live" count read off `active_campaigns.status='ACTIVE'` which is the local DB mirror — green at the campaign layer, hiding the truth at the leaves.
+
+**Diagnosis evidence (Graph API, 2 May 2026 ~10:30 UTC):**
+
+| Layer | ACTIVE campaigns on `act_1059094086326037` | Truly delivering (spend > 0) |
+|---|---|---|
+| Campaign-layer effective_status | 12 | — |
+| Insights with spend | — | 2 (£6.04 lifetime) |
+
+**Fix (commit pending below):** rename `updateCampaignStatus` → `updateNodeStatus` (works for any Meta node — Meta's POST `/{id}` with body `{status}` is the same endpoint regardless of object type) and call it three times sequentially: campaign, then adset, then ad. Sequenced because Meta validates each level against its parent's status.
+
+Both `scan-posts` and `boost/create` patched. Two existing call sites (Stripe webhook pause flow, monitor cron auto-pause) renamed in lockstep.
+
+**What about the existing 10 zombies?** Left as-is. Auto-activating them now would turn on £30+/day of unintended spend on posts that the user never deliberately approved for live spend. The right cleanup is manual: pick the campaigns Asad still wants live in Ads Manager, activate the adset+ad layers there, delete the rest.
 
 ---
 

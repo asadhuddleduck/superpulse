@@ -340,14 +340,21 @@ export async function fetchCampaigns(
 }
 
 /**
- * Update a campaign's status (ACTIVE, PAUSED, DELETED, etc.).
+ * Update a Meta node's status (ACTIVE, PAUSED, DELETED, etc.).
+ *
+ * Works for campaigns, adsets, and ads — Meta's POST `/{id}` with a `status`
+ * body field accepts any of them. Renamed from `updateCampaignStatus` on
+ * 2026-05-02 once we discovered scan-posts and boost-create were only
+ * activating the campaign layer, leaving adset+ad PAUSED. Result: 10 of 12
+ * "live" campaigns were actually delivering nothing because their child
+ * adsets and ads stayed paused. See INCIDENT-LOG.md.
  */
-export async function updateCampaignStatus(
-  campaignId: string,
+export async function updateNodeStatus(
+  nodeId: string,
   status: string,
   token: string
 ): Promise<{ success: boolean }> {
-  const url = `${GRAPH_API}/${campaignId}`;
+  const url = `${GRAPH_API}/${nodeId}`;
   const res = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
