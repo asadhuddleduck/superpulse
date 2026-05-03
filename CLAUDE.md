@@ -3,6 +3,8 @@
 ## Version
 **Current: v7** — Meta campaign naming uses this (e.g. "SuperPulse v7 | caption"). Bump this number when shipping significant improvements to the boost engine, scoring algorithm, or campaign creation flow. Update it in `src/app/api/boost/create/route.ts` and `src/app/api/cron/scan-posts/route.ts`.
 
+**Frozen 2026-05-03 — process redesign in progress.** Do NOT bump v7 → v8 until the new boost flow is approved + shipped. v7 is the freeze marker. See INCIDENT-LOG 2026-05-03 entry and the parent Notion task `https://www.notion.so/35584fd7bc4e81d48805e70695d3fc3e`.
+
 ## Product
 SuperPulse automatically boosts Instagram posts for local businesses using AI. The business owner just posts on Instagram — SuperPulse decides what to boost, where (radius targeting), when, how much budget, and when to pause/adjust. 100% automated.
 
@@ -229,7 +231,7 @@ Ahmed-type: Local restaurant/takeaway owner, 2-5K followers, posts 3-4x/week, £
 - Decisions DB: multiple SuperPulse decisions logged
 
 ## Project Files
-- `docs/INCIDENT-LOG.md` — **PRODUCTION INCIDENT POSTMORTEMS.** Read this before debugging anything that smells like prior pain. Newest first. As of 2 May 2026: standard_enhancements deprecation + tenant 2 permissions failure. scan-posts cron is currently DISABLED; tenant `t_fb_3426122537565919` is soft-disabled (status='disabled'). Re-enabling requires patching the class-of-bug classifier rule, wrapping `deleteCampaign` in `logApiCall`, and adding rate-limit header capture — full action list in the incident log.
+- `docs/INCIDENT-LOG.md` — **PRODUCTION INCIDENT POSTMORTEMS.** Read this before debugging anything that smells like prior pain. Newest first. As of 3 May 2026: **process freeze** — `scan-posts` cron disabled (removed from `vercel.json` + env-var kill switch `SCAN_POSTS_KILL_SWITCH` blocks accidental re-enable in `src/app/api/cron/scan-posts/route.ts`); 8 ACTIVE campaigns paused (preserved with full audit trail — ≥1p spend rule says NEVER delete); other crons (`monitor`, `reconcile`) still running. Re-enable gated on the new boost flow being approved + shipped — full checklist in the log's 2026-05-03 entry. Parent Notion task: `https://www.notion.so/35584fd7bc4e81d48805e70695d3fc3e`.
 - `docs/API-FEASIBILITY.md` — **DEFINITIVE** technical assessment of Meta API capabilities for scoring formula (5-agent research). Read this first for any technical work.
 - `docs/ARCHITECTURE.md` → §11 Live Ad QA Checklist — run before going live on any new ad account (Asad's own IG first, then each legacy client). 5 mandatory Ads Manager checks. Code comment in `src/lib/facebook.ts:405` notes `actor_id` is canonical (not `object_id`); the QA checklist describes the `object_id` fallback if identity ever fails.
 - `docs/AD-CONFIG-TWEAKS.md` — spec for the 3 Apr-10 ad config tweaks (placements, multi-advertiser off, Advantage+ off). All 3 shipped in commit `9f004a5` (27 Apr). Delete this file after the live QA pass (§11 of ARCHITECTURE.md) succeeds.

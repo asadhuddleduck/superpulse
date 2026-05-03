@@ -1,6 +1,5 @@
 {
   "crons": [
-    { "path": "/api/cron/scan-posts", "schedule": "0 */6 * * *" },
     { "path": "/api/cron/monitor", "schedule": "0 */6 * * *" },
     { "path": "/api/cron/reconcile", "schedule": "0 4 * * *" }
   ]

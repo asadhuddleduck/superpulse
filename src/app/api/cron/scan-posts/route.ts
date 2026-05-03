@@ -510,6 +510,22 @@ async function runScan() {
 }
 
 export async function GET(request: Request) {
+  // Kill switch: SuperPulse process redesign in progress (see INCIDENT-LOG 2026-05-03).
+  // Default behaviour (env unset OR not "off") = handler returns immediately, creates nothing.
+  // Set SCAN_POSTS_KILL_SWITCH=off in Vercel ONLY when the new boost flow is approved + shipped.
+  // This guard exists so even an accidental re-add of /api/cron/scan-posts to vercel.json
+  // cannot create campaigns. Remove this block when re-enabling, not before.
+  if (process.env.SCAN_POSTS_KILL_SWITCH !== "off") {
+    return NextResponse.json(
+      {
+        ok: false,
+        skipped: true,
+        reason: "scan-posts disabled pending process rethink — see INCIDENT-LOG 2026-05-03",
+      },
+      { status: 200 },
+    );
+  }
+
   const authError = checkCronAuth(request);
   if (authError) return authError;
   try {

@@ -4,6 +4,38 @@ Running record of production incidents, root causes, and runbook patterns. Newes
 
 ---
 
+## 2026-05-03 — Process freeze: cron disabled + 8 campaigns paused pending redesign
+
+24h after the hardening pass, plumbing is healthy: 3 `scan_completed` ticks on schedule, 6 `boost_succeeded`, 0 `boost_failed`, all 6 new campaigns delivering at all 3 layers (effective_status=ACTIVE), spend > 0 on every one, no orphans accumulating, `rate_limit_log` <5% on all axes. The boost engine *works*.
+
+But the **process layer** — what posts get picked, by what scoring, with what budget, into what audiences, with what success metric, with what lifecycle — was scaffolded around a v1-era spec that doesn't match what SuperPulse-the-product actually needs. The cron is shipping boosts on autopilot for a design that hasn't been ratified. Asad's call: stop creating campaigns until the actual process is redesigned.
+
+### Actions taken
+
+- **All 8 ACTIVE campaigns on `act_1059094086326037` set to PAUSED** via three-layer `updateNodeStatus` (ad → adset → campaign), each verified `effective_status=PAUSED` against the Graph API before the DB mirror. Lifetime spend preserved (~£19.07 total across the 8: £3.59, £3.53, £3.27, £3.26, £2.09, £1.98, £0.82, £0.53). Audit trail: 8 `boost_paused_admin` rows in `audit_events`.
+  - **Standing rule (memory + this log):** any SuperPulse campaign with ≥1p lifetime spend is **never** deleted. Pause only. 0-spend campaigns also default to pause. Spend = money moved through Meta + into our books = HMRC/Stripe/Xero reconciliation surface; deleting severs that link.
+- **`/api/cron/scan-posts` removed from `vercel.json`.** Other crons (`monitor`, `reconcile`) kept running — they cannot create campaigns. `monitor`'s only state mutation is the underperformer rule (spend>£2 + CTR<0.5% → PAUSE); confirmed by code read 2026-05-03 it has no ACTIVE-setting code path. So paused campaigns stay paused.
+- **Defence-in-depth kill switch** added at the top of the GET handler in `src/app/api/cron/scan-posts/route.ts`: gated on env var `SCAN_POSTS_KILL_SWITCH`. Default behaviour (env unset OR not `"off"`) = handler returns `{skipped: true, reason: "..."}` immediately. Even if a future agent re-adds the cron line to `vercel.json` by mistake, no campaigns get created. The guard's comment block names this incident date and the Notion task — to discourage "cleanup" removal.
+- **Parent Notion task opened** — `https://www.notion.so/35584fd7bc4e81d48805e70695d3fc3e` — "★ Redesign SuperPulse's actual process — what should the AI actually do?". Contains the open questions, the sub-task scaffold, and the things-NOT-to-do guardrails. Sub-tasks will be spawned from there as the design firms up.
+
+### Re-enable checklist (when the new process lands)
+
+1. Decision doc approved (goal metric + scoring + lifecycle).
+2. New boost flow code shipped, gated by the kill switch.
+3. 24h manual-trigger dry-run on Asad's `act_1059094086326037`.
+4. Re-add `/api/cron/scan-posts` to `vercel.json` at `0 */6 * * *`.
+5. Set `SCAN_POSTS_KILL_SWITCH=off` in Vercel prod.
+6. Bump `v7` → `v8` in campaign naming (`src/app/api/boost/create/route.ts` and `src/app/api/cron/scan-posts/route.ts`).
+7. Watch first 24h of `audit_events` for `scan_completed` + `boost_succeeded` cadence. Roll to PhatBuns next.
+
+### Verification artefacts
+
+- Pause script: `scripts/pause-active-campaigns.ts` (dry-run by default, `--apply` to execute). Refuses to operate if `active_campaigns` ACTIVE-count != expected, or if any row is on an unexpected ad account.
+- Playwright screenshot: `ads-mgr-post-pause.png` — 8 toggles "Off" on `act_1059094086326037`.
+- DB query for monitoring: `SELECT COUNT(*) FROM active_campaigns WHERE status='ACTIVE'` should stay at 0 until the new process ships.
+
+---
+
 ## 2026-05-02 — Hardening pass: 6 of 7 outstanding action items shipped (cron still OFF)
 
 Shipped items 1–6 from the 2026-05-01 → 2026-05-02 incident's action list. Cron remains disabled until item 7 (re-enable) — gated on user testing the picker post-token-clear.
