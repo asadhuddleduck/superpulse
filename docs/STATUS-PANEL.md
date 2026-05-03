@@ -5,6 +5,8 @@
 **Component:** `src/components/StatusPanel.tsx`
 **API:** `src/app/api/status/route.ts`
 
+> **v8 update (2026-05-03):** the v8 dashboard extends this status panel with a terminal-style "Live Feed" box below the fold (phone-first, matrix-style API talk, no tokens revealed). Metrics top, feed bottom. See `docs/V8-SPEC.md` §Dashboard for the full spec. The schema + audit_events write sites below still apply — the v8 feed reads the same `audit_events` rows.
+
 ## Purpose
 
 Make the magic visible. Today, scan-posts cron runs every 2h and auto-boost cron creates campaigns invisibly. Client thinks nothing is happening. StatusPanel surfaces:

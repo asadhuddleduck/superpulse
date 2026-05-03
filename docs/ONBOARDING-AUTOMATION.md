@@ -5,6 +5,8 @@
 **Notion parent:** [Onboarding journey polish — first 60 seconds](https://www.notion.so/huddleduck/34e84fd7bc4e81f99413e91bcde28fec)
 **Plan file:** `/Users/asadshah/.claude/plans/parallel-exploring-barto.md`
 
+> **v8 update (2026-05-03):** v8 adds a paid audit upsell at `/waitlist/audit` (£19 / +£50 Loom / +£250 consult, Apify-powered IG scrape, hybrid AI+human fulfillment). The "9 boost decisions" framing in the Vision section below is v0/v7 — the v8 engine is `BUDGET_TILT` + `STOP_AD` only with every eligible Reel auto-added to every ad set. See `docs/V8-SPEC.md` for the canonical v8 product + engine.
+
 ## Vision
 
 **Log in → approve budget → give locations → done.**

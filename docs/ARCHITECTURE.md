@@ -4,6 +4,11 @@
   Date: 2026-03-24
 ================================================================================
 
+>>> v8 NOTICE (2026-05-03): the canonical v8 spec is docs/V8-SPEC.md. Where this
+>>> file conflicts with V8-SPEC.md (data model, decision loop, scoring formula,
+>>> cron cadence), V8-SPEC.md wins. Section 11 (Live Ad QA Checklist) and the
+>>> general system-flow narrative are still useful context for v8.
+
 
 TABLE OF CONTENTS
 -----------------

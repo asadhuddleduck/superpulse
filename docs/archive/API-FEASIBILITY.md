@@ -1,5 +1,12 @@
 # SuperPulse — AI Scoring Formula: API Feasibility Assessment
 
+> **ARCHIVED 2026-05-03.** v0 scoring research. The scoring formula and decision
+> engine in this doc are SUPERSEDED by `docs/V8-SPEC.md`. v8 has no scoring
+> formula in the v0 sense — every eligible Reel is added to every ad set, AI
+> only tweaks budget allocation + auto-pauses underperformers. Meta API
+> capability findings here (rate limits, time-series caveat, copyright handling)
+> are still valid input. Pricing/decision-loop sections are not.
+
 **Date:** 24 March 2026
 **Research Method:** 5-agent team (3 researchers + 1 advocate + team lead) with high-bandwidth collaboration
 **API Version:** Meta Graph API v25.0 / Instagram Graph API with Facebook Login

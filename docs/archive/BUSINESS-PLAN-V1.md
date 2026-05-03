@@ -1,5 +1,10 @@
 # SuperPulse Business Plan V1
 
+> **ARCHIVED 2026-05-03.** Pre-pivot business plan from agent swarm (24 Mar 2026).
+> Superseded by `docs/V8-SPEC.md`. Pricing, decision-engine, and product narrative
+> in this doc do NOT reflect v8. Kept for historical context only — do not act on
+> anything in here without cross-checking V8-SPEC.md.
+
 **AI-Powered Automated Instagram Post Boosting for Local Businesses**
 
 Document Version: 1.0 (Working Draft)

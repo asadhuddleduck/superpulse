@@ -5,6 +5,8 @@
 
 **Frozen 2026-05-03 — process redesign in progress.** Do NOT bump v7 → v8 until the new boost flow is approved + shipped. v7 is the freeze marker. See INCIDENT-LOG 2026-05-03 entry and the parent Notion task `https://www.notion.so/35584fd7bc4e81d48805e70695d3fc3e`.
 
+**v8 spec locked 2026-05-03.** The canonical reference is `docs/V8-SPEC.md`. Where this file conflicts with V8-SPEC.md (scoring formula, "7 decision types", multi-tier pricing, 2h/6h cron cadence, "9 decisions automated" framing), V8-SPEC.md wins. The body below is preserved as v7 historical context. Do NOT update v7 sections in this file — update V8-SPEC.md instead.
+
 ## Product
 SuperPulse automatically boosts Instagram posts for local businesses using AI. The business owner just posts on Instagram — SuperPulse decides what to boost, where (radius targeting), when, how much budget, and when to pause/adjust. 100% automated.
 
@@ -87,7 +89,10 @@ Clients see immediately: higher views, more followers, more engagement, profile 
 Boosting via API bypasses Apple's in-app purchase fees (~30%). Clients automatically save vs self-boosting through the Instagram app.
 
 ## AI Decision Engine
-See `docs/API-FEASIBILITY.md` for the definitive technical assessment (5-agent research, March 2026).
+
+> **v8 update (2026-05-03):** the v8 engine is `BUDGET_TILT` + `STOP_AD` only. AI tweaks budget allocation across ad sets and auto-pauses underperformers — it does NOT pick which posts to boost. Every Reel that passes eligibility gets added to every ad set. Cadence: scan 60min, decide 6h, execute 30min. Stop conditions, schema, and full spec in **`docs/V8-SPEC.md`**. The v7 content below is preserved for context — V8-SPEC.md wins where they conflict.
+
+See `docs/archive/API-FEASIBILITY.md` for the v0 technical assessment (5-agent research, March 2026 — scoring formula superseded by V8-SPEC.md).
 
 ### Revised Scoring Formula (API-validated)
 | Factor | Weight | API Status | MVP Approach |
@@ -112,8 +117,10 @@ See `docs/API-FEASIBILITY.md` for the definitive technical assessment (5-agent r
 - Every 6 hours: monitor active boost performance
 - Daily: reconciliation batch (archive performance data, update baselines, refresh tokens)
 
-### 7 Decision Types
-BOOST, DON'T_BOOST, INCREASE_BUDGET, DECREASE_BUDGET, PAUSE, EXPAND_RADIUS, REDUCE_RADIUS
+### Decision Types — v8 (2026-05-03 lock)
+**v8 in production:** `BUDGET_TILT` (up/down/neutral per ad set, 3× spread guardrail) + `STOP_AD` (codified thresholds — see V8-SPEC.md §Stop conditions).
+
+**v7 (deprecated, retained for v0–v7 historical reads):** BOOST, DON'T_BOOST, INCREASE_BUDGET, DECREASE_BUDGET, PAUSE, EXPAND_RADIUS, REDUCE_RADIUS — never fully implemented in code, superseded before activation.
 
 ### Pre-Boost Flow (Revised)
 1. Score the post using formula above
@@ -151,6 +158,12 @@ permanent rejection pattern shows up in `api_call_log`.
 8. Audience match via Claude API (Phase 3)
 
 ## Pricing
+
+**v8 launch (2026-05-03 lock): £300/month flat + VAT.** Single tier. `FIRSTMONTHFREE` Stripe coupon zeroes month 1. Per-location pricing slot reserved in schema but disabled at launch. Multi-tier (Starter/Growth/Pro) is deferred — see V8-SPEC.md §Pricing.
+
+**Audit upsell** (mini-product at `/waitlist/audit`): £19 base / +£50 Loom order-bump / +£250 1:1 consult upsell. Apify-powered IG scrape, hybrid AI+human fulfillment day 1. Separate from the SaaS subscription.
+
+### v0–v7 multi-tier proposal (deprecated, retained for context)
 | Tier | Price | Includes |
 |------|-------|----------|
 | Starter | £49/month | 1 location, basic AI auto-boost, weekly email report |
@@ -160,8 +173,6 @@ permanent rejection pattern shows up in `api_call_log`.
 | + Location | +£29/location/month | Per additional location (Growth, Pro, or Managed Boost) |
 | Annual | 2 months free | 16.7% discount |
 | Trial | 14 days free | No credit card required |
-
-**Pro + Managed Boost = £299/month** — the premium tier for businesses that want AI power with human quality assurance.
 
 ### Managed Boost Add-On — What It Is
 A daily human QA step on the AI's boost decisions. Does NOT slow things down. Akmal reviews the AI's queue each morning, vetoes weak content, favours business priorities, and makes judgment calls on edge cases (borderline copyright, content quality). Includes a monthly Loom performance review. Capacity: 20-25 clients per person before needing a hire.
@@ -231,12 +242,13 @@ Ahmed-type: Local restaurant/takeaway owner, 2-5K followers, posts 3-4x/week, £
 - Decisions DB: multiple SuperPulse decisions logged
 
 ## Project Files
+- `docs/V8-SPEC.md` — **CANONICAL v8 REFERENCE (2026-05-03 lock).** Single source of truth for v8 product, engine, dashboard, audit upsell, marketing claims, and migration policy. Read this first for anything v8.
 - `docs/INCIDENT-LOG.md` — **PRODUCTION INCIDENT POSTMORTEMS.** Read this before debugging anything that smells like prior pain. Newest first. As of 3 May 2026: **process freeze** — `scan-posts` cron disabled (removed from `vercel.json` + env-var kill switch `SCAN_POSTS_KILL_SWITCH` blocks accidental re-enable in `src/app/api/cron/scan-posts/route.ts`); 8 ACTIVE campaigns paused (preserved with full audit trail — ≥1p spend rule says NEVER delete); other crons (`monitor`, `reconcile`) still running. Re-enable gated on the new boost flow being approved + shipped — full checklist in the log's 2026-05-03 entry. Parent Notion task: `https://www.notion.so/35584fd7bc4e81d48805e70695d3fc3e`.
-- `docs/API-FEASIBILITY.md` — **DEFINITIVE** technical assessment of Meta API capabilities for scoring formula (5-agent research). Read this first for any technical work.
+- `docs/archive/API-FEASIBILITY.md` — v0 Meta API feasibility research (5-agent research, March 2026). Scoring formula superseded by V8-SPEC.md. Kept for historical context.
 - `docs/ARCHITECTURE.md` → §11 Live Ad QA Checklist — run before going live on any new ad account (Asad's own IG first, then each legacy client). 5 mandatory Ads Manager checks. Code comment in `src/lib/facebook.ts:405` notes `actor_id` is canonical (not `object_id`); the QA checklist describes the `object_id` fallback if identity ever fails.
-- `docs/AD-CONFIG-TWEAKS.md` — spec for the 3 Apr-10 ad config tweaks (placements, multi-advertiser off, Advantage+ off). All 3 shipped in commit `9f004a5` (27 Apr). Delete this file after the live QA pass (§11 of ARCHITECTURE.md) succeeds.
-- `docs/BUSINESS-PLAN-V1.md` — First draft business plan from agent swarm
-- `docs/ARCHITECTURE.md` — Technical architecture (schema, system flows, build plan). Note: scoring formula in this doc is superseded by API-FEASIBILITY.md.
+- `docs/AD-CONFIG-TWEAKS.md` — spec for the 3 Apr-10 ad config tweaks (placements, multi-advertiser off, Advantage+ off). All 3 shipped in commit `9f004a5` (27 Apr). **Still applies in v8** (Reels-only, multi-advertiser off, Advantage+ off). Pending: live Ads Manager QA pass on Asad's IG. Delete this file only after that QA pass succeeds.
+- `docs/archive/BUSINESS-PLAN-V1.md` — First draft business plan from agent swarm (24 Mar 2026, pre-pivot). Archived; superseded by V8-SPEC.md.
+- `docs/ARCHITECTURE.md` — v7 technical architecture (schema, system flows, build plan). v8 schema + cron flow are in V8-SPEC.md and replace relevant sections. ARCHITECTURE.md §11 (Live Ad QA Checklist) still applies.
 - `docs/PRIVACY-POLICY.md` — Privacy policy (written, not deployed yet). Will become /privacy route.
 - `docs/META-APP-REVIEW-JUSTIFICATIONS.md` — 6 permission justification texts ready to paste into Meta submission form.
 - `docs/BRAND-STRATEGY.md` — Brand strategy document
