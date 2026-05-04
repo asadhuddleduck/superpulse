@@ -12,7 +12,15 @@ export type AuditEventType =
   | "spend_threshold"
   | "error"
   | "onboarding_complete"
-  | "subscription_changed";
+  | "subscription_changed"
+  // v8 engine event types (added 2026-05-04). One per cron-tick lifecycle event.
+  | "v8_scan_tick"
+  | "v8_decision_made"
+  | "v8_decision_invalid"
+  | "v8_intent_executed"
+  | "v8_intent_skipped"
+  | "v8_circuit_breaker_tripped"
+  | "v8_ad_retired";
 
 export interface AuditEventRow {
   id: number;

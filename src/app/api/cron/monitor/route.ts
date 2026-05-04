@@ -1,30 +1,46 @@
 import { NextResponse } from "next/server";
-import {
-  fetchAdInsights,
-  updateNodeStatus as updateMetaCampaignStatus,
-} from "@/lib/facebook";
+import { fetchAdInsights } from "@/lib/facebook";
 import { checkCronAuth } from "@/lib/cron-auth";
 import { getActiveTenants, type Tenant } from "@/lib/queries/tenants";
-import {
-  getActiveCampaigns,
-  updateLocalCampaignStatus,
-} from "@/lib/queries/campaigns";
+import { getActiveCampaigns } from "@/lib/queries/campaigns";
 import { upsertPerformance } from "@/lib/queries/performance";
 import { logApiCall } from "@/lib/queries/api-calls";
 import { writeAuditEvent } from "@/lib/queries/audit-events";
+import { getActiveReelAdsForTenant } from "@/lib/queries/v8";
+import { evaluateAd } from "@/lib/v8/stop-conditions";
+import { enqueueIntent } from "@/lib/v8/intents";
+
+// v8 retune (2026-05-04): the v7 inline "spend > £2 + CTR < 0.5% → pause"
+// block is removed. Campaign-level performance writes are preserved (the
+// dashboard StatusPanel + reconcile cron still read them). Stop conditions
+// now run per-ad and enqueue STOP_AD intents into v8_intents — execute cron
+// drains that queue. Net effect: monitor is read-only against Meta. All ad
+// mutations flow through v8_intents → v8/execute exclusively.
 
 interface TenantMonitorResult {
   tenantId: string;
-  monitored: number;
-  paused: string[];
+  campaignsMonitored: number;
+  reelAdsEvaluated: number;
+  stopIntentsEnqueued: number;
   error?: string;
+}
+
+function profileVisitsFromActions(actions: Array<{ action_type: string; value: string }> | undefined): number {
+  if (!actions) return 0;
+  for (const a of actions) {
+    if (a.action_type === "onsite_conversion.ig_profile_visit" || a.action_type === "ig_profile_visits") {
+      return parseInt(a.value, 10) || 0;
+    }
+  }
+  return 0;
 }
 
 async function processTenant(tenant: Tenant): Promise<TenantMonitorResult> {
   const result: TenantMonitorResult = {
     tenantId: tenant.id,
-    monitored: 0,
-    paused: [],
+    campaignsMonitored: 0,
+    reelAdsEvaluated: 0,
+    stopIntentsEnqueued: 0,
   };
 
   const token = tenant.metaAccessToken;
@@ -34,102 +50,129 @@ async function processTenant(tenant: Tenant): Promise<TenantMonitorResult> {
     return result;
   }
 
-  const cleanAdAccountId = adAccountId.startsWith("act_")
-    ? adAccountId.slice(4)
-    : adAccountId;
+  const cleanAdAccountId = adAccountId.startsWith("act_") ? adAccountId.slice(4) : adAccountId;
 
   const activeCampaigns = await getActiveCampaigns(tenant.id);
-  if (activeCampaigns.length === 0) return result;
+  const reelAds = await getActiveReelAdsForTenant(tenant.id);
+  if (activeCampaigns.length === 0 && reelAds.length === 0) return result;
 
-  const insightsStart = Date.now();
-  let insights;
+  // ---------- Campaign-level insights (unchanged from v7) ----------
+  if (activeCampaigns.length > 0) {
+    const campaignInsightsStart = Date.now();
+    let campaignInsights;
+    try {
+      campaignInsights = await fetchAdInsights(cleanAdAccountId, token, { level: "campaign" });
+      await logApiCall({
+        tenantId: tenant.id,
+        endpoint: `/act_${cleanAdAccountId}/insights?level=campaign`,
+        method: "GET",
+        statusCode: 200,
+        durationMs: Date.now() - campaignInsightsStart,
+      });
+    } catch (err) {
+      await logApiCall({
+        tenantId: tenant.id,
+        endpoint: `/act_${cleanAdAccountId}/insights?level=campaign`,
+        method: "GET",
+        statusCode: 500,
+        durationMs: Date.now() - campaignInsightsStart,
+        error: err instanceof Error ? err.message : String(err),
+      });
+      result.error = `Failed to fetch campaign insights: ${err instanceof Error ? err.message : err}`;
+      return result;
+    }
+
+    const campaignInsightsMap = new Map<string, { impressions: number; reach: number; clicks: number; spend: number }>();
+    for (const entry of campaignInsights) {
+      if (entry.campaign_id) {
+        campaignInsightsMap.set(entry.campaign_id, {
+          impressions: parseInt(entry.impressions, 10) || 0,
+          reach: parseInt(entry.reach, 10) || 0,
+          clicks: parseInt(entry.clicks, 10) || 0,
+          spend: parseFloat(entry.spend) || 0,
+        });
+      }
+    }
+
+    const today = new Date().toISOString().split("T")[0];
+    for (const campaign of activeCampaigns) {
+      const perf = campaignInsightsMap.get(campaign.metaCampaignId);
+      if (!perf) continue;
+      await upsertPerformance({
+        campaignId: campaign.metaCampaignId,
+        date: today,
+        impressions: perf.impressions,
+        reach: perf.reach,
+        clicks: perf.clicks,
+        spend: perf.spend,
+        profileVisits: 0,
+      });
+      result.campaignsMonitored++;
+    }
+  }
+
+  // ---------- Ad-level insights → STOP_AD intents (v8 addition) ----------
+  if (reelAds.length === 0) return result;
+
+  const adInsightsStart = Date.now();
+  let adInsights;
   try {
-    insights = await fetchAdInsights(cleanAdAccountId, token);
+    adInsights = await fetchAdInsights(cleanAdAccountId, token, { level: "ad" });
     await logApiCall({
       tenantId: tenant.id,
-      endpoint: `/act_${cleanAdAccountId}/insights`,
+      endpoint: `/act_${cleanAdAccountId}/insights?level=ad`,
       method: "GET",
       statusCode: 200,
-      durationMs: Date.now() - insightsStart,
+      durationMs: Date.now() - adInsightsStart,
     });
   } catch (err) {
     await logApiCall({
       tenantId: tenant.id,
-      endpoint: `/act_${cleanAdAccountId}/insights`,
+      endpoint: `/act_${cleanAdAccountId}/insights?level=ad`,
       method: "GET",
       statusCode: 500,
-      durationMs: Date.now() - insightsStart,
+      durationMs: Date.now() - adInsightsStart,
       error: err instanceof Error ? err.message : String(err),
     });
-    result.error = `Failed to fetch insights: ${err instanceof Error ? err.message : err}`;
     return result;
   }
 
-  const insightsMap = new Map<string, {
-    impressions: number;
-    reach: number;
-    clicks: number;
-    spend: number;
-  }>();
-  for (const entry of insights) {
-    if (entry.campaign_id) {
-      insightsMap.set(entry.campaign_id, {
-        impressions: parseInt(entry.impressions, 10) || 0,
-        reach: parseInt(entry.reach, 10) || 0,
-        clicks: parseInt(entry.clicks, 10) || 0,
-        spend: parseFloat(entry.spend) || 0,
-      });
-    }
+  const adInsightsMap = new Map<string, { impressions: number; clicks: number; spendPennies: number; profileVisits: number }>();
+  for (const entry of adInsights) {
+    if (!entry.ad_id) continue;
+    adInsightsMap.set(entry.ad_id, {
+      impressions: parseInt(entry.impressions, 10) || 0,
+      clicks: parseInt(entry.clicks, 10) || 0,
+      spendPennies: Math.round((parseFloat(entry.spend) || 0) * 100),
+      profileVisits: profileVisitsFromActions(entry.actions),
+    });
   }
 
-  const today = new Date().toISOString().split("T")[0];
-
-  for (const campaign of activeCampaigns) {
-    const perf = insightsMap.get(campaign.metaCampaignId);
+  const now = Date.now();
+  for (const reelAd of reelAds) {
+    const perf = adInsightsMap.get(reelAd.metaAdId);
     if (!perf) continue;
-
-    await upsertPerformance({
-      campaignId: campaign.metaCampaignId,
-      date: today,
-      impressions: perf.impressions,
-      reach: perf.reach,
-      clicks: perf.clicks,
-      spend: perf.spend,
-      profileVisits: 0,
-    });
-    result.monitored++;
-
-    // Underperformer rule: spend > £2 and CTR < 0.5% → pause.
-    const ctr = perf.impressions > 0 ? perf.clicks / perf.impressions : 0;
-    if (perf.spend > 2.0 && ctr < 0.005) {
-      const pauseStart = Date.now();
-      try {
-        await updateMetaCampaignStatus(campaign.metaCampaignId, "PAUSED", token);
-        await logApiCall({
-          tenantId: tenant.id,
-          endpoint: `/${campaign.metaCampaignId}`,
-          method: "POST",
-          statusCode: 200,
-          durationMs: Date.now() - pauseStart,
-        });
-        await updateLocalCampaignStatus(campaign.metaCampaignId, "PAUSED");
-        result.paused.push(campaign.metaCampaignId);
-        await writeAuditEvent(
-          tenant.id,
-          "spend_threshold",
-          `Paused underperforming campaign — spent £${perf.spend.toFixed(2)} with low CTR`,
-          { metaCampaignId: campaign.metaCampaignId, spend: perf.spend, ctr },
-        );
-      } catch (err) {
-        await logApiCall({
-          tenantId: tenant.id,
-          endpoint: `/${campaign.metaCampaignId}`,
-          method: "POST",
-          statusCode: 500,
-          durationMs: Date.now() - pauseStart,
-          error: err instanceof Error ? err.message : String(err),
-        });
-      }
+    result.reelAdsEvaluated++;
+    const adAgeDays = Math.floor((now - Date.parse(reelAd.addedAt)) / 86400000);
+    const stop = evaluateAd(perf, adAgeDays);
+    if (!stop) continue;
+    try {
+      const intentId = await enqueueIntent({
+        tenantId: tenant.id,
+        aiDecisionId: null,
+        intentType: "STOP_AD",
+        payload: { metaAdId: reelAd.metaAdId, reason: stop },
+      });
+      result.stopIntentsEnqueued++;
+      await writeAuditEvent(tenant.id, "v8_intent_executed", `Enqueued STOP_AD: ${stop}`, {
+        intentId,
+        metaAdId: reelAd.metaAdId,
+        reason: stop,
+        perf,
+      });
+    } catch (err) {
+      // enqueueIntent failure shouldn't kill the whole tenant tick.
+      console.error(`enqueue STOP_AD failed for ${reelAd.metaAdId}:`, err);
     }
   }
 
@@ -154,8 +197,9 @@ async function runMonitor() {
       } catch (err) {
         results[i] = {
           tenantId: tenant.id,
-          monitored: 0,
-          paused: [],
+          campaignsMonitored: 0,
+          reelAdsEvaluated: 0,
+          stopIntentsEnqueued: 0,
           error: err instanceof Error ? err.message : String(err),
         };
       }
@@ -170,8 +214,9 @@ async function runMonitor() {
 
   return {
     tenantsProcessed: tenants.length,
-    totalMonitored: results.reduce((sum, r) => sum + r.monitored, 0),
-    totalPaused: results.reduce((sum, r) => sum + r.paused.length, 0),
+    campaignsMonitored: results.reduce((sum, r) => sum + r.campaignsMonitored, 0),
+    reelAdsEvaluated: results.reduce((sum, r) => sum + r.reelAdsEvaluated, 0),
+    stopIntentsEnqueued: results.reduce((sum, r) => sum + r.stopIntentsEnqueued, 0),
     results,
   };
 }

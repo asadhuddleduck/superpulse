@@ -190,6 +190,8 @@ export interface IGMediaItem {
   id: string;
   caption?: string;
   media_type: string;
+  // REELS / FEED / STORY / AD — Reels boostability gate in v8 keys off this.
+  media_product_type?: string;
   media_url?: string;
   thumbnail_url?: string;
   timestamp: string;
@@ -204,7 +206,7 @@ export async function fetchIGMedia(
   igUserId: string,
   token: string
 ): Promise<IGMediaItem[]> {
-  const url = `${GRAPH_API}/${igUserId}/media?fields=id,caption,media_type,media_url,thumbnail_url,timestamp,like_count,comments_count&limit=25&access_token=${token}`;
+  const url = `${GRAPH_API}/${igUserId}/media?fields=id,caption,media_type,media_product_type,media_url,thumbnail_url,timestamp,like_count,comments_count&limit=25&access_token=${token}`;
   const res = await fetch(url);
   await captureRateLimits(res, url);
   if (!res.ok) {
@@ -337,6 +339,32 @@ export async function fetchCampaigns(
   }
   const data = await res.json();
   return data.data ?? [];
+}
+
+/**
+ * Update an ad set's daily_budget (in pennies). The v8 execute cron uses this
+ * to apply BUDGET_TILT intents — proven Meta v25.0 field, same one used at
+ * adset creation. Wraps captureRateLimits per the standard pattern.
+ */
+export async function updateAdSetDailyBudget(
+  adSetId: string,
+  dailyBudgetPennies: number,
+  token: string
+): Promise<void> {
+  const url = `${GRAPH_API}/${adSetId}`;
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      daily_budget: dailyBudgetPennies,
+      access_token: token,
+    }),
+  });
+  await captureRateLimits(res, url);
+  if (!res.ok) {
+    const error = await res.text();
+    throw new Error(`Failed to update adset daily_budget: ${error}`);
+  }
 }
 
 /**
@@ -501,6 +529,11 @@ export async function createAdSet(
         // explore_home, ig_search). The "reels" position covers profile-reel surfaces.
         instagram_positions: ["reels", "story"],
         device_platforms: ["mobile"],
+        // Opt out of Advantage Audience (the modern "Detailed Targeting Expansion").
+        // Meta defaults this to 1 if omitted — confirmed via live GET on a paused
+        // SuperPulse campaign 2026-05-04 (R2 inspection). With it ON, Meta expands
+        // the audience beyond our 5-mile geo-radius, defeating the locality promise.
+        targeting_automation: { advantage_audience: 0 },
       },
       status: "PAUSED",
       access_token: token,
@@ -566,6 +599,16 @@ export async function createAdCreative(
       // `standard_enhancements` was the bundled opt-out — Meta deprecated it 2026-05-01
       // ("standard enhancements field in creative has been deprecated. Please choose to
       // set individual features instead"). The 8 individual feature keys below replace it.
+      // Opt out of every Advantage+ / Essential creative enhancement Meta would otherwise
+      // auto-apply. These 15 keys cover the three Ads Manager UI bundles ("Advantage+
+      // creative enhancements", "Essential enhancements", and the on-by-default video/
+      // multi-image extras) — verified live in Ads Manager UI 2026-05-04 against
+      // act_1059094086326037. Notes:
+      //   - multi_photo_to_video → "Adapt multi-image format" (defaulted ON)
+      //   - video_highlights     → "Add video effects" (defaulted ON in Essential bundle)
+      //   - inline_comment       → "Relevant comments" (Essential bundle)
+      //   - enhance_cta          → "Enhance CTA" (Essential bundle)
+      // standard_enhancements was deprecated 2026-05-01; individual keys replace it.
       degrees_of_freedom_spec: {
         creative_features_spec: {
           image_brightness_and_contrast: { enroll_status: "OPT_OUT" },
@@ -576,8 +619,27 @@ export async function createAdCreative(
           video_auto_crop:               { enroll_status: "OPT_OUT" },
           audio:                         { enroll_status: "OPT_OUT" },
           advantage_plus_creative:       { enroll_status: "OPT_OUT" },
+          enhance_cta:                   { enroll_status: "OPT_OUT" },
+          inline_comment:                { enroll_status: "OPT_OUT" },
+          add_text_overlay:              { enroll_status: "OPT_OUT" },
+          adapt_to_placement:            { enroll_status: "OPT_OUT" },
+          description_automation:        { enroll_status: "OPT_OUT" },
+          multi_photo_to_video:          { enroll_status: "OPT_OUT" },
+          video_highlights:              { enroll_status: "OPT_OUT" },
+          // Undocumented in Meta's 46-key spec but live in v25.0 — discovered by
+          // toggling the Ads Manager UI 2026-05-04 and reading the resulting
+          // creative_features_spec back. video_filtering = "Add video effects",
+          // ig_video_native_subtitle = "Add subtitles" (both default ON for video).
+          video_filtering:               { enroll_status: "OPT_OUT" },
+          ig_video_native_subtitle:      { enroll_status: "OPT_OUT" },
         },
       },
+      // Opt out of multi-advertiser ads at the CREATIVE level — `contextual_multi_ads`
+      // is the canonical field per Meta docs (v25.0) and defaults to OPT_IN since
+      // 19 Aug 2024. The older `multi_advertiser_ads.has_opted_out` field at the ad
+      // level is no longer honored by Ads Manager (verified UI 2026-05-04: still
+      // showed checked despite POSTing has_opted_out: true).
+      contextual_multi_ads: { enroll_status: "OPT_OUT" },
       access_token: token,
     }),
   });
@@ -608,8 +670,9 @@ export async function createAd(
       adset_id: adSetId,
       creative: { creative_id: creativeId },
       status: "PAUSED",
-      // Hard opt-out of multi-advertiser ad bundling (per AD-CONFIG-TWEAKS).
-      multi_advertiser_ads: { has_opted_out: true },
+      // Multi-advertiser opt-out lives on the CREATIVE as `contextual_multi_ads`
+      // (see createAdCreative). The older ad-level `multi_advertiser_ads.has_opted_out`
+      // is silently ignored by Ads Manager — confirmed 2026-05-04 live UI inspection.
       access_token: token,
     }),
   });
@@ -703,20 +766,28 @@ export interface AdInsightEntry {
   actions?: AdInsightAction[];
   campaign_id?: string;
   campaign_name?: string;
+  // Populated when fetched at level="adset" or level="ad" (v8 monitor + decide).
+  adset_id?: string;
+  adset_name?: string;
+  ad_id?: string;
+  ad_name?: string;
 }
 
 /**
- * Fetch ad account insights at the campaign level. Default `last_7d`; pass
- * `{ datePreset: 'yesterday' }` from the daily reconcile cron to lock in a
- * post-midnight final snapshot.
+ * Fetch ad account insights. Default level `campaign`; v8 monitor passes
+ * `level: 'ad'` to drive per-ad stop-condition evaluation. The fields query
+ * always asks for campaign_id, adset_id, ad_id so callers can join regardless
+ * of the chosen level. Default datePreset `last_7d`; pass `yesterday` from
+ * the daily reconcile cron for a post-midnight final snapshot.
  */
 export async function fetchAdInsights(
   adAccountId: string,
   token: string,
-  options: { datePreset?: "last_7d" | "yesterday" | "today" } = {},
+  options: { datePreset?: "last_7d" | "yesterday" | "today"; level?: "campaign" | "adset" | "ad" } = {},
 ): Promise<AdInsightEntry[]> {
   const datePreset = options.datePreset ?? "last_7d";
-  const url = `${GRAPH_API}/act_${adAccountId}/insights?fields=impressions,reach,clicks,spend,actions&date_preset=${datePreset}&level=campaign&access_token=${token}`;
+  const level = options.level ?? "campaign";
+  const url = `${GRAPH_API}/act_${adAccountId}/insights?fields=impressions,reach,clicks,spend,actions,campaign_id,adset_id,ad_id&date_preset=${datePreset}&level=${level}&access_token=${token}`;
   const res = await fetch(url);
   await captureRateLimits(res, url);
   if (!res.ok) {

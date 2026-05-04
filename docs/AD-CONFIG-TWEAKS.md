@@ -4,6 +4,13 @@ Three configuration tweaks to apply to `src/lib/facebook.ts` before the next pro
 
 **Status (28 Apr 2026):** All 3 tweaks shipped in commit `9f004a5` (Multi-tenant Phase 1, 27 Apr) — bundled with another deploy as required. Pending: live-ad QA on Asad's own IG. The persistent QA checklist lives in `docs/ARCHITECTURE.md` → "Live Ad QA Checklist". **Once that QA pass succeeds in production, delete this file** and tick the parent Notion task. Until then, keep this doc as the spec-of-record.
 
+**Status update (2026-05-04):** Live QA on `act_1059094086326037` revealed the original Tweak 2 + Tweak 3 implementations were INSUFFICIENT — Ads Manager UI still showed "Multi-advertiser ads" checkbox checked, "Essential enhancements" 1/3 ON, and "Advantage+ creative enhancements" 1/4 ON despite the POSTed opt-outs. Investigated via 3 Opus research agents + 3 round-trip probe campaigns on Asad's own IG. Findings:
+1. **Multi-advertiser opt-out moved.** The canonical field is `contextual_multi_ads.enroll_status: OPT_OUT` on the **creative** (not `multi_advertiser_ads.has_opted_out: true` on the ad — silently ignored since Aug 2024). Ad-level field removed; creative-level added.
+2. **`creative_features_spec` needs more keys.** The original 8-key opt-out left 9 enhancements ON by default. Added 9 more: `enhance_cta`, `inline_comment`, `add_text_overlay`, `adapt_to_placement`, `description_automation`, `multi_photo_to_video`, `video_highlights`, `video_filtering`, `ig_video_native_subtitle`. The last two are **undocumented in Meta's 46-key spec** but live in v25.0 — discovered by toggling Ads Manager UI and reading the resulting `creative_features_spec` back.
+3. **Advantage Audience defaults to ON at the adset level.** Added `targeting_automation: { advantage_audience: 0 }` to `createAdSet`.
+
+Fix shipped in `src/lib/facebook.ts` 2026-05-04. Verified PASS on probe campaign — all three Ads Manager UI toggles read OFF. The 8 paused live campaigns were NOT patched (creative is immutable; they're zero-spending; v8 will replace them wholesale post-freeze — see R3 report at `.research/R3-patch-and-test.md`).
+
 ## Why these tweaks
 
 The boost flow works end-to-end as of 10 Apr (verified live on `act_1059094086326037`). But the default ad config Meta auto-applies includes a bunch of placements, multi-advertiser features, and creative enhancements we don't want. We want a **clean, minimal, intentional** ad setup — Instagram-only, raw creative, no Meta-injected variants. We can always loosen the constraints later.

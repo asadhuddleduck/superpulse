@@ -158,3 +158,85 @@ CREATE TABLE IF NOT EXISTS rate_limit_log (
 
 CREATE INDEX IF NOT EXISTS idx_rate_limit_log_captured_at ON rate_limit_log(captured_at);
 CREATE INDEX IF NOT EXISTS idx_rate_limit_log_account ON rate_limit_log(ad_account_id, captured_at DESC);
+
+-- v8 engine schema (added 2026-05-04). One campaign per tenant, N adsets
+-- per campaign (one per location), every eligible Reel as an ad in every
+-- adset. AI tweaks budgets via 3x spread guardrail; auto-pauses underperformers.
+-- Spec: docs/V8-SPEC.md sections 17 and Schema. CBO disabled at launch
+-- (cbo_enabled DEFAULT 0); see handover doc for re-enable plan.
+
+CREATE TABLE IF NOT EXISTS tenant_campaigns (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  tenant_id TEXT NOT NULL UNIQUE,
+  meta_campaign_id TEXT NOT NULL UNIQUE,
+  status TEXT NOT NULL DEFAULT 'PAUSED',
+  daily_budget_pennies INTEGER NOT NULL,
+  cbo_enabled INTEGER NOT NULL DEFAULT 0,
+  spend_cap_pennies INTEGER,
+  created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+  updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS location_adsets (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  tenant_campaign_id INTEGER NOT NULL REFERENCES tenant_campaigns(id),
+  location_id INTEGER NOT NULL REFERENCES locations(id),
+  meta_adset_id TEXT NOT NULL UNIQUE,
+  status TEXT NOT NULL DEFAULT 'PAUSED',
+  daily_budget_pennies INTEGER,
+  min_daily_budget_pennies INTEGER,
+  max_daily_budget_pennies INTEGER,
+  current_spend_today_pennies INTEGER DEFAULT 0,
+  last_guardrail_write_at TEXT,
+  created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(tenant_campaign_id, location_id)
+);
+
+CREATE TABLE IF NOT EXISTS reel_ads (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  location_adset_id INTEGER NOT NULL REFERENCES location_adsets(id),
+  post_id TEXT NOT NULL REFERENCES ig_posts(id),
+  meta_ad_id TEXT NOT NULL UNIQUE,
+  meta_creative_id TEXT,
+  status TEXT NOT NULL DEFAULT 'PAUSED',
+  ai_score REAL,
+  added_at TEXT DEFAULT CURRENT_TIMESTAMP,
+  retired_at TEXT,
+  retired_reason TEXT,
+  UNIQUE(location_adset_id, post_id)
+);
+
+CREATE TABLE IF NOT EXISTS ai_decisions (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  tenant_id TEXT NOT NULL,
+  decision_type TEXT NOT NULL,
+  input_hash TEXT,
+  input_json TEXT,
+  output_json TEXT,
+  llm_model TEXT,
+  input_tokens INTEGER,
+  output_tokens INTEGER,
+  cost_pennies INTEGER,
+  narrative TEXT,
+  valid INTEGER NOT NULL DEFAULT 1,
+  created_at TEXT DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Intent queue produced by decide cron, drained by execute cron. Also
+-- enqueued by monitor cron when stop conditions trigger.
+CREATE TABLE IF NOT EXISTS v8_intents (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  tenant_id TEXT NOT NULL,
+  ai_decision_id INTEGER REFERENCES ai_decisions(id),
+  intent_type TEXT NOT NULL,
+  payload_json TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'pending',
+  error TEXT,
+  created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+  executed_at TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_reel_ads_adset ON reel_ads(location_adset_id, status);
+CREATE INDEX IF NOT EXISTS idx_location_adsets_campaign ON location_adsets(tenant_campaign_id);
+CREATE INDEX IF NOT EXISTS idx_ai_decisions_tenant_time ON ai_decisions(tenant_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_v8_intents_pending ON v8_intents(tenant_id, status, created_at);
