@@ -1,0 +1,792 @@
+/* ========== PROPOSAL PAGE — scoped to .proposal-root ========== */
+/* Ported from landing-page design system. Scoped to avoid clashes with
+   the rest of the superpulse app. All rules either target classes that
+   only exist inside .proposal-root, or are explicitly scoped with a
+   .proposal-root prefix. */
+
+.proposal-root {
+  /* True black palette */
+  --black: #000000;
+  --black-soft: #0A0A0A;
+  --black-card: #0D0D0D;
+  --black-card-hover: #141414;
+  --gradient-card: linear-gradient(145deg, #0A0A0A 0%, #111111 100%);
+  --gradient-accent: linear-gradient(135deg, #1EBA8F 0%, #17A07A 100%);
+
+  --viridian: #1EBA8F;
+  --viridian-glow: rgba(30, 186, 143, 0.15);
+  --sandstorm: #F7CE46;
+  --sandstorm-glow: rgba(247, 206, 70, 0.15);
+  --chocolate: #3D2817;
+
+  --text-primary: #FFFFFF;
+  --text-secondary: #999999;
+  --text-muted: #555555;
+
+  --border: rgba(255, 255, 255, 0.08);
+  --border-bright: rgba(30, 186, 143, 0.25);
+
+  --font-primary: var(--font-lato), -apple-system, 'SF Pro Display', 'SF Pro Text', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  --font-heading: var(--font-lato), -apple-system, 'SF Pro Display', 'Helvetica Neue', sans-serif;
+  --ease-premium: cubic-bezier(0.16, 1, 0.3, 1);
+
+  background: var(--black);
+  color: var(--text-primary);
+  font-family: var(--font-primary);
+  position: relative;
+  overflow-x: hidden;
+
+  /* ========== SLIDE FORMAT ========== */
+  /* Each direct child <section> is a 100vh slide; native scroll-snap drives
+     swipe-style navigation. Mobile-friendly (Safari + Chrome both honour
+     scroll-snap-stop: always). */
+  scroll-snap-type: y mandatory;
+  height: 100vh;
+  overflow-y: scroll;
+  scroll-behavior: smooth;
+  -webkit-overflow-scrolling: touch;
+}
+
+.proposal-root > section {
+  scroll-snap-align: start;
+  scroll-snap-stop: always;
+  min-height: 100vh;
+  height: 100vh;
+  max-height: 100vh;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  padding: 56px 22px 48px;
+  position: relative;
+  overflow: hidden;
+}
+
+@media (min-width: 768px) {
+  .proposal-root > section {
+    padding: 72px 56px 64px;
+  }
+}
+
+.proposal-slide-inner {
+  width: 100%;
+  max-width: 720px;
+  margin: 0 auto;
+  flex: 1 1 auto;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  padding-top: 6vh;
+}
+
+@media (min-width: 1280px) {
+  .proposal-slide-inner {
+    max-width: 880px;
+  }
+}
+
+/* ========== TEXT ANIMATIONS REMOVED (v4 reset) ========== */
+/* All scroll-in text animations are intentionally gone. Content is
+   100% visible at all times. Looping infographics handle motion
+   instead — they're always-on, no scroll triggers, no glitch surface.
+   See PulsingRadius, GhostPostFade, PathOfLight, CounterTickUp
+   primitives in src/components/scroll/. */
+
+/* ========== LOGO STRIP (real client logos) ========== */
+.proposal-logo-strip {
+  text-align: center;
+  width: 100%;
+  max-width: 480px;
+  margin: 0 auto;
+}
+.proposal-logo-strip-label {
+  font-size: 10px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+  color: var(--text-muted);
+  margin-bottom: 20px;
+}
+.proposal-logo-strip-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 22px 32px;
+  flex-wrap: wrap;
+}
+.proposal-logo-strip-img {
+  height: 32px;
+  width: auto;
+  filter: brightness(0) invert(1);
+  opacity: 0.45;
+  transition: opacity 220ms var(--ease-premium);
+}
+.proposal-logo-strip-img:hover {
+  opacity: 0.85;
+}
+@media (max-width: 767px) {
+  .proposal-logo-strip {
+    --logo-scale: 0.78;
+  }
+  .proposal-logo-strip-row {
+    gap: 16px 22px;
+  }
+}
+
+/* ========== SLIDE TYPOGRAPHY ========== */
+.proposal-eyebrow {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--viridian);
+  margin-bottom: 10px;
+  opacity: 0.9;
+}
+.proposal-h1 {
+  font-family: var(--font-heading);
+  font-size: clamp(22px, 5vw, 40px);
+  font-weight: 800;
+  letter-spacing: -0.6px;
+  line-height: 1.14;
+  color: var(--text-primary);
+  margin-bottom: 14px;
+  text-wrap: balance;
+}
+.proposal-h2 {
+  font-family: var(--font-heading);
+  font-size: clamp(20px, 4vw, 32px);
+  font-weight: 800;
+  letter-spacing: -0.4px;
+  line-height: 1.18;
+  color: var(--text-primary);
+  margin-bottom: 12px;
+  text-wrap: balance;
+}
+.proposal-subhead {
+  font-size: clamp(13px, 2.1vw, 17px);
+  line-height: 1.5;
+  color: var(--text-secondary);
+  margin-bottom: 18px;
+  max-width: 560px;
+}
+.proposal-body {
+  font-size: clamp(13px, 2vw, 16px);
+  line-height: 1.55;
+  color: var(--text-secondary);
+  margin-bottom: 12px;
+}
+.proposal-body strong {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+.proposal-pull-quote {
+  border-left: 2px solid var(--viridian);
+  padding: 6px 0 6px 14px;
+  font-size: clamp(13px, 2vw, 17px);
+  font-weight: 500;
+  color: var(--text-primary);
+  margin: 16px 0 0;
+  font-style: italic;
+  line-height: 1.5;
+}
+
+/* ========== SLIDE INDEX (1/12 etc) ========== */
+.proposal-slide-index {
+  position: absolute;
+  top: 18px;
+  right: 22px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 2px;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+  z-index: 2;
+}
+
+/* ========== SCROLL HINT (bottom of each slide) ========== */
+.proposal-scroll-hint {
+  position: absolute;
+  bottom: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 9px;
+  letter-spacing: 1.6px;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  opacity: 0.55;
+  animation: proposalHintBounce 3s ease-in-out infinite;
+  z-index: 2;
+}
+@keyframes proposalHintBounce {
+  0%, 100% { transform: translate(-50%, 0); opacity: 0.4; }
+  50% { transform: translate(-50%, 3px); opacity: 0.7; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .proposal-scroll-hint { animation: none; opacity: 0.5; }
+}
+
+/* ========== SLIDE CARD ========== */
+.proposal-card {
+  background: var(--black-card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 14px 16px;
+}
+.proposal-card--accent {
+  border-color: var(--border-bright);
+}
+.proposal-stat {
+  font-family: var(--font-heading);
+  font-size: clamp(34px, 7vw, 56px);
+  font-weight: 900;
+  letter-spacing: -1.5px;
+  line-height: 1;
+  color: var(--viridian);
+  font-variant-numeric: tabular-nums;
+}
+.proposal-stat-label {
+  font-size: 10px;
+  letter-spacing: 1.4px;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-top: 6px;
+  line-height: 1.3;
+}
+
+.proposal-root *,
+.proposal-root *::before,
+.proposal-root *::after {
+  box-sizing: border-box;
+}
+
+/* ========== KEYFRAMES (ported from landing-page globals) ========== */
+
+@keyframes proposalHeroReveal {
+  from {
+    opacity: 0;
+    transform: translateY(20px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes proposalFadeSlideUp {
+  from {
+    opacity: 0;
+    transform: translateY(30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes proposalCardAppear {
+  from {
+    opacity: 0;
+    transform: scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes proposalInputBreath {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(30, 186, 143, 0.0),
+                0 0 24px 0 rgba(30, 186, 143, 0.08);
+  }
+  50% {
+    box-shadow: 0 0 0 4px rgba(30, 186, 143, 0.10),
+                0 0 32px 4px rgba(30, 186, 143, 0.18);
+  }
+}
+
+@keyframes proposalLiveDotBreath {
+  0%, 100% {
+    opacity: 0.6;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+@keyframes proposalHairlinePulse {
+  0%, 100% {
+    opacity: 0.2;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+@keyframes proposalShimmerSweep {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+/* ========== GHOST POST FADE (slide 3) ========== */
+/* 6s loop:
+   0–80%   post fades from alive to dead, ticker counts 00 → 24
+   80–95%  post stays dead, skull emoji floats in, ticker holds at 24
+   95–100% snap back to alive (loop)                                 */
+
+.proposal-root .proposal-ghost-tile {
+  animation: proposalGhostFade 6s linear infinite;
+  will-change: opacity, filter;
+  position: relative;
+}
+@keyframes proposalGhostFade {
+  0%   { filter: saturate(1) brightness(1); opacity: 1; }
+  60%  { filter: saturate(0.3) brightness(0.5); opacity: 0.5; }
+  78%  { filter: saturate(0) brightness(0.25); opacity: 0.2; }
+  80%  { filter: saturate(0) brightness(0.18); opacity: 0.12; }
+  95%  { filter: saturate(0) brightness(0.18); opacity: 0.12; }
+  100% { filter: saturate(1) brightness(1); opacity: 1; }
+}
+
+/* Skull "post is dead" overlay — fades in once during the dead phase. */
+.proposal-root .proposal-ghost-skull {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  opacity: 0;
+  font-size: 56px;
+  filter: drop-shadow(0 0 16px rgba(0,0,0,0.55));
+  animation: proposalGhostSkull 6s linear infinite;
+  will-change: opacity, transform;
+}
+@keyframes proposalGhostSkull {
+  0%, 78%   { opacity: 0; transform: scale(0.55); }
+  84%       { opacity: 1; transform: scale(1.08); }
+  93%       { opacity: 1; transform: scale(1); }
+  97%, 100% { opacity: 0; transform: scale(0.55); }
+}
+
+/* CSS-only hour ticker — a column of 25 lines (00 → 24) stacked
+   vertically. Mask shows one line at a time. Steps for 0–80%, then
+   holds at 24 until 95%, then snaps back to 0. */
+.proposal-root .proposal-ghost-clock {
+  display: inline-flex;
+  height: 1em;
+  overflow: hidden;
+  vertical-align: bottom;
+  font-variant-numeric: tabular-nums;
+}
+.proposal-root .proposal-ghost-clock-track {
+  display: flex;
+  flex-direction: column;
+  animation: proposalGhostClock 6s linear infinite;
+}
+.proposal-root .proposal-ghost-clock-track > span {
+  height: 1em;
+  line-height: 1;
+}
+@keyframes proposalGhostClock {
+  0%   { transform: translateY(0); animation-timing-function: steps(24, end); }
+  80%  { transform: translateY(-24em); animation-timing-function: linear; }
+  95%  { transform: translateY(-24em); animation-timing-function: linear; }
+  100% { transform: translateY(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .proposal-root .proposal-ghost-tile,
+  .proposal-root .proposal-ghost-skull,
+  .proposal-root .proposal-ghost-clock-track { animation: none !important; }
+}
+
+/* ========== REDACTED TAPE (sample proposal route) ========== */
+.proposal-root .proposal-redacted-tape {
+  position: relative;
+  display: inline-block;
+  white-space: nowrap;
+  vertical-align: baseline;
+  line-height: inherit;
+}
+.proposal-root .proposal-redacted-tape-word {
+  visibility: hidden;
+  color: transparent;
+  user-select: none;
+}
+.proposal-root .proposal-redacted-tape-cover {
+  /* The cover IS the red tape — not a black hole. Subtle stripe texture
+     gives it weight and reads as "deliberately stamped over" rather
+     than "we forgot to render something". */
+  position: absolute;
+  top: -0.08em;
+  bottom: -0.08em;
+  left: -0.22em;
+  right: -0.22em;
+  background:
+    repeating-linear-gradient(
+      135deg,
+      rgba(255, 255, 255, 0.06) 0,
+      rgba(255, 255, 255, 0.06) 3px,
+      transparent 3px,
+      transparent 7px
+    ),
+    linear-gradient(180deg, #D62828 0%, #A81818 100%);
+  border-radius: 3px;
+  box-shadow:
+    0 6px 18px rgba(180, 25, 25, 0.45),
+    inset 0 1px 0 rgba(255, 255, 255, 0.18),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.25);
+  transform: rotate(-1.6deg);
+  pointer-events: none;
+}
+.proposal-root .proposal-redacted-tape-stamp {
+  /* White stamp text sitting directly on the red tape — no separate
+     box. Rotates with the tape so the whole thing reads as one unit. */
+  position: absolute;
+  top: -0.08em;
+  bottom: -0.08em;
+  left: -0.22em;
+  right: -0.22em;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #FFFFFF;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-weight: 800;
+  font-size: 0.62em;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.35);
+  transform: rotate(-1.6deg);
+  pointer-events: none;
+  white-space: nowrap;
+  z-index: 1;
+}
+
+/* ========== PHOTO CONVEYOR (left-scrolling brand photos on slide 2) ========== */
+.proposal-root .proposal-conveyor-track {
+  animation: proposalConveyor linear infinite;
+  will-change: transform;
+}
+@keyframes proposalConveyor {
+  from { transform: translate3d(0, 0, 0); }
+  to { transform: translate3d(-50%, 0, 0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .proposal-root .proposal-conveyor-track { animation: none !important; }
+}
+
+/* ========== UTILITY ANIMATIONS ========== */
+
+.proposal-root .proposal-hero-reveal {
+  animation: proposalHeroReveal 0.8s var(--ease-premium) backwards;
+}
+
+.proposal-root .proposal-fade-slide-up {
+  animation: proposalFadeSlideUp 0.6s var(--ease-premium) backwards;
+}
+
+.proposal-root .proposal-card-appear {
+  animation: proposalCardAppear 0.3s var(--ease-premium) backwards;
+}
+
+/* ========== REVEAL ON SCROLL ========== */
+.proposal-root .reveal-on-scroll {
+  opacity: 0;
+  transform: translateY(24px);
+  transition: opacity 600ms var(--ease-premium), transform 600ms var(--ease-premium);
+  will-change: opacity, transform;
+}
+.proposal-root .reveal-on-scroll.is-visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* ========== ANIMATED COUNTER ========== */
+.proposal-root .animated-counter {
+  font-family: var(--font-heading);
+  font-weight: 900;
+  color: var(--text-primary);
+  letter-spacing: -1.5px;
+  display: inline-block;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ========== MARQUEE ========== */
+.proposal-root .marquee {
+  display: flex;
+  overflow: hidden;
+  width: 100%;
+  position: relative;
+  mask-image: linear-gradient(
+    to right,
+    transparent 0%,
+    black 5%,
+    black 95%,
+    transparent 100%
+  );
+  -webkit-mask-image: linear-gradient(
+    to right,
+    transparent 0%,
+    black 5%,
+    black 95%,
+    transparent 100%
+  );
+}
+.proposal-root .marquee-track {
+  display: flex;
+  flex-shrink: 0;
+  gap: 48px;
+  align-items: center;
+  white-space: nowrap;
+  will-change: transform;
+}
+
+/* ========== MASKED REVEAL ========== */
+.proposal-root .masked-reveal {
+  display: inline-block;
+  overflow: hidden;
+  position: relative;
+}
+.proposal-root .masked-reveal-inner {
+  display: inline-block;
+  transform: translateY(100%);
+  opacity: 0;
+  transition: transform 700ms var(--ease-premium), opacity 700ms var(--ease-premium);
+  will-change: transform, opacity;
+}
+.proposal-root .masked-reveal.is-visible .masked-reveal-inner {
+  transform: translateY(0);
+  opacity: 1;
+}
+
+/* ========== STRIKETHROUGH NUMBER ========== */
+.proposal-root .strikethrough-number {
+  position: relative;
+  display: inline-block;
+}
+.proposal-root .strikethrough-number-line {
+  position: absolute;
+  left: 0;
+  top: 50%;
+  height: 2px;
+  background: var(--viridian);
+  transform: scaleX(0);
+  transform-origin: left center;
+  transition: transform 600ms var(--ease-premium);
+  width: 100%;
+}
+.proposal-root .strikethrough-number.is-visible .strikethrough-number-line {
+  transform: scaleX(1);
+}
+
+/* ========== BREATHING BUTTON ========== */
+.proposal-root .breathing-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 14px 32px;
+  border-radius: 999px;
+  background: var(--gradient-accent);
+  color: #000;
+  font-family: var(--font-heading);
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.2px;
+  border: none;
+  cursor: pointer;
+  text-decoration: none;
+  position: relative;
+  transition: transform 200ms var(--ease-premium),
+              box-shadow 300ms var(--ease-premium);
+  animation: proposalInputBreath 5s ease-in-out infinite;
+  will-change: transform, box-shadow;
+}
+.proposal-root .breathing-button:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 0 0 6px rgba(30, 186, 143, 0.14),
+              0 0 40px 6px rgba(30, 186, 143, 0.28);
+}
+
+/* ========== INTRIGUE BULLET ========== */
+.proposal-root .intrigue-bullet {
+  position: relative;
+  padding: 14px 16px;
+  border: 1px solid rgba(30, 186, 143, 0.3);
+  border-radius: 12px;
+  background: rgba(30, 186, 143, 0.02);
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--text-secondary);
+  overflow: hidden;
+}
+.proposal-root .intrigue-bullet::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(30, 186, 143, 0.06) 50%,
+    transparent 100%
+  );
+  background-size: 200% 100%;
+  animation: proposalShimmerSweep 6s linear infinite;
+  pointer-events: none;
+}
+.proposal-root .intrigue-bullet-keyword {
+  color: var(--viridian);
+  font-weight: 700;
+}
+
+/* ========== LIVE DOT ========== */
+.proposal-root .live-dot {
+  display: inline-block;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--viridian);
+  box-shadow: 0 0 6px rgba(30, 186, 143, 0.7);
+  animation: proposalLiveDotBreath 1.5s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  vertical-align: middle;
+}
+
+/* ========== HORIZONTAL HAIRLINE ========== */
+.proposal-root .horizontal-hairline {
+  display: inline-block;
+  width: 60px;
+  height: 1px;
+  background: var(--viridian);
+  animation: proposalHairlinePulse 4s ease-in-out infinite;
+}
+
+/* ========== SWITCH ON CASCADE ========== */
+.proposal-root .switch-on-cascade {
+  display: inline-flex;
+  gap: 8px;
+  align-items: center;
+}
+.proposal-root .switch-on-tile {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 14px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  color: var(--text-muted);
+  background: rgba(255, 255, 255, 0.04);
+  opacity: 0.45;
+  transition: opacity 320ms var(--ease-premium), color 320ms var(--ease-premium),
+    background 320ms var(--ease-premium), border-color 320ms var(--ease-premium),
+    transform 320ms var(--ease-premium), box-shadow 320ms var(--ease-premium);
+  transform: scale(0.96);
+}
+.proposal-root .switch-on-tile.is-active {
+  transform: scale(1);
+}
+.proposal-root .switch-on-tile.is-active.color-viridian {
+  opacity: 1;
+  color: #000;
+  background: var(--viridian);
+  border-color: var(--viridian);
+  box-shadow: 0 4px 18px rgba(30, 186, 143, 0.35);
+}
+.proposal-root .switch-on-tile.is-active.color-sandstorm {
+  opacity: 1;
+  color: #000;
+  background: var(--sandstorm);
+  border-color: var(--sandstorm);
+  box-shadow: 0 4px 18px rgba(247, 206, 70, 0.35);
+}
+.proposal-root .switch-on-tile.is-active.color-white {
+  opacity: 1;
+  color: #000;
+  background: #FFFFFF;
+  border-color: #FFFFFF;
+  box-shadow: 0 4px 18px rgba(255, 255, 255, 0.25);
+}
+
+/* ========== ACCORDION ========== */
+.proposal-root .accordion {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.proposal-root .accordion-item {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--gradient-card);
+  overflow: hidden;
+  transition: border-color 200ms var(--ease-premium);
+}
+.proposal-root .accordion-item.is-open {
+  border-color: var(--border-bright);
+}
+.proposal-root .accordion-trigger {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 18px 20px;
+  background: none;
+  border: none;
+  color: var(--text-primary);
+  font-family: var(--font-primary);
+  font-size: 15px;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+.proposal-root .accordion-chevron {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  color: var(--text-secondary);
+  transition: transform 300ms var(--ease-premium);
+}
+.proposal-root .accordion-item.is-open .accordion-chevron {
+  transform: rotate(180deg);
+}
+.proposal-root .accordion-content {
+  padding: 0 20px 20px;
+  font-size: 14px;
+  line-height: 1.65;
+  color: var(--text-secondary);
+}
+
+/* ========== REDUCED MOTION ========== */
+@media (prefers-reduced-motion: reduce) {
+  .proposal-root .breathing-button,
+  .proposal-root .live-dot,
+  .proposal-root .horizontal-hairline,
+  .proposal-root .intrigue-bullet::before {
+    animation: none !important;
+  }
+  .proposal-root .reveal-on-scroll,
+  .proposal-root .masked-reveal-inner,
+  .proposal-root .strikethrough-number-line {
+    transition: none !important;
+  }
+  .proposal-root .reveal-on-scroll {
+    opacity: 1;
+    transform: none;
+  }
+  .proposal-root .masked-reveal-inner {
+    transform: none;
+    opacity: 1;
+  }
+  .proposal-root .marquee-track {
+    animation: none !important;
+  }
+}
