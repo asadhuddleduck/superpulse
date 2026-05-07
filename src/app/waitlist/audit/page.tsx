@@ -55,46 +55,47 @@ function AuditInner() {
           </span>
           <h1 className="wl-hero-headline">
             Want to{" "}
-            <span className="wl-hero-headline-accent">skip the queue?</span>
+            <span className="wl-hero-headline-accent">jump the queue?</span>
           </h1>
           <p className="wl-hero-sub">
-            While you wait, our team will hand-review {ig ? <>@{ig}</> : "your Instagram"}{" "}
-            and send you a personalised profile audit. Built by humans + AI in under
-            24 hours.
+            While you wait, one of our team will go through {ig ? <>@{ig}</> : "your Instagram"}{" "}
+            by hand and send you a proper profile audit, written for your business.
+            Back in your inbox inside 24 hours.
           </p>
 
           <div className="wl-card">
             <div className="wl-card-label">
               <span className="wl-card-label-dot" />
-              Audit · £27 · Delivered in 24h
+              Audit · £27 · In your inbox inside 24h
             </div>
-            <h2 className="wl-card-heading">Your IG profile audit</h2>
+            <h2 className="wl-card-heading">Your Instagram profile audit</h2>
             <p className="wl-card-sub">
-              A senior strategist on our team — paired with our analysis engine —
-              rips through your last 50 posts and sends you a PDF that covers:
+              One of our team sits down with your last 50 posts, looks at them the
+              way a paying local would, and sends you a short PDF covering:
             </p>
 
             <ul className="wl-bullets">
-              <li>The 3 posts already on your grid that we&rsquo;d boost first</li>
-              <li>Why those posts are the ones locals will respond to</li>
-              <li>Your posting cadence vs. businesses that are growing fastest</li>
-              <li>An estimate of how many extra profile visits SuperPulse would deliver per month for you</li>
-              <li>Specific copy + hook fixes for your next 5 posts</li>
+              <li>The 3 posts on your grid we&rsquo;d put money behind first</li>
+              <li>Why those are the ones locals near you will actually walk in for</li>
+              <li>How your posting rhythm compares to local businesses growing fastest right now</li>
+              <li>A rough read on how many extra profile visits a month SuperPulse would put your way</li>
+              <li>Plain-English fixes for the captions and hooks on your next 5 posts</li>
             </ul>
 
             {error && <p className="wl-error">{error}</p>}
 
             <button onClick={handleBuy} disabled={loading || !email} className="wl-btn">
-              {loading ? "Opening Stripe…" : "Get my profile audit · £27"}
+              {loading ? "Opening Stripe…" : "Send me my audit · £27"}
             </button>
 
             <p className="wl-fine">
-              Secure checkout via Stripe. Refundable if we miss the 24h window.
+              Secure checkout through Stripe. If we miss the 24 hour window, you
+              get your money back.
             </p>
 
             <p className="wl-skip">
               <a href="/waitlist/done?skipped=1" className="wl-skip-link">
-                No thanks — I&rsquo;ll wait for the public launch
+                No thanks, I&rsquo;ll wait for the public launch
               </a>
             </p>
           </div>

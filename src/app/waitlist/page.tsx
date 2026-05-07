@@ -7,16 +7,15 @@ import WaitlistFooter from "@/components/waitlist/Footer";
 import ConvergenceBackground from "@/components/waitlist/ConvergenceBackground";
 import SocialProof from "@/components/waitlist/SocialProof";
 import CaseStudies from "@/components/waitlist/CaseStudies";
-import FounderSection from "@/components/waitlist/FounderSection";
 import WaitlistLogoStrip from "@/components/waitlist/LogoStrip";
 
 const BUSINESS_TYPES = [
-  "Restaurant / takeaway / QSR",
-  "Cafe / coffee shop",
-  "Barbers / hairdressers",
-  "Aesthetics / beauty clinic",
-  "Dentist / orthodontist",
-  "Gym / fitness studio",
+  "Restaurant, takeaway or cafe",
+  "Barbers or hairdressers",
+  "Beauty, nails or aesthetics",
+  "Dentist or orthodontist",
+  "Gym or fitness studio",
+  "Optician or other clinic",
   "Other local business",
 ];
 
@@ -76,17 +75,17 @@ export default function WaitlistPage() {
         <section className="wl-hero">
           <span className="wl-hero-eyebrow">
             <span className="wl-hero-eyebrow-dot" />
-            Now opening to local businesses
+            Now letting local businesses in
           </span>
           <h1 className="wl-hero-headline">
-            More locals walking in.{" "}
-            <span className="wl-hero-headline-accent">Without lifting a finger.</span>
+            More locals through the door.{" "}
+            <span className="wl-hero-headline-accent">Without you doing the ads.</span>
           </h1>
           <p className="wl-hero-sub">
-            SuperPulse turns the posts you already make on Instagram into local ads
-            that run forever. For restaurants, barbers, dentists, aesthetics
-            clinics, gyms — any local business that lives or dies on locals knowing
-            you exist. Join the waitlist below.
+            You post on Instagram like you already do. We turn the right posts into
+            local ads that find people on your doorstep. Restaurants, barbers,
+            dentists, clinics, gyms, beauticians, opticians. If your business runs
+            on locals knowing you exist, get on the list.
           </p>
 
           <div className="wl-card">
@@ -95,10 +94,10 @@ export default function WaitlistPage() {
                 <span className="wl-card-label-dot" />
                 Free to join · No card needed
               </div>
-              <h2 className="wl-card-heading">Join the waitlist</h2>
+              <h2 className="wl-card-heading">Get on the waitlist</h2>
               <p className="wl-card-sub">
-                Tell us about your business. If it&rsquo;s a fit, we&rsquo;ll be in
-                touch to give you a personal demo.
+                Quick details about your business. If you&rsquo;re a fit, one of us
+                gives you a call and walks you through it on a short demo.
               </p>
 
               <div className="wl-field">
@@ -109,7 +108,7 @@ export default function WaitlistPage() {
                   autoComplete="name"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  placeholder="Jane Doe"
+                  placeholder="Your name"
                   required
                   className="wl-input"
                 />
@@ -193,12 +192,12 @@ export default function WaitlistPage() {
               {error && <p className="wl-error">{error}</p>}
 
               <button type="submit" disabled={loading} className="wl-btn">
-                {loading ? "Joining…" : "Join the waitlist"}
+                {loading ? "Adding you…" : "Put me on the list"}
               </button>
 
               <p className="wl-fine">
-                We&rsquo;ll only use your details to contact you about SuperPulse.
-                No spam, ever.
+                We only use these details to talk to you about SuperPulse. No
+                lists, no spam, ever.
               </p>
             </form>
           </div>
@@ -207,7 +206,6 @@ export default function WaitlistPage() {
         <WaitlistLogoStrip />
         <SocialProof />
         <CaseStudies />
-        <FounderSection />
       </main>
 
       <WaitlistFooter />

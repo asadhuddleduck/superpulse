@@ -16,9 +16,9 @@ export const viewport: Viewport = {
 };
 
 export const metadata: Metadata = {
-  title: "SuperPulse — More locals walking in. Without lifting a finger.",
+  title: "SuperPulse. More locals through the door, without you doing the ads.",
   description:
-    "SuperPulse turns the posts you already make on Instagram into local ads that run forever. For restaurants, barbers, dentists, aesthetics clinics, gyms, and any local business.",
+    "You post on Instagram like normal. We turn the right posts into local ads that find people on your doorstep. For restaurants, barbers, dentists, clinics, gyms and any local business that runs on locals knowing you exist.",
   robots: { index: false, follow: false },
 };
 

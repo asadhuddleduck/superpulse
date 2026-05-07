@@ -15,7 +15,7 @@ function UpsellInner() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Block direct access — must come from a successful £27 checkout.
+  // Block direct access. Must come from a successful £27 checkout.
   useEffect(() => {
     if (typeof window !== "undefined" && !sessionId) {
       window.location.href = "/waitlist/done?skipped=1";
@@ -60,13 +60,13 @@ function UpsellInner() {
             Payment received · Audit queued
           </span>
           <h1 className="wl-hero-headline">
-            One last thing —{" "}
-            <span className="wl-hero-headline-accent">make it personal?</span>
+            One last thing.{" "}
+            <span className="wl-hero-headline-accent">Want it walked through?</span>
           </h1>
           <p className="wl-hero-sub">
-            Your audit&rsquo;s already in our queue. Want one of the team to
-            record a 5-7 min Loom walking you through every finding, in plain
-            English, for your business specifically? Most owners say this is the
+            Your audit is already in the queue. Want one of the team to record a
+            5 to 7 minute Loom video, sat looking at your account, walking you
+            through every finding in plain English? Most owners say this is the
             bit that finally makes it click.
           </p>
 
@@ -75,34 +75,34 @@ function UpsellInner() {
               <span className="wl-card-label-dot" />
               Personal Loom · +£97 on top of your audit
             </div>
-            <h2 className="wl-card-heading">Get a Loom walkthrough on top</h2>
+            <h2 className="wl-card-heading">Get the Loom walkthrough too</h2>
             <p className="wl-card-sub">
-              A real human from our team — not a bot — records a walkthrough of
-              your audit so you actually understand what to do next:
+              A real human on our side, not a bot, records a personal video so
+              you actually know what to do next, in your own words:
             </p>
 
             <ul className="wl-bullets">
-              <li>5-7 minute personalised Loom from the team</li>
-              <li>Walks you through your top 3 boost candidates, on-screen</li>
-              <li>Shows you where most of your local follower growth is being left on the table</li>
-              <li>Concrete next 30 days plan — even if you never use SuperPulse</li>
-              <li>Yours forever — share it with anyone running your social</li>
+              <li>5 to 7 minute personal Loom, recorded for you by name</li>
+              <li>Walks through your top 3 posts to put money behind, on screen</li>
+              <li>Points out where you&rsquo;re leaving the most local follower growth on the table</li>
+              <li>A concrete plan for your next 30 days, even if you never use SuperPulse</li>
+              <li>Yours to keep, share it with whoever runs your social</li>
             </ul>
 
             {error && <p className="wl-error">{error}</p>}
 
             <button onClick={handleBuy} disabled={loading} className="wl-btn">
-              {loading ? "Opening Stripe…" : "Yes — add the Loom · £97"}
+              {loading ? "Opening Stripe…" : "Yes, add the Loom · £97"}
             </button>
 
             <p className="wl-fine">
-              £97 added on top of your £27 audit. Loom delivered alongside the
-              audit PDF within 24h. Refundable if we miss the window.
+              £97 on top of your £27 audit. Loom lands with your audit PDF inside
+              24 hours. If we miss the window, you get your money back.
             </p>
 
             <p className="wl-skip">
               <a href={`/waitlist/done?session_id=${sessionId}`} className="wl-skip-link">
-                No thanks — just send me the £27 audit
+                No thanks, just send the £27 audit
               </a>
             </p>
           </div>

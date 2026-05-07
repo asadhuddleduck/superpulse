@@ -489,77 +489,9 @@
   .waitlist-root .wl-case-quote { font-size: 16px; }
 }
 
-/* ========== FOUNDER ========== */
-.waitlist-root .wl-founder {
-  max-width: 480px;
-  margin: 0 auto;
-  padding-top: 40px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  text-align: center;
-}
-.waitlist-root .wl-founder-photo {
-  width: 200px;
-  height: auto;
-  border-radius: 20px;
-  border: 2px solid var(--wl-border);
-  margin-bottom: 20px;
-}
-.waitlist-root .wl-founder-name {
-  font-family: var(--wl-font-heading);
-  font-size: 18px;
-  font-weight: 800;
-  color: var(--wl-text-primary);
-  letter-spacing: -0.3px;
-  margin-bottom: 2px;
-}
-.waitlist-root .wl-founder-title {
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--wl-text-muted);
-  margin-bottom: 16px;
-}
-.waitlist-root .wl-founder-bio {
-  font-size: 14px;
-  color: var(--wl-text-secondary);
-  line-height: 1.7;
-}
-.waitlist-root .wl-founder-bio + .wl-founder-bio { margin-top: 14px; }
+/* Founder section removed 2026-05-07. Copy archived in docs/archive/founder-section-copy.md. */
 
-/* ========== QR CODE ========== */
-.waitlist-root .wl-qr-section {
-  padding: 20px 24px 60px;
-  text-align: center;
-  position: relative;
-  z-index: 1;
-}
-.waitlist-root .wl-qr-label {
-  font-size: 10px;
-  font-weight: 500;
-  text-transform: uppercase;
-  letter-spacing: 1.5px;
-  color: var(--wl-text-muted);
-  margin-bottom: 18px;
-}
-.waitlist-root .wl-qr-frame {
-  display: inline-block;
-  padding: 18px;
-  border-radius: 16px;
-  background: var(--wl-gradient-card);
-  border: 1px solid var(--wl-border);
-}
-.waitlist-root .wl-qr-frame img {
-  width: 200px;
-  height: 200px;
-  display: block;
-}
-.waitlist-root .wl-qr-url {
-  margin-top: 14px;
-  font-size: 11px;
-  color: var(--wl-text-muted);
-  letter-spacing: 0.3px;
-}
+/* QR code section removed 2026-05-07. Was only used for the NEC stand. */
 
 /* ========== FOOTER ========== */
 .waitlist-root .wl-footer {

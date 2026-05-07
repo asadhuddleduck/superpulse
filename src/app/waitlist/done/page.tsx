@@ -16,15 +16,15 @@ function DoneInner() {
   if (skipped) {
     title = "You’re on the list.";
     body =
-      "We’ll be in touch from SuperPulse before the public launch. If your business looks like a strong fit, expect a call from the team to set up a personal demo.";
+      "We’ll be in touch from SuperPulse before we open to the public. If your business looks like a strong fit, expect a call from one of us to set up a short personal demo.";
   } else if (upsell) {
-    title = "Loom + audit booked.";
+    title = "Loom and audit booked.";
     body =
-      "Both your audit PDF and your personal Loom walkthrough will land in your inbox within 24 hours. We’ll also be in touch about your SuperPulse waitlist spot.";
+      "Your audit PDF and your personal Loom video both land in your inbox inside 24 hours. We’ll also be in touch about your SuperPulse spot on the waitlist.";
   } else {
     title = "Audit booked.";
     body =
-      "Your audit PDF will land in your inbox within 24 hours. We’ll also be in touch about your SuperPulse waitlist spot.";
+      "Your audit PDF lands in your inbox inside 24 hours. We’ll also be in touch about your SuperPulse spot on the waitlist.";
   }
 
   return (
