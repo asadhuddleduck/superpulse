@@ -16,9 +16,9 @@ export const viewport: Viewport = {
 };
 
 export const metadata: Metadata = {
-  title: "SuperPulse — Invitation-only waitlist",
+  title: "SuperPulse — More locals walking in. Without lifting a finger.",
   description:
-    "Join the private SuperPulse waitlist. Smart post boosting for local chains.",
+    "SuperPulse turns the posts you already make on Instagram into local ads that run forever. For restaurants, barbers, dentists, aesthetics clinics, gyms, and any local business.",
   robots: { index: false, follow: false },
 };
 

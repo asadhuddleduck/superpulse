@@ -72,6 +72,10 @@ export async function POST(request: NextRequest) {
 }
 
 async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
+  if (session.mode === "payment") {
+    await handleAuditPayment(session);
+    return;
+  }
   if (session.mode !== "subscription") return;
 
   const customerId = String(session.customer ?? "");
@@ -197,3 +201,58 @@ async function handlePaymentFailed(invoice: Stripe.Invoice) {
     { invoiceId: invoice.id, amountDue: invoice.amount_due },
   );
 }
+
+async function handleAuditPayment(session: Stripe.Checkout.Session) {
+  const product = (session.metadata?.product ?? "").trim();
+  if (product !== "audit-27" && product !== "audit-97") return;
+
+  const sessionId = session.id;
+  const paymentIntentId =
+    typeof session.payment_intent === "string"
+      ? session.payment_intent
+      : (session.payment_intent?.id ?? null);
+  const customerId =
+    typeof session.customer === "string"
+      ? session.customer
+      : (session.customer?.id ?? null);
+  const email = (
+    session.metadata?.email ??
+    session.customer_details?.email ??
+    session.customer_email ??
+    ""
+  ).trim().toLowerCase();
+  const name = (
+    session.metadata?.name ??
+    session.customer_details?.name ??
+    ""
+  ).trim();
+  const ig = (session.metadata?.instagram_handle ?? "").trim();
+  const phone = (session.customer_details?.phone ?? "").trim();
+  const parentSessionId = (session.metadata?.parent_session_id ?? "").trim() || null;
+  const amountTotal = session.amount_total ?? 0;
+  const currency = (session.currency ?? "gbp").toLowerCase();
+
+  // Idempotent — Stripe retries on 5xx, but UNIQUE on stripe_session_id keeps us clean.
+  await db.execute({
+    sql: `INSERT INTO audit_purchases
+            (stripe_session_id, stripe_payment_intent_id, stripe_customer_id,
+             email, name, phone, instagram_handle, tier, amount_total, currency,
+             parent_session_id)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          ON CONFLICT(stripe_session_id) DO NOTHING`,
+    args: [
+      sessionId,
+      paymentIntentId,
+      customerId,
+      email,
+      name || null,
+      phone || null,
+      ig || null,
+      product,
+      amountTotal,
+      currency,
+      parentSessionId,
+    ],
+  });
+}
+
