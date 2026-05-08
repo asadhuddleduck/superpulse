@@ -262,25 +262,57 @@ Ahmed-type: Local restaurant/takeaway owner, 2-5K followers, posts 3-4x/week, £
 - `src/app/login/page.tsx` — Facebook Login OAuth page
 - `src/app/dashboard/page.tsx` — Protected dashboard (shows user, Pages, linked IG accounts)
 - `src/app/privacy/page.tsx` — Privacy policy page (renders docs/PRIVACY-POLICY.md)
-- `src/app/waitlist/page.tsx` — Password-gated invitation waitlist (NEC 2026 lead capture). Three stages: password → form → success.
+- `src/app/waitlist/page.tsx` — Public lead-capture (name, email, phone, business type, locations count, IG handle). Posts to `/api/waitlist`, redirects to `/waitlist/audit`.
+- `src/app/waitlist/audit/page.tsx` — £27 IG profile audit offer page (post-join upsell). Button posts to `/api/checkout/audit-27`.
+- `src/app/waitlist/upsell/page.tsx` — £97 Loom walkthrough upsell (post-£27 only, gated on `session_id` query param). Posts to `/api/checkout/audit-97`.
+- `src/app/waitlist/done/page.tsx` — Variant thank-you page (skipped / audit / loom+audit copy).
 - `src/app/waitlist/layout.tsx` — Sub-layout with Lato font + scoped CSS, wraps children in `.waitlist-root`
 - `src/app/waitlist/waitlist.css` — Scoped landing-page design system (prefixed with `.waitlist-root` to avoid clashes with the rest of the app)
-- `src/app/api/waitlist/route.ts` — POST handler. Password check OR submit (name/email/phone → INSERT OR REPLACE into `waitlist` table)
-- `src/components/waitlist/` — Ported landing-page components (Header, Footer, ConvergenceBackground, SocialProof, CaseStudies, FounderSection, LogoStrip)
+- `src/app/api/waitlist/route.ts` — POST handler. Validates fields, upserts into `waitlist` table.
+- `src/app/api/checkout/audit-27/route.ts` — Stripe Checkout session for £27 audit. Metadata `product=audit-27`.
+- `src/app/api/checkout/audit-97/route.ts` — Stripe Checkout session for £97 Loom upsell. Requires `parent_session_id`. Metadata `product=audit-97`.
+- `src/components/waitlist/` — Ported landing-page components (Header, Footer, ConvergenceBackground, SocialProof, CaseStudies, LogoStrip). FounderSection removed 2026-05-07 (copy archived in `docs/archive/founder-section-copy.md`).
 - `src/app/api/auth/callback/facebook/route.ts` — OAuth callback (code → short-lived → long-lived token → cookie)
 - `src/app/api/auth/logout/route.ts` — Clears token cookie
 - `src/lib/auth.ts` — Cookie helpers (httpOnly, secure, sameSite strict, 60-day maxAge)
 - `src/lib/facebook.ts` — Facebook Graph API v25.0 helpers (OAuth URL, token exchange, fetch user/pages/IG)
 - `src/lib/db.ts` — Turso lazy proxy pattern — USED by the waitlist route
 
-## Waitlist Page (Shipped 13 Apr 2026, NEC 2026 campaign)
-- **URL:** https://superpulse.io/waitlist
-- **Password (env `WAITLIST_PASSWORD` on Vercel prod):** `VIP2026`
-- **Turso table:** `waitlist` (email PK, name, phone, source='nec-2026', created_at)
-- **Query submissions:** `turso db shell superpulse "SELECT * FROM waitlist ORDER BY created_at DESC"` (or use Turso HTTP API with env creds from `.env.local`)
-- **Design:** full port of landing-page aesthetic (Lato font, convergence canvas background, hero with gradient wordmark, logo strip "trusted by smart local chains", animated stats, 9 testimonial case studies, founder section, QR code, footer). No restaurant/food language anywhere — scrubbed for generic "local chains" / "business" copy.
-- **QR code:** static SVG at `public/waitlist-qr.svg` generated once via `qrcode` dev dep, Sandstorm yellow modules on transparent background. Encodes the waitlist URL so Asad can flash his phone at NEC visitors.
-- **Scoping:** all waitlist styles live in `waitlist.css` prefixed with `.waitlist-root`, so the dashboard/login/landing pages are unaffected. Components under `src/components/waitlist/` are deliberately isolated from the main `src/components/` tree.
+## Waitlist Funnel (Public, Shipped 7 May 2026)
+
+The 13 Apr 2026 NEC waitlist (password-gated, name+email+phone only) was retired on 7 May 2026 and replaced with a public lead-capture + paid audit upsell funnel for cold Meta-ad traffic. Audience expanded from QSR/restaurants to **any local business that lives or dies on locals knowing they exist** (restaurants, takeaways, cafes, barbers, hairdressers, dentists, aesthetics clinics, gyms, opticians, etc).
+
+### URLs
+- `superpulse.io/waitlist` — public form (no password)
+- `superpulse.io/waitlist/audit` — £27 IG profile audit offer (post-join)
+- `superpulse.io/waitlist/upsell` — £97 Loom walkthrough on top (post-£27, gated by `session_id` query param)
+- `superpulse.io/waitlist/done` — variant thank-you copy (skipped / audit / loom+audit)
+
+### Funnel flow
+1. Visitor lands on `/waitlist` → fills form (name, email, phone, business type dropdown, # locations, IG handle) → row inserted into Turso `waitlist`.
+2. Redirect to `/waitlist/audit?email=…&name=…&ig=…` → £27 button → Stripe Checkout (live mode) → success URL is `/waitlist/upsell?session_id=…`.
+3. `/waitlist/upsell` → £97 button → Stripe Checkout → success URL is `/waitlist/done?session_id=…&upsell=1`. Skip link → `/waitlist/done?session_id=…` (audit-only thank you).
+4. Webhook handler (`src/app/api/webhook/stripe/route.ts` → `handleAuditPayment`) inserts both purchases into `audit_purchases` (idempotent on `stripe_session_id`).
+
+### Stripe products (live mode, created 7 May 2026 via `scripts/create-audit-prices.mjs`)
+- £27 audit: `prod_UTQhPPzQv3xJQg` / price `price_1TUTqXEMAaEi0IoguFsAN99O` → env `STRIPE_PRICE_AUDIT_27`
+- £97 Loom upsell: `prod_UTQhd9Hp0K8j0r` / price `price_1TUTqYEMAaEi0Iog0iX8l7KW` → env `STRIPE_PRICE_AUDIT_97`
+
+### Turso schema
+- `waitlist` — email (PK), name, phone, source ('public' default), locations_count, instagram_handle, business_type, created_at
+- `audit_purchases` — id PK, stripe_session_id UNIQUE, stripe_payment_intent_id, stripe_customer_id, email, name, phone, instagram_handle, tier ('audit-27' | 'audit-97'), amount_total (pennies), currency, parent_session_id, refunded, created_at
+- Query submissions: `mcp__turso-cloud__execute_read_only_query` against `superpulse` DB or `turso db shell superpulse "SELECT * FROM waitlist ORDER BY created_at DESC"`.
+
+### Copy rules (locked 7 May 2026)
+- **No "AI" anywhere on `/waitlist/*`.** Meta App Review can see this domain. Use "our team" / "our system" / "we".
+- **No em-dashes or en-dashes** in customer-facing copy. Use full stops or commas.
+- **No vertical-specific headlines** (no "barbers" or "dentists" in the hero) — the headline must read as "that's me" for any local business owner. Vertical names belong in the sub paragraph as a list.
+- Owner-to-owner UK voice. Plain. Short sentences.
+- Only verifiable proof points may be used: 7p per profile visit, £2.18 CPM, 1M+ monthly local impressions on an 18-location chain, 6 retainer clients zero churn, 38 locations, 10/10 NPS.
+
+### Scoping & retired bits
+- All waitlist styles live in `waitlist.css` prefixed with `.waitlist-root` so other routes are unaffected.
+- Removed 7 May 2026: `WAITLIST_PASSWORD` env var, `public/waitlist-qr.svg`, `qrcode` dev dep, `.wl-qr-*` CSS, `FounderSection` component (`src/components/waitlist/FounderSection.tsx`), `public/asad-shah.jpg`, `.wl-founder-*` CSS. Founder copy archived in `docs/archive/founder-section-copy.md`.
 
 ## Meta App (Created 3 April 2026)
 - **App Name:** SuperPulse

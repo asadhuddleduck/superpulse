@@ -35,10 +35,13 @@ SuperPulse v8 is a single-objective, single-CTA, Reels-only auto-boost engine fo
 
 ### Launch funnel (week 1)
 13. **Waitlist landing page** at `superpulse.io/waitlist` (or new variant). Captures email + IG handle + phone + locations + monthly ad budget.
-14. **Paid audit upsell** at `/waitlist/audit`. Three price points:
-    - **£19** — AI-assisted IG audit, human-reviewed, PDF delivered in <24h. Hybrid AI+human fulfillment day 1; transition to full-AI later.
-    - **+£50 order-bump** — 5-7 min human Loom video walking through the audit findings.
-    - **+£250 post-purchase upsell** — 1:1 strategy call 7 days later, results review + action plan.
+14. **Paid audit upsell** at `/waitlist/audit`. **Shipped 7 May 2026 with simplified two-tier pricing** (the original £19 / +£50 / +£250 spec below was superseded; see CLAUDE.md §Waitlist Funnel for the live config):
+    - **£27** — IG profile audit, hand-reviewed by the team, PDF delivered in <24h.
+    - **+£97 post-purchase upsell** — 5-7 min personal Loom walkthrough recorded by the team. £97 charged on top of the £27.
+    - Original spec retained below for context but no longer authoritative:
+      - £19 — AI-assisted IG audit, human-reviewed, PDF delivered in <24h. Hybrid AI+human fulfillment day 1; transition to full-AI later.
+      - +£50 order-bump — 5-7 min human Loom video walking through the audit findings.
+      - +£250 post-purchase upsell — 1:1 strategy call 7 days later, results review + action plan.
     - All bundle: free priority access to SuperPulse + free human onboarding (£300 value) when SaaS opens to them.
 15. **IG audit data via Apify, not Meta API.** Avoids new Meta App Review for a different use case. Apify IG profile scraper costs ~$0.20–$0.50/scrape. Audit runs against public profile data only — no token, no scope.
 16. **IG ad creative** drives traffic to the waitlist. Production deferred to a separate marketing task — out of v8 spec scope.
