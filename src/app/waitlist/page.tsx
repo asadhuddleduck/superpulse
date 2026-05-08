@@ -78,8 +78,8 @@ export default function WaitlistPage() {
             Now letting local businesses in
           </span>
           <h1 className="wl-hero-headline">
-            More locals through the door.{" "}
-            <span className="wl-hero-headline-accent">Without you doing the ads.</span>
+            Keep posting like you do.{" "}
+            <span className="wl-hero-headline-accent">We turn it into locals walking in.</span>
           </h1>
           <p className="wl-hero-sub">
             You post on Instagram like you already do. We turn the right posts into
