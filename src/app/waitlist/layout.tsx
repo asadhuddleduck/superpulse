@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Lato } from "next/font/google";
+import MetaPixel from "@/components/MetaPixel";
 import "./waitlist.css";
 
 const lato = Lato({
@@ -25,5 +26,10 @@ export const metadata: Metadata = {
 export default function WaitlistLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
-  return <div className={`${lato.variable} waitlist-root`}>{children}</div>;
+  return (
+    <div className={`${lato.variable} waitlist-root`}>
+      <MetaPixel />
+      {children}
+    </div>
+  );
 }

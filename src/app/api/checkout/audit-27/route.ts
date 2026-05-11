@@ -39,6 +39,7 @@ export async function POST(request: Request) {
     const session = await stripe.checkout.sessions.create({
       mode: "payment",
       customer_email: email,
+      customer_creation: "always",
       line_items: [{ price: priceId, quantity: 1 }],
       success_url: `${baseUrl}/waitlist/upsell?session_id={CHECKOUT_SESSION_ID}&${params.toString()}`,
       cancel_url: `${baseUrl}/waitlist/audit?${params.toString()}`,
@@ -51,6 +52,7 @@ export async function POST(request: Request) {
         instagram_handle: ig,
       },
       payment_intent_data: {
+        setup_future_usage: "off_session",
         metadata: {
           product: "audit-27",
           email,

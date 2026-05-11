@@ -631,3 +631,135 @@
   max-width: 480px;
   margin: 0 auto;
 }
+
+.waitlist-root .wl-tick-group {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 16px 0 8px;
+}
+.waitlist-root .wl-tick {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  padding: 12px 14px;
+  border: 1px solid var(--wl-border);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.02);
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1.4;
+  color: var(--wl-text-primary);
+  transition: border-color 160ms var(--wl-ease-premium), background 160ms var(--wl-ease-premium);
+}
+.waitlist-root .wl-tick:hover {
+  border-color: var(--wl-border-bright);
+  background: rgba(30, 186, 143, 0.04);
+}
+.waitlist-root .wl-tick input[type="checkbox"] {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 18px;
+  height: 18px;
+  border: 1.5px solid rgba(255, 255, 255, 0.25);
+  border-radius: 4px;
+  background: transparent;
+  cursor: pointer;
+  flex-shrink: 0;
+  margin-top: 1px;
+  position: relative;
+  transition: all 160ms var(--wl-ease-premium);
+}
+.waitlist-root .wl-tick input[type="checkbox"]:checked {
+  background: var(--wl-viridian);
+  border-color: var(--wl-viridian);
+}
+.waitlist-root .wl-tick input[type="checkbox"]:checked::after {
+  content: "";
+  position: absolute;
+  left: 5px;
+  top: 1px;
+  width: 5px;
+  height: 10px;
+  border: solid #000;
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+
+.waitlist-root .wl-offer {
+  margin-top: 24px;
+  padding-top: 24px;
+  border-top: 1px dashed var(--wl-border);
+}
+.waitlist-root .wl-offer .wl-card-label {
+  margin-bottom: 12px;
+}
+
+.waitlist-root .wl-skip-link-button {
+  background: none;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  cursor: pointer;
+}
+
+.waitlist-root .wl-testimonial-wall {
+  position: relative;
+  z-index: 1;
+  padding: 60px 24px 80px;
+  max-width: 1100px;
+  margin: 0 auto;
+}
+.waitlist-root .wl-testimonial-wall-title {
+  text-align: center;
+  font-family: var(--wl-font-heading);
+  font-size: 22px;
+  font-weight: 900;
+  letter-spacing: -0.6px;
+  color: var(--wl-text-primary);
+  margin: 0 0 32px;
+}
+.waitlist-root .wl-testimonial-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 14px;
+}
+@media (min-width: 720px) {
+  .waitlist-root .wl-testimonial-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+@media (min-width: 1000px) {
+  .waitlist-root .wl-testimonial-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+.waitlist-root .wl-testimonial-card {
+  background: var(--wl-gradient-card);
+  border: 1px solid var(--wl-border);
+  border-radius: 14px;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.waitlist-root .wl-testimonial-stars {
+  color: var(--wl-sandstorm);
+  letter-spacing: 2px;
+  font-size: 14px;
+}
+.waitlist-root .wl-testimonial-quote {
+  color: var(--wl-text-primary);
+  font-size: 14px;
+  line-height: 1.55;
+  margin: 0;
+}
+.waitlist-root .wl-testimonial-attrib {
+  margin: 0;
+  font-size: 12px;
+  color: var(--wl-text-secondary);
+}
+.waitlist-root .wl-testimonial-attrib strong {
+  color: var(--wl-text-primary);
+  font-weight: 700;
+}

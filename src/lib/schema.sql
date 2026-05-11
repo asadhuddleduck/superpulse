@@ -117,6 +117,54 @@ CREATE TABLE IF NOT EXISTS waitlist (
   created_at TEXT DEFAULT CURRENT_TIMESTAMP
 );
 
+ALTER TABLE waitlist ADD COLUMN locations_count INTEGER;
+ALTER TABLE waitlist ADD COLUMN instagram_handle TEXT;
+ALTER TABLE waitlist ADD COLUMN business_type TEXT;
+ALTER TABLE waitlist ADD COLUMN first_name TEXT;
+ALTER TABLE waitlist ADD COLUMN utm_source TEXT;
+ALTER TABLE waitlist ADD COLUMN utm_medium TEXT;
+ALTER TABLE waitlist ADD COLUMN utm_campaign TEXT;
+ALTER TABLE waitlist ADD COLUMN utm_content TEXT;
+ALTER TABLE waitlist ADD COLUMN utm_term TEXT;
+ALTER TABLE waitlist ADD COLUMN landed_at TEXT;
+
+CREATE TABLE IF NOT EXISTS audit_purchases (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  stripe_session_id TEXT NOT NULL UNIQUE,
+  stripe_payment_intent_id TEXT,
+  stripe_customer_id TEXT,
+  email TEXT NOT NULL,
+  name TEXT,
+  phone TEXT,
+  instagram_handle TEXT,
+  tier TEXT NOT NULL,
+  amount_total INTEGER NOT NULL,
+  currency TEXT NOT NULL DEFAULT 'gbp',
+  parent_session_id TEXT,
+  refunded INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_audit_purchases_email ON audit_purchases(email);
+CREATE INDEX IF NOT EXISTS idx_audit_purchases_customer ON audit_purchases(stripe_customer_id);
+
+CREATE TABLE IF NOT EXISTS qualifier_responses (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  email TEXT NOT NULL,
+  business_type TEXT,
+  locations_count INTEGER,
+  has_instagram INTEGER NOT NULL DEFAULT 0,
+  posts_actively INTEGER NOT NULL DEFAULT 0,
+  has_business_manager INTEGER NOT NULL DEFAULT 0,
+  has_run_ads INTEGER NOT NULL DEFAULT 0,
+  qualified INTEGER NOT NULL DEFAULT 0,
+  audit_offer_choice TEXT,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_qualifier_email ON qualifier_responses(email);
+CREATE INDEX IF NOT EXISTS idx_qualifier_qualified ON qualifier_responses(qualified, created_at DESC);
+
 -- Audit events: human-readable activity feed for the dashboard StatusPanel.
 -- Distinct from api_call_log, which is machine-facing (App Review quota tracking).
 -- Write sites: end of every cron processTenant(), every campaign create/activate, Stripe webhook events.

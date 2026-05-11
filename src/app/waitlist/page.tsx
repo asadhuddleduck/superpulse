@@ -1,51 +1,55 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
-import { useRouter } from "next/navigation";
+import { useState, useEffect, Suspense, type FormEvent } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import WaitlistHeader from "@/components/waitlist/Header";
 import WaitlistFooter from "@/components/waitlist/Footer";
 import ConvergenceBackground from "@/components/waitlist/ConvergenceBackground";
 import SocialProof from "@/components/waitlist/SocialProof";
 import CaseStudies from "@/components/waitlist/CaseStudies";
 import WaitlistLogoStrip from "@/components/waitlist/LogoStrip";
+import { trackPixel } from "@/lib/meta-pixel-client";
 
-const BUSINESS_TYPES = [
-  "Restaurant, takeaway or cafe",
-  "Barbers or hairdressers",
-  "Beauty, nails or aesthetics",
-  "Dentist or orthodontist",
-  "Gym or fitness studio",
-  "Optician or other clinic",
-  "Other local business",
-];
+const UTM_KEYS = ["utm_source", "utm_medium", "utm_campaign", "utm_content", "utm_term"] as const;
+type UtmKey = (typeof UTM_KEYS)[number];
 
-export default function WaitlistPage() {
+function WaitlistInner() {
   const router = useRouter();
-  const [name, setName] = useState("");
+  const searchParams = useSearchParams();
+  const [firstName, setFirstName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
-  const [locations, setLocations] = useState("1");
   const [instagram, setInstagram] = useState("");
-  const [businessType, setBusinessType] = useState(BUSINESS_TYPES[0]);
+  const [utm, setUtm] = useState<Partial<Record<UtmKey, string>>>({});
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    const next: Partial<Record<UtmKey, string>> = {};
+    for (const key of UTM_KEYS) {
+      const v = searchParams.get(key);
+      if (v) next[key] = v;
+    }
+    setUtm(next);
+  }, [searchParams]);
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     setError(null);
     setLoading(true);
     try {
+      const eventId = crypto.randomUUID();
       const res = await fetch("/api/waitlist", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          name,
+          first_name: firstName,
           email,
           phone,
-          locations_count: locations,
           instagram_handle: instagram,
-          business_type: businessType,
           source: "public",
+          event_id: eventId,
+          ...utm,
         }),
       });
       const data = await res.json();
@@ -53,12 +57,13 @@ export default function WaitlistPage() {
         setError(data.error || "Something went wrong. Try again.");
         return;
       }
+      trackPixel("Lead", { event_id: eventId });
       const params = new URLSearchParams({
         email,
-        name,
+        name: firstName,
         ig: instagram.trim().replace(/^@/, ""),
       });
-      router.push(`/waitlist/audit?${params.toString()}`);
+      router.push(`/waitlist/qualify?${params.toString()}`);
     } catch {
       setError("Network error. Try again.");
     } finally {
@@ -96,26 +101,26 @@ export default function WaitlistPage() {
               </div>
               <h2 className="wl-card-heading">Get on the waitlist</h2>
               <p className="wl-card-sub">
-                Quick details about your business. If you&rsquo;re a fit, one of us
-                gives you a call and walks you through it on a short demo.
+                Four quick details. If you&rsquo;re a fit, one of us gives you a
+                call and walks you through it on a short demo.
               </p>
 
               <div className="wl-field">
-                <label htmlFor="name" className="wl-label">Full name</label>
+                <label htmlFor="first_name" className="wl-label">First name</label>
                 <input
-                  id="name"
+                  id="first_name"
                   type="text"
-                  autoComplete="name"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  placeholder="Your name"
+                  autoComplete="given-name"
+                  value={firstName}
+                  onChange={(e) => setFirstName(e.target.value)}
+                  placeholder="Your first name"
                   required
                   className="wl-input"
                 />
               </div>
 
               <div className="wl-field">
-                <label htmlFor="email" className="wl-label">Email</label>
+                <label htmlFor="email" className="wl-label">Business email</label>
                 <input
                   id="email"
                   type="email"
@@ -130,7 +135,7 @@ export default function WaitlistPage() {
               </div>
 
               <div className="wl-field">
-                <label htmlFor="phone" className="wl-label">Phone</label>
+                <label htmlFor="phone" className="wl-label">Mobile</label>
                 <input
                   id="phone"
                   type="tel"
@@ -139,35 +144,6 @@ export default function WaitlistPage() {
                   value={phone}
                   onChange={(e) => setPhone(e.target.value)}
                   placeholder="07…"
-                  required
-                  className="wl-input"
-                />
-              </div>
-
-              <div className="wl-field">
-                <label htmlFor="business_type" className="wl-label">Business type</label>
-                <select
-                  id="business_type"
-                  value={businessType}
-                  onChange={(e) => setBusinessType(e.target.value)}
-                  className="wl-input wl-select"
-                >
-                  {BUSINESS_TYPES.map((t) => (
-                    <option key={t} value={t}>{t}</option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="wl-field">
-                <label htmlFor="locations" className="wl-label">How many locations?</label>
-                <input
-                  id="locations"
-                  type="number"
-                  inputMode="numeric"
-                  min={1}
-                  max={500}
-                  value={locations}
-                  onChange={(e) => setLocations(e.target.value)}
                   required
                   className="wl-input"
                 />
@@ -210,5 +186,13 @@ export default function WaitlistPage() {
 
       <WaitlistFooter />
     </>
+  );
+}
+
+export default function WaitlistPage() {
+  return (
+    <Suspense fallback={null}>
+      <WaitlistInner />
+    </Suspense>
   );
 }

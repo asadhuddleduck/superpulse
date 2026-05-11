@@ -1,10 +1,11 @@
 "use client";
 
-import { useState, useEffect, Suspense } from "react";
+import { useState, useEffect, useRef, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import WaitlistHeader from "@/components/waitlist/Header";
 import WaitlistFooter from "@/components/waitlist/Footer";
 import ConvergenceBackground from "@/components/waitlist/ConvergenceBackground";
+import { trackPixel } from "@/lib/meta-pixel-client";
 
 function UpsellInner() {
   const params = useSearchParams();
@@ -15,10 +16,16 @@ function UpsellInner() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const firedRef = useRef(false);
   // Block direct access. Must come from a successful £27 checkout.
   useEffect(() => {
     if (typeof window !== "undefined" && !sessionId) {
       window.location.href = "/waitlist/done?skipped=1";
+      return;
+    }
+    if (sessionId && !firedRef.current) {
+      firedRef.current = true;
+      trackPixel("Purchase", { value: 27, currency: "GBP", content_name: "audit-27" });
     }
   }, [sessionId]);
 
@@ -26,7 +33,7 @@ function UpsellInner() {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch("/api/checkout/audit-97", {
+      const res = await fetch("/api/upsell/charge-97", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -37,11 +44,12 @@ function UpsellInner() {
         }),
       });
       const data = await res.json();
-      if (!res.ok || !data.url) {
-        setError(data.error || "Could not start checkout.");
+      if (!res.ok || !data.redirect) {
+        setError(data.error || "Could not complete the charge. Try again.");
+        setLoading(false);
         return;
       }
-      window.location.href = data.url;
+      window.location.href = data.redirect;
     } catch {
       setError("Network error. Try again.");
       setLoading(false);
