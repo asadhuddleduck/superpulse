@@ -5,6 +5,7 @@ import { getClientIp, getCookieValue, getUserAgent } from "@/lib/cf-ip";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { isAllowedOrigin } from "@/lib/origin-check";
 import { normaliseIgHandle, normalisePhoneUk } from "@/lib/business-types";
+import { notifySlack } from "@/lib/slack";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -80,6 +81,12 @@ export async function POST(request: Request) {
 
   const nowIso = new Date().toISOString();
 
+  const existing = await db.execute({
+    sql: `SELECT email FROM waitlist WHERE email = ? LIMIT 1`,
+    args: [email],
+  });
+  const isNewSignup = existing.rows.length === 0;
+
   await db.execute({
     sql: `INSERT INTO waitlist
             (email, name, first_name, phone, source, instagram_handle,
@@ -119,6 +126,22 @@ export async function POST(request: Request) {
       nowIso,
     ],
   });
+
+  if (isNewSignup) {
+    const utmCampaign = clean(body.utm_campaign);
+    const utmSource = clean(body.utm_source);
+    const utmLine = utmCampaign || utmSource
+      ? `\n*Source:* ${[utmSource, utmCampaign].filter(Boolean).join(" / ")}`
+      : "";
+    notifySlack(
+      `🎉 New SuperPulse waitlist signup\n` +
+        `*Name:* ${firstName}\n` +
+        `*Email:* ${email}\n` +
+        `*Phone:* ${phoneCheck.e164}\n` +
+        `*Instagram:* @${igCheck.handle}` +
+        utmLine,
+    );
+  }
 
   const eventId = body.event_id?.trim();
   if (eventId) {
