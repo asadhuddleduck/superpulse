@@ -1,5 +1,8 @@
 import { NextResponse } from "next/server";
 import { stripe } from "@/lib/stripe";
+import { logServerError, mapStripeErrorToUserSafe } from "@/lib/error-mapper";
+import { isAllowedOrigin } from "@/lib/origin-check";
+import { checkRateLimit } from "@/lib/rate-limit";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -7,12 +10,21 @@ export const dynamic = "force-dynamic";
 type Body = { email?: string; name?: string; instagram_handle?: string };
 
 export async function POST(request: Request) {
+  if (!isAllowedOrigin(request.headers)) {
+    return NextResponse.json({ error: "Bad request" }, { status: 403 });
+  }
+  const rl = await checkRateLimit("qualify", request.headers);
+  if (!rl.ok) {
+    return NextResponse.json(
+      { error: "Too many attempts. Try again in a moment." },
+      { status: 429, headers: { "Retry-After": String(rl.retryAfterSeconds) } },
+    );
+  }
+
   const priceId = process.env.STRIPE_PRICE_AUDIT_27;
   if (!priceId) {
-    return NextResponse.json(
-      { error: "STRIPE_PRICE_AUDIT_27 is not set" },
-      { status: 500 },
-    );
+    logServerError("audit-27", new Error("STRIPE_PRICE_AUDIT_27 not set"));
+    return NextResponse.json({ error: "Payment setup error." }, { status: 500 });
   }
 
   let body: Body;
@@ -30,46 +42,50 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "email required" }, { status: 400 });
   }
 
-  const baseUrl =
-    process.env.NEXT_PUBLIC_BASE_URL ??
-    (request.headers.get("origin") || "http://localhost:3000");
+  const baseUrl = process.env.NEXT_PUBLIC_BASE_URL;
+  if (!baseUrl) {
+    logServerError("audit-27", new Error("NEXT_PUBLIC_BASE_URL not set"));
+    return NextResponse.json({ error: "Server config error." }, { status: 500 });
+  }
+
+  const idempotencyKey = `cs27:${email}:${Math.floor(Date.now() / 60000)}`;
 
   try {
-    const params = new URLSearchParams({ email, name, ig });
-    const session = await stripe.checkout.sessions.create({
-      mode: "payment",
-      customer_email: email,
-      customer_creation: "always",
-      line_items: [{ price: priceId, quantity: 1 }],
-      success_url: `${baseUrl}/waitlist/upsell?session_id={CHECKOUT_SESSION_ID}&${params.toString()}`,
-      cancel_url: `${baseUrl}/waitlist/audit?${params.toString()}`,
-      automatic_tax: { enabled: true },
-      tax_id_collection: { enabled: true },
-      metadata: {
-        product: "audit-27",
-        email,
-        name,
-        instagram_handle: ig,
-      },
-      payment_intent_data: {
-        setup_future_usage: "off_session",
+    const session = await stripe.checkout.sessions.create(
+      {
+        mode: "payment",
+        customer_email: email,
+        customer_creation: "always",
+        line_items: [{ price: priceId, quantity: 1 }],
+        success_url: `${baseUrl}/waitlist/upsell?session_id={CHECKOUT_SESSION_ID}`,
+        cancel_url: `${baseUrl}/waitlist`,
+        automatic_tax: { enabled: true },
         metadata: {
           product: "audit-27",
           email,
           name,
           instagram_handle: ig,
         },
+        payment_intent_data: {
+          setup_future_usage: "off_session",
+          receipt_email: email,
+          metadata: {
+            product: "audit-27",
+            email,
+            name,
+            instagram_handle: ig,
+          },
+        },
       },
-    });
-
+      { idempotencyKey },
+    );
     if (!session.url) {
-      return NextResponse.json({ error: "Stripe did not return a URL" }, { status: 500 });
+      return NextResponse.json({ error: "Payment setup error." }, { status: 502 });
     }
     return NextResponse.json({ url: session.url });
   } catch (err) {
-    return NextResponse.json(
-      { error: err instanceof Error ? err.message : "Stripe error" },
-      { status: 500 },
-    );
+    logServerError("audit-27", err);
+    const mapped = mapStripeErrorToUserSafe(err);
+    return NextResponse.json(mapped.body, { status: mapped.status });
   }
 }

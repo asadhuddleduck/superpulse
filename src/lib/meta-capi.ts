@@ -11,14 +11,15 @@ export type CapiPayload = {
   event_id: string;
   event_time?: number;
   email?: string;
-  phone?: string;
+  phone_e164?: string;
   first_name?: string;
   value?: number;
   currency?: string;
   source_url?: string;
   client_ip?: string;
   client_user_agent?: string;
-  test_event_code?: string;
+  fbp?: string;
+  fbc?: string;
 };
 
 const API_VERSION = "v25.0";
@@ -36,10 +37,12 @@ export async function sendCapi(payload: CapiPayload): Promise<{ ok: boolean; sta
 
   const userData: Record<string, string | string[]> = {};
   if (payload.email) userData.em = sha256(payload.email);
-  if (payload.phone) userData.ph = sha256(payload.phone.replace(/\D/g, ""));
+  if (payload.phone_e164) userData.ph = sha256(payload.phone_e164);
   if (payload.first_name) userData.fn = sha256(payload.first_name);
   if (payload.client_ip) userData.client_ip_address = payload.client_ip;
   if (payload.client_user_agent) userData.client_user_agent = payload.client_user_agent;
+  if (payload.fbp) userData.fbp = payload.fbp;
+  if (payload.fbc) userData.fbc = payload.fbc;
 
   const event: Record<string, unknown> = {
     event_name: payload.event_name,
@@ -55,7 +58,8 @@ export async function sendCapi(payload: CapiPayload): Promise<{ ok: boolean; sta
   }
 
   const body: Record<string, unknown> = { data: [event] };
-  if (payload.test_event_code) body.test_event_code = payload.test_event_code;
+  const testCode = process.env.META_CAPI_TEST_EVENT_CODE;
+  if (testCode) body.test_event_code = testCode;
 
   try {
     const res = await fetch(
@@ -66,8 +70,26 @@ export async function sendCapi(payload: CapiPayload): Promise<{ ok: boolean; sta
         body: JSON.stringify(body),
       },
     );
-    return { ok: res.ok, status: res.status };
+    if (!res.ok) {
+      let errText = "";
+      try {
+        errText = await res.text();
+      } catch {
+        /* ignore */
+      }
+      console.error("[capi]", payload.event_name, res.status, errText.slice(0, 300));
+      return { ok: false, status: res.status, error: errText };
+    }
+    return { ok: true, status: res.status };
   } catch (err) {
-    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error("[capi]", payload.event_name, "fetch failed", msg);
+    return { ok: false, error: msg };
   }
+}
+
+export function fireCapi(payload: CapiPayload): void {
+  void sendCapi(payload).catch((err) => {
+    console.error("[capi fire-and-forget]", err);
+  });
 }

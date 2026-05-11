@@ -1,6 +1,7 @@
 import { createClient, type Client } from "@libsql/client/web";
 import { readFileSync } from "fs";
-import { join } from "path";
+import { dirname, join } from "path";
+import { fileURLToPath } from "url";
 
 let _db: Client | null = null;
 
@@ -46,16 +47,43 @@ function isIdempotentError(err: unknown): boolean {
  * inline ALTER TABLE migrations don't fail on re-runs.
  */
 export async function runSchema(): Promise<void> {
-  const schemaPath = join(process.cwd(), "src", "lib", "schema.sql");
-  const sql = readFileSync(schemaPath, "utf-8");
+  // Resolve schema.sql relative to THIS file, not process.cwd(). Vercel
+  // serverless cwd is not guaranteed to be project root.
+  const here = dirname(fileURLToPath(import.meta.url));
+  const candidates = [
+    join(here, "schema.sql"),
+    join(process.cwd(), "src", "lib", "schema.sql"),
+  ];
+  let sql: string | null = null;
+  for (const candidate of candidates) {
+    try {
+      sql = readFileSync(candidate, "utf-8");
+      break;
+    } catch {
+      /* try next */
+    }
+  }
+  if (!sql) {
+    throw new Error("schema.sql not found in any expected location");
+  }
 
-  // Strip `-- ...` line comments BEFORE splitting on `;`. A bare split on `;`
-  // mis-parses any semicolon that happens to live inside a comment (which
-  // bit us once already — see commit fb6896f). Stripping comments first
-  // means future schema authors can write whatever they want in `--` lines.
+  // Strip `-- ...` line comments BEFORE splitting on `;`. Only strip when the
+  // `--` is outside a string literal. We do this by tracking quote state.
   const stripped = sql
     .split("\n")
-    .map((line) => line.replace(/--.*$/, ""))
+    .map((line) => {
+      let inSingle = false;
+      let inDouble = false;
+      for (let i = 0; i < line.length - 1; i++) {
+        const c = line[i];
+        if (c === "'" && !inDouble) inSingle = !inSingle;
+        else if (c === '"' && !inSingle) inDouble = !inDouble;
+        else if (c === "-" && line[i + 1] === "-" && !inSingle && !inDouble) {
+          return line.slice(0, i);
+        }
+      }
+      return line;
+    })
     .join("\n");
 
   const statements = stripped

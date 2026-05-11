@@ -1,63 +1,118 @@
 "use client";
 
-import { useState, Suspense, type FormEvent, useEffect } from "react";
-import { useSearchParams } from "next/navigation";
+import { useState, useEffect, useRef } from "react";
 import WaitlistHeader from "@/components/waitlist/Header";
 import WaitlistFooter from "@/components/waitlist/Footer";
 import ConvergenceBackground from "@/components/waitlist/ConvergenceBackground";
-import { trackPixel } from "@/lib/meta-pixel-client";
+import SocialProof from "@/components/waitlist/SocialProof";
+import { trackPixel, getOrCreateEventId } from "@/lib/meta-pixel-client";
+import { BUSINESS_TYPES } from "@/lib/business-types";
 
-const BUSINESS_TYPES = [
-  "Restaurant, takeaway or cafe",
-  "Barbers or hairdressers",
-  "Beauty, nails or aesthetics",
-  "Dentist or orthodontist",
-  "Gym or fitness studio",
-  "Optician or other clinic",
-  "Other local business",
-];
+const LEAD_KEY = "wl-lead";
+const STATE_KEY = "wl-qualify-state";
 
-function QualifyInner() {
-  const params = useSearchParams();
-  const email = params.get("email") ?? "";
-  const name = params.get("name") ?? "";
-  const ig = params.get("ig") ?? "";
+type Lead = { email: string; firstName: string; ig: string };
+type State = {
+  businessType: string;
+  locations: string;
+  hasInstagram: boolean;
+  postsActively: boolean;
+  hasBusinessManager: boolean;
+  hasRunAds: boolean;
+};
 
-  const [businessType, setBusinessType] = useState(BUSINESS_TYPES[0]);
-  const [locations, setLocations] = useState("1");
-  const [hasInstagram, setHasInstagram] = useState(false);
-  const [postsActively, setPostsActively] = useState(false);
-  const [hasBusinessManager, setHasBusinessManager] = useState(false);
-  const [hasRunAds, setHasRunAds] = useState(false);
+const initialState: State = {
+  businessType: BUSINESS_TYPES[0],
+  locations: "1",
+  hasInstagram: false,
+  postsActively: false,
+  hasBusinessManager: false,
+  hasRunAds: false,
+};
 
+function readLead(): Lead | null {
+  if (typeof sessionStorage === "undefined") return null;
+  try {
+    const raw = sessionStorage.getItem(LEAD_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as Partial<Lead>;
+    if (!parsed.email) return null;
+    return {
+      email: String(parsed.email),
+      firstName: String(parsed.firstName ?? ""),
+      ig: String(parsed.ig ?? ""),
+    };
+  } catch {
+    return null;
+  }
+}
+
+function readState(): State {
+  if (typeof sessionStorage === "undefined") return initialState;
+  try {
+    const raw = sessionStorage.getItem(STATE_KEY);
+    if (!raw) return initialState;
+    return { ...initialState, ...JSON.parse(raw) } as State;
+  } catch {
+    return initialState;
+  }
+}
+
+function persistState(state: State): void {
+  if (typeof sessionStorage === "undefined") return;
+  try {
+    sessionStorage.setItem(STATE_KEY, JSON.stringify(state));
+  } catch {
+    /* ignore */
+  }
+}
+
+export default function QualifyPage() {
+  const [lead, setLead] = useState<Lead | null>(null);
+  const [state, setState] = useState<State>(initialState);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const submittingRef = useRef(false);
+  const [hydrated, setHydrated] = useState(false);
 
   useEffect(() => {
-    if (typeof window !== "undefined" && !email) {
-      window.location.href = "/waitlist";
+    const found = readLead();
+    if (!found) {
+      window.location.replace("/waitlist");
+      return;
     }
-  }, [email]);
+    setLead(found);
+    setState(readState());
+    setHydrated(true);
+  }, []);
+
+  function update<K extends keyof State>(key: K, value: State[K]) {
+    setState((prev) => {
+      const next = { ...prev, [key]: value };
+      persistState(next);
+      return next;
+    });
+  }
 
   async function submit(choice: "yes" | "no") {
-    if (loading) return;
+    if (!lead) return;
+    if (submittingRef.current) return;
+    submittingRef.current = true;
     setLoading(true);
     setError(null);
     try {
-      const eventId = crypto.randomUUID();
+      const eventId = getOrCreateEventId("registration");
       const res = await fetch("/api/qualify", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          email,
-          name,
-          instagram_handle: ig,
-          business_type: businessType,
-          locations_count: Number(locations),
-          has_instagram: hasInstagram,
-          posts_actively: postsActively,
-          has_business_manager: hasBusinessManager,
-          has_run_ads: hasRunAds,
+          email: lead.email,
+          business_type: state.businessType,
+          locations_count: Number(state.locations),
+          has_instagram: state.hasInstagram,
+          posts_actively: state.postsActively,
+          has_business_manager: state.hasBusinessManager,
+          has_run_ads: state.hasRunAds,
           audit_offer_choice: choice,
           event_id: eventId,
         }),
@@ -65,6 +120,8 @@ function QualifyInner() {
       const data = await res.json();
       if (!res.ok) {
         setError(data.error || "Something went wrong. Try again.");
+        submittingRef.current = false;
+        setLoading(false);
         return;
       }
       trackPixel("CompleteRegistration", { event_id: eventId });
@@ -78,15 +135,12 @@ function QualifyInner() {
       window.location.href = "/waitlist/done";
     } catch {
       setError("Network error. Try again.");
-    } finally {
+      submittingRef.current = false;
       setLoading(false);
     }
   }
 
-  function handleAuditYes(e: FormEvent) {
-    e.preventDefault();
-    submit("yes");
-  }
+  if (!hydrated || !lead) return null;
 
   return (
     <>
@@ -97,11 +151,11 @@ function QualifyInner() {
         <section className="wl-hero">
           <span className="wl-hero-eyebrow">
             <span className="wl-hero-eyebrow-dot" />
-            You&rsquo;re on the list{name ? `, ${name}` : ""}
+            You&rsquo;re on the list{lead.firstName ? `, ${lead.firstName}` : ""}
           </span>
           <h1 className="wl-hero-headline">
             Four quick questions.{" "}
-            <span className="wl-hero-headline-accent">Helps us speed your spot up.</span>
+            <span className="wl-hero-headline-accent">Helps us move you up the list.</span>
           </h1>
           <p className="wl-hero-sub">
             We onboard a small number of local businesses at a time. Answer four
@@ -109,7 +163,7 @@ function QualifyInner() {
             Takes about 30 seconds.
           </p>
 
-          <form onSubmit={handleAuditYes} className="wl-card">
+          <div className="wl-card">
             <div className="wl-card-label">
               <span className="wl-card-label-dot" />
               Quick qualifier · 30 seconds
@@ -119,8 +173,8 @@ function QualifyInner() {
               <label htmlFor="q-business-type" className="wl-label">What kind of business?</label>
               <select
                 id="q-business-type"
-                value={businessType}
-                onChange={(e) => setBusinessType(e.target.value)}
+                value={state.businessType}
+                onChange={(e) => update("businessType", e.target.value)}
                 className="wl-input wl-select"
               >
                 {BUSINESS_TYPES.map((t) => (
@@ -137,8 +191,8 @@ function QualifyInner() {
                 inputMode="numeric"
                 min={1}
                 max={500}
-                value={locations}
-                onChange={(e) => setLocations(e.target.value)}
+                value={state.locations}
+                onChange={(e) => update("locations", e.target.value)}
                 required
                 className="wl-input"
               />
@@ -148,32 +202,32 @@ function QualifyInner() {
               <label className="wl-tick">
                 <input
                   type="checkbox"
-                  checked={hasInstagram}
-                  onChange={(e) => setHasInstagram(e.target.checked)}
+                  checked={state.hasInstagram}
+                  onChange={(e) => update("hasInstagram", e.target.checked)}
                 />
                 <span>I already have an Instagram business profile set up</span>
               </label>
               <label className="wl-tick">
                 <input
                   type="checkbox"
-                  checked={postsActively}
-                  onChange={(e) => setPostsActively(e.target.checked)}
+                  checked={state.postsActively}
+                  onChange={(e) => update("postsActively", e.target.checked)}
                 />
                 <span>We post on Instagram at least once a week</span>
               </label>
               <label className="wl-tick">
                 <input
                   type="checkbox"
-                  checked={hasBusinessManager}
-                  onChange={(e) => setHasBusinessManager(e.target.checked)}
+                  checked={state.hasBusinessManager}
+                  onChange={(e) => update("hasBusinessManager", e.target.checked)}
                 />
                 <span>I have a Meta Business Manager set up (or could set one up)</span>
               </label>
               <label className="wl-tick">
                 <input
                   type="checkbox"
-                  checked={hasRunAds}
-                  onChange={(e) => setHasRunAds(e.target.checked)}
+                  checked={state.hasRunAds}
+                  onChange={(e) => update("hasRunAds", e.target.checked)}
                 />
                 <span>We&rsquo;ve run paid ads on Meta before</span>
               </label>
@@ -186,10 +240,10 @@ function QualifyInner() {
               </div>
               <h2 className="wl-card-heading">Audit your Instagram while you wait</h2>
               <p className="wl-card-sub">
-                One of the team sits down with{ig ? <> @{ig}</> : " your Instagram"} and writes
-                you a short, plain-English PDF: the 3 posts to put money behind first, why
-                locals near you will walk in for them, and a 30-day plan even if you never
-                use SuperPulse.
+                One of the team sits down with your Instagram and writes you a
+                short, plain-English PDF: the 3 posts to put money behind first,
+                why locals near you will walk in for them, and a 30-day plan even
+                if you never use SuperPulse.
               </p>
               <ul className="wl-bullets">
                 <li>3 posts to boost first, and why</li>
@@ -200,12 +254,19 @@ function QualifyInner() {
 
               {error && <p className="wl-error">{error}</p>}
 
-              <button type="submit" disabled={loading} className="wl-btn">
+              <button
+                type="button"
+                onClick={() => submit("yes")}
+                disabled={loading}
+                className="wl-btn"
+              >
                 {loading ? "One sec…" : "Yes, send me the £27 audit"}
               </button>
 
               <p className="wl-fine">
-                Secure checkout through Stripe. You&rsquo;ll be on the waitlist either way.
+                Secure checkout through Stripe. You&rsquo;ll be on the waitlist
+                either way. Your card will only be charged again if you choose to
+                add the £97 Loom walkthrough on the next page.
               </p>
 
               <p className="wl-skip">
@@ -219,19 +280,13 @@ function QualifyInner() {
                 </button>
               </p>
             </div>
-          </form>
+          </div>
         </section>
+
+        <SocialProof />
       </main>
 
       <WaitlistFooter />
     </>
-  );
-}
-
-export default function QualifyPage() {
-  return (
-    <Suspense fallback={null}>
-      <QualifyInner />
-    </Suspense>
   );
 }

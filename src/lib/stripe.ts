@@ -10,6 +10,11 @@ export function getStripe(): Stripe {
     }
     _stripe = new Stripe(key, {
       httpClient: Stripe.createFetchHttpClient(),
+      appInfo: {
+        name: "SuperPulse",
+        version: "1.0.0",
+        url: "https://superpulse.io",
+      },
     });
   }
   return _stripe;

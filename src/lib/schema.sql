@@ -142,15 +142,20 @@ CREATE TABLE IF NOT EXISTS audit_purchases (
   currency TEXT NOT NULL DEFAULT 'gbp',
   parent_session_id TEXT,
   refunded INTEGER NOT NULL DEFAULT 0,
+  source TEXT DEFAULT 'webhook',
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
+ALTER TABLE audit_purchases ADD COLUMN source TEXT DEFAULT 'webhook';
+
 CREATE INDEX IF NOT EXISTS idx_audit_purchases_email ON audit_purchases(email);
 CREATE INDEX IF NOT EXISTS idx_audit_purchases_customer ON audit_purchases(stripe_customer_id);
+CREATE INDEX IF NOT EXISTS idx_audit_purchases_parent ON audit_purchases(parent_session_id);
+CREATE INDEX IF NOT EXISTS idx_audit_purchases_pi ON audit_purchases(stripe_payment_intent_id);
 
 CREATE TABLE IF NOT EXISTS qualifier_responses (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
-  email TEXT NOT NULL,
+  email TEXT NOT NULL UNIQUE,
   business_type TEXT,
   locations_count INTEGER,
   has_instagram INTEGER NOT NULL DEFAULT 0,
@@ -159,11 +164,31 @@ CREATE TABLE IF NOT EXISTS qualifier_responses (
   has_run_ads INTEGER NOT NULL DEFAULT 0,
   qualified INTEGER NOT NULL DEFAULT 0,
   audit_offer_choice TEXT,
-  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+
+ALTER TABLE qualifier_responses ADD COLUMN updated_at TEXT;
 
 CREATE INDEX IF NOT EXISTS idx_qualifier_email ON qualifier_responses(email);
 CREATE INDEX IF NOT EXISTS idx_qualifier_qualified ON qualifier_responses(qualified, created_at DESC);
+
+ALTER TABLE waitlist ADD COLUMN last_landed_at TEXT;
+ALTER TABLE waitlist ADD COLUMN last_utm_source TEXT;
+ALTER TABLE waitlist ADD COLUMN last_utm_medium TEXT;
+ALTER TABLE waitlist ADD COLUMN last_utm_campaign TEXT;
+ALTER TABLE waitlist ADD COLUMN last_utm_content TEXT;
+ALTER TABLE waitlist ADD COLUMN last_utm_term TEXT;
+
+CREATE TABLE IF NOT EXISTS rate_limit_buckets (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  bucket_key TEXT NOT NULL,
+  window_start TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  hit_count INTEGER NOT NULL DEFAULT 1,
+  UNIQUE(bucket_key, window_start)
+);
+
+CREATE INDEX IF NOT EXISTS idx_rate_limit_key ON rate_limit_buckets(bucket_key, window_start DESC);
 
 -- Audit events: human-readable activity feed for the dashboard StatusPanel.
 -- Distinct from api_call_log, which is machine-facing (App Review quota tracking).

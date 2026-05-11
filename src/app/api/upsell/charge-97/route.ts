@@ -2,22 +2,48 @@ import { NextResponse } from "next/server";
 import type Stripe from "stripe";
 import { stripe } from "@/lib/stripe";
 import { db } from "@/lib/db";
-import { sendCapi } from "@/lib/meta-capi";
+import { fireCapi } from "@/lib/meta-capi";
+import { getClientIp, getCookieValue, getUserAgent } from "@/lib/cf-ip";
+import { checkRateLimit } from "@/lib/rate-limit";
+import { isAllowedOrigin } from "@/lib/origin-check";
+import { logServerError, mapStripeErrorToUserSafe } from "@/lib/error-mapper";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 type Body = {
   parent_session_id?: string;
-  email?: string;
-  name?: string;
-  instagram_handle?: string;
 };
 
-const AMOUNT_PENNIES = 9700;
 const CURRENCY = "gbp";
 
+async function resolveAmount(): Promise<number> {
+  const priceId = process.env.STRIPE_PRICE_AUDIT_97;
+  if (!priceId) return 9700;
+  try {
+    const price = await stripe.prices.retrieve(priceId);
+    if (typeof price.unit_amount === "number" && price.unit_amount > 0) {
+      return price.unit_amount;
+    }
+  } catch (err) {
+    logServerError("charge-97.price", err);
+  }
+  return 9700;
+}
+
 export async function POST(request: Request) {
+  if (!isAllowedOrigin(request.headers)) {
+    return NextResponse.json({ error: "Bad request" }, { status: 403 });
+  }
+
+  const rl = await checkRateLimit("upsell", request.headers);
+  if (!rl.ok) {
+    return NextResponse.json(
+      { error: "Too many attempts. Try again in a moment." },
+      { status: 429, headers: { "Retry-After": String(rl.retryAfterSeconds) } },
+    );
+  }
+
   let body: Body;
   try {
     body = (await request.json()) as Body;
@@ -26,87 +52,148 @@ export async function POST(request: Request) {
   }
 
   const parentSessionId = body.parent_session_id?.trim() ?? "";
-  const emailFromBody = body.email?.trim().toLowerCase() ?? "";
-  const nameFromBody = body.name?.trim() ?? "";
-  const igFromBody = (body.instagram_handle ?? "").trim().replace(/^@/, "");
+  if (!parentSessionId.startsWith("cs_")) {
+    return NextResponse.json({ error: "Missing or invalid session id" }, { status: 400 });
+  }
 
-  if (!parentSessionId) {
+  const existing = await db.execute({
+    sql: `SELECT id, stripe_payment_intent_id FROM audit_purchases
+          WHERE parent_session_id = ? AND tier = 'audit-97' LIMIT 1`,
+    args: [parentSessionId],
+  });
+  if (existing.rows[0]) {
+    return NextResponse.json({
+      ok: true,
+      already_purchased: true,
+      redirect: `/waitlist/done?session_id=${parentSessionId}&upsell=1`,
+    });
+  }
+
+  const parentRefundCheck = await db.execute({
+    sql: `SELECT refunded FROM audit_purchases WHERE stripe_session_id = ? LIMIT 1`,
+    args: [parentSessionId],
+  });
+  const parentRefundedRow = parentRefundCheck.rows[0] as { refunded?: number } | undefined;
+  if (parentRefundedRow && Number(parentRefundedRow.refunded) === 1) {
     return NextResponse.json(
-      { error: "parent_session_id required" },
-      { status: 400 },
+      { error: "The original £27 audit was refunded. Get in touch if this is unexpected." },
+      { status: 409 },
     );
   }
 
   let parent: Stripe.Checkout.Session;
   try {
-    parent = await stripe.checkout.sessions.retrieve(parentSessionId);
+    parent = (await stripe.checkout.sessions.retrieve(parentSessionId, {
+      expand: ["payment_intent.payment_method", "customer"],
+    })) as Stripe.Checkout.Session;
   } catch (err) {
-    return NextResponse.json(
-      { error: err instanceof Error ? err.message : "Could not fetch parent session" },
-      { status: 400 },
-    );
+    logServerError("charge-97.parent", err);
+    return NextResponse.json({ error: "Could not verify the £27 audit." }, { status: 400 });
   }
 
   if (parent.payment_status !== "paid") {
+    return NextResponse.json({ error: "£27 audit not paid." }, { status: 402 });
+  }
+
+  const parentPi = parent.payment_intent as Stripe.PaymentIntent | string | null;
+  const parentPiObj = typeof parentPi === "string" ? null : parentPi;
+
+  const customerId =
+    typeof parent.customer === "string" ? parent.customer : parent.customer?.id ?? null;
+  if (!customerId) {
     return NextResponse.json(
-      { error: "Parent £27 audit not paid" },
-      { status: 402 },
+      { error: "Card cannot be reused for this order." },
+      { status: 422 },
     );
   }
 
-  const customerId =
-    typeof parent.customer === "string"
-      ? parent.customer
-      : (parent.customer?.id ?? null);
+  const paymentMethodFromParent =
+    parentPiObj && parentPiObj.payment_method
+      ? typeof parentPiObj.payment_method === "string"
+        ? parentPiObj.payment_method
+        : parentPiObj.payment_method.id
+      : null;
 
-  if (!customerId) {
-    return NextResponse.json(
-      { error: "No customer on parent session — card cannot be reused" },
-      { status: 422 },
-    );
+  let paymentMethodId = paymentMethodFromParent;
+  if (!paymentMethodId) {
+    try {
+      const methods = await stripe.paymentMethods.list({
+        customer: customerId,
+        type: "card",
+        limit: 1,
+      });
+      paymentMethodId = methods.data[0]?.id ?? null;
+    } catch (err) {
+      logServerError("charge-97.pmlist", err);
+    }
   }
 
   const email = (
-    emailFromBody ||
     parent.customer_details?.email ||
     parent.customer_email ||
+    parent.metadata?.email ||
     ""
-  ).toLowerCase();
-  const name = nameFromBody || parent.customer_details?.name || "";
-  const ig = igFromBody || (parent.metadata?.instagram_handle ?? "");
+  ).toString().trim().toLowerCase();
+  const name = (parent.customer_details?.name || parent.metadata?.name || "").toString().trim();
+  const ig = (parent.metadata?.instagram_handle || "").toString().trim();
 
-  const methods = await stripe.paymentMethods.list({
-    customer: customerId,
-    type: "card",
-    limit: 1,
-  });
-  const paymentMethodId = methods.data[0]?.id;
+  let phoneE164: string | undefined;
+  if (email) {
+    try {
+      const wl = await db.execute({
+        sql: `SELECT phone FROM waitlist WHERE email = ? LIMIT 1`,
+        args: [email],
+      });
+      const row = wl.rows[0] as { phone?: string } | undefined;
+      if (row?.phone) phoneE164 = row.phone;
+    } catch {
+      /* not critical */
+    }
+  }
+
+  const amountPennies = await resolveAmount();
+  const baseUrl = process.env.NEXT_PUBLIC_BASE_URL;
+  if (!baseUrl) {
+    logServerError("charge-97", new Error("NEXT_PUBLIC_BASE_URL not set"));
+    return NextResponse.json({ error: "Server config error. Try again later." }, { status: 500 });
+  }
 
   if (!paymentMethodId) {
-    return NextResponse.json(
-      { error: "No saved card on file for this customer" },
-      { status: 422 },
+    return await fallbackToCheckout(
+      parentSessionId,
+      customerId,
+      email,
+      name,
+      ig,
+      amountPennies,
+      baseUrl,
     );
   }
 
+  const idempotencyKey = `oneclick:${parentSessionId}`;
+
   let intent: Stripe.PaymentIntent;
   try {
-    intent = await stripe.paymentIntents.create({
-      amount: AMOUNT_PENNIES,
-      currency: CURRENCY,
-      customer: customerId,
-      payment_method: paymentMethodId,
-      off_session: true,
-      confirm: true,
-      description: "SuperPulse audit Loom walkthrough (£97)",
-      metadata: {
-        product: "audit-97",
-        email,
-        name,
-        instagram_handle: ig,
-        parent_session_id: parentSessionId,
+    intent = await stripe.paymentIntents.create(
+      {
+        amount: amountPennies,
+        currency: CURRENCY,
+        customer: customerId,
+        payment_method: paymentMethodId,
+        off_session: true,
+        confirm: true,
+        receipt_email: email || undefined,
+        description: "SuperPulse audit Loom walkthrough",
+        metadata: {
+          product: "audit-97",
+          email,
+          name,
+          instagram_handle: ig,
+          parent_session_id: parentSessionId,
+        },
       },
-    });
+      { idempotencyKey },
+    );
   } catch (err) {
     const stripeErr = err as {
       type?: string;
@@ -114,29 +201,41 @@ export async function POST(request: Request) {
       message?: string;
       payment_intent?: { id?: string };
     };
-    if (stripeErr?.type === "StripeCardError" && stripeErr.payment_intent?.id) {
-      return NextResponse.json(
-        {
-          error: stripeErr.message || "Card declined",
-          payment_intent_id: stripeErr.payment_intent.id,
-          requires_action: stripeErr.code === "authentication_required",
-        },
-        { status: 402 },
+    if (
+      stripeErr?.type === "StripeCardError" &&
+      stripeErr.code === "authentication_required"
+    ) {
+      return await fallbackToCheckout(
+        parentSessionId,
+        customerId,
+        email,
+        name,
+        ig,
+        amountPennies,
+        baseUrl,
       );
     }
-    return NextResponse.json(
-      { error: err instanceof Error ? err.message : "Stripe error" },
-      { status: 500 },
+    logServerError("charge-97.confirm", err);
+    const mapped = mapStripeErrorToUserSafe(err);
+    return NextResponse.json(mapped.body, { status: mapped.status });
+  }
+
+  if (intent.status === "requires_action") {
+    return await fallbackToCheckout(
+      parentSessionId,
+      customerId,
+      email,
+      name,
+      ig,
+      amountPennies,
+      baseUrl,
     );
   }
 
   if (intent.status !== "succeeded") {
+    logServerError("charge-97.status", new Error(`unexpected status ${intent.status}`));
     return NextResponse.json(
-      {
-        error: `Payment ${intent.status}`,
-        payment_intent_id: intent.id,
-        requires_action: intent.status === "requires_action",
-      },
+      { error: `Payment ${intent.status}. Try again.` },
       { status: 402 },
     );
   }
@@ -145,46 +244,96 @@ export async function POST(request: Request) {
     sql: `INSERT INTO audit_purchases
             (stripe_session_id, stripe_payment_intent_id, stripe_customer_id,
              email, name, phone, instagram_handle, tier, amount_total, currency,
-             parent_session_id)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+             parent_session_id, source)
+          VALUES (?, ?, ?, ?, ?, ?, ?, 'audit-97', ?, ?, ?, 'oneclick')
           ON CONFLICT(stripe_session_id) DO NOTHING`,
     args: [
-      intent.id,
+      `oneclick:${intent.id}`,
       intent.id,
       customerId,
       email,
       name || null,
-      parent.customer_details?.phone || null,
+      phoneE164 || null,
       ig || null,
-      "audit-97",
-      AMOUNT_PENNIES,
+      intent.amount_received ?? amountPennies,
       CURRENCY,
       parentSessionId,
     ],
   });
 
-  await sendCapi({
+  fireCapi({
     event_name: "Purchase",
     event_id: intent.id,
     email,
-    first_name: name,
-    value: AMOUNT_PENNIES / 100,
+    phone_e164: phoneE164,
+    first_name: name || undefined,
+    value: (intent.amount_received ?? amountPennies) / 100,
     currency: CURRENCY.toUpperCase(),
     source_url: request.headers.get("referer") || undefined,
-    client_ip: request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || undefined,
-    client_user_agent: request.headers.get("user-agent") || undefined,
+    client_ip: getClientIp(request.headers),
+    client_user_agent: getUserAgent(request.headers),
+    fbp: getCookieValue(request.headers, "_fbp"),
+    fbc: getCookieValue(request.headers, "_fbc"),
   });
 
-  const params = new URLSearchParams({
-    session_id: parentSessionId,
-    upsell: "1",
-    email,
-    name,
-    ig,
-  });
   return NextResponse.json({
     ok: true,
     payment_intent_id: intent.id,
-    redirect: `/waitlist/done?${params.toString()}`,
+    redirect: `/waitlist/done?session_id=${parentSessionId}&upsell=1&pi=${intent.id}`,
   });
+}
+
+async function fallbackToCheckout(
+  parentSessionId: string,
+  customerId: string,
+  email: string,
+  name: string,
+  ig: string,
+  amountPennies: number,
+  baseUrl: string,
+): Promise<NextResponse> {
+  const priceId = process.env.STRIPE_PRICE_AUDIT_97;
+  if (!priceId) {
+    logServerError("charge-97.fallback", new Error("STRIPE_PRICE_AUDIT_97 not set"));
+    return NextResponse.json({ error: "Payment setup error." }, { status: 500 });
+  }
+
+  try {
+    const session = await stripe.checkout.sessions.create(
+      {
+        mode: "payment",
+        customer: customerId,
+        line_items: [{ price: priceId, quantity: 1 }],
+        success_url: `${baseUrl}/waitlist/done?session_id=${parentSessionId}&upsell=1&cs={CHECKOUT_SESSION_ID}`,
+        cancel_url: `${baseUrl}/waitlist/upsell?session_id=${parentSessionId}`,
+        automatic_tax: { enabled: true },
+        metadata: {
+          product: "audit-97",
+          email,
+          name,
+          instagram_handle: ig,
+          parent_session_id: parentSessionId,
+        },
+        payment_intent_data: {
+          receipt_email: email || undefined,
+          metadata: {
+            product: "audit-97",
+            email,
+            name,
+            instagram_handle: ig,
+            parent_session_id: parentSessionId,
+          },
+        },
+      },
+      { idempotencyKey: `fb97:${parentSessionId}` },
+    );
+    if (!session.url) {
+      return NextResponse.json({ error: "Payment setup error." }, { status: 502 });
+    }
+    return NextResponse.json({ ok: true, requires_action: true, redirect: session.url, amount: amountPennies });
+  } catch (err) {
+    logServerError("charge-97.fallback", err);
+    const mapped = mapStripeErrorToUserSafe(err);
+    return NextResponse.json(mapped.body, { status: mapped.status });
+  }
 }

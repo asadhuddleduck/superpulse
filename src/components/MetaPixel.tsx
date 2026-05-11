@@ -1,7 +1,8 @@
 "use client";
 
 import Script from "next/script";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
+import { CONSENT_EVENT, readConsent, type ConsentState } from "@/lib/consent";
 
 declare global {
   interface Window {
@@ -12,13 +13,20 @@ declare global {
 
 export default function MetaPixel() {
   const pixelId = process.env.NEXT_PUBLIC_META_PIXEL_ID;
+  const [consent, setConsent] = useState<ConsentState>("pending");
 
   useEffect(() => {
-    if (!pixelId || typeof window === "undefined") return;
-    window.fbq?.("track", "PageView");
-  }, [pixelId]);
+    setConsent(readConsent());
+    function onChange(e: Event) {
+      const v = (e as CustomEvent<ConsentState>).detail;
+      if (v) setConsent(v);
+    }
+    window.addEventListener(CONSENT_EVENT, onChange);
+    return () => window.removeEventListener(CONSENT_EVENT, onChange);
+  }, []);
 
   if (!pixelId) return null;
+  if (consent !== "accepted") return null;
 
   return (
     <>

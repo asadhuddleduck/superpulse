@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, Suspense, type FormEvent } from "react";
+import { useState, useEffect, useRef, Suspense, type FormEvent } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import WaitlistHeader from "@/components/waitlist/Header";
 import WaitlistFooter from "@/components/waitlist/Footer";
@@ -8,10 +8,12 @@ import ConvergenceBackground from "@/components/waitlist/ConvergenceBackground";
 import SocialProof from "@/components/waitlist/SocialProof";
 import CaseStudies from "@/components/waitlist/CaseStudies";
 import WaitlistLogoStrip from "@/components/waitlist/LogoStrip";
-import { trackPixel } from "@/lib/meta-pixel-client";
+import { trackPixel, getOrCreateEventId, persistEventId } from "@/lib/meta-pixel-client";
 
 const UTM_KEYS = ["utm_source", "utm_medium", "utm_campaign", "utm_content", "utm_term"] as const;
 type UtmKey = (typeof UTM_KEYS)[number];
+
+const LEAD_KEY = "wl-lead";
 
 function WaitlistInner() {
   const router = useRouter();
@@ -23,6 +25,7 @@ function WaitlistInner() {
   const [utm, setUtm] = useState<Partial<Record<UtmKey, string>>>({});
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const submittingRef = useRef(false);
 
   useEffect(() => {
     const next: Partial<Record<UtmKey, string>> = {};
@@ -35,10 +38,12 @@ function WaitlistInner() {
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
+    if (submittingRef.current) return;
+    submittingRef.current = true;
     setError(null);
     setLoading(true);
     try {
-      const eventId = crypto.randomUUID();
+      const eventId = getOrCreateEventId("lead");
       const res = await fetch("/api/waitlist", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -55,17 +60,25 @@ function WaitlistInner() {
       const data = await res.json();
       if (!res.ok) {
         setError(data.error || "Something went wrong. Try again.");
+        submittingRef.current = false;
         return;
       }
       trackPixel("Lead", { event_id: eventId });
-      const params = new URLSearchParams({
+      persistEventId("lead", eventId);
+      const lead = {
         email,
-        name: firstName,
-        ig: instagram.trim().replace(/^@/, ""),
-      });
-      router.push(`/waitlist/qualify?${params.toString()}`);
+        firstName,
+        ig: instagram.trim().replace(/^@/, "").toLowerCase(),
+      };
+      try {
+        sessionStorage.setItem(LEAD_KEY, JSON.stringify(lead));
+      } catch {
+        /* ignore */
+      }
+      router.replace("/waitlist/qualify");
     } catch {
       setError("Network error. Try again.");
+      submittingRef.current = false;
     } finally {
       setLoading(false);
     }
@@ -94,7 +107,7 @@ function WaitlistInner() {
           </p>
 
           <div className="wl-card">
-            <form onSubmit={handleSubmit}>
+            <form onSubmit={handleSubmit} noValidate>
               <div className="wl-card-label">
                 <span className="wl-card-label-dot" />
                 Free to join · No card needed
@@ -113,8 +126,10 @@ function WaitlistInner() {
                   autoComplete="given-name"
                   value={firstName}
                   onChange={(e) => setFirstName(e.target.value)}
+                  onBlur={() => setError(null)}
                   placeholder="Your first name"
                   required
+                  maxLength={80}
                   className="wl-input"
                 />
               </div>
@@ -128,14 +143,16 @@ function WaitlistInner() {
                   inputMode="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
+                  onBlur={() => setError(null)}
                   placeholder="you@business.com"
                   required
+                  maxLength={150}
                   className="wl-input"
                 />
               </div>
 
               <div className="wl-field">
-                <label htmlFor="phone" className="wl-label">Mobile</label>
+                <label htmlFor="phone" className="wl-label">Mobile (UK)</label>
                 <input
                   id="phone"
                   type="tel"
@@ -143,8 +160,10 @@ function WaitlistInner() {
                   inputMode="tel"
                   value={phone}
                   onChange={(e) => setPhone(e.target.value)}
-                  placeholder="07…"
+                  onBlur={() => setError(null)}
+                  placeholder="07… or +44…"
                   required
+                  maxLength={20}
                   className="wl-input"
                 />
               </div>
@@ -159,8 +178,10 @@ function WaitlistInner() {
                   spellCheck={false}
                   value={instagram}
                   onChange={(e) => setInstagram(e.target.value)}
+                  onBlur={() => setError(null)}
                   placeholder="@yourbusiness"
                   required
+                  maxLength={50}
                   className="wl-input"
                 />
               </div>

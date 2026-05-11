@@ -1,8 +1,13 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { sendCapi } from "@/lib/meta-capi";
+import { fireCapi } from "@/lib/meta-capi";
+import { getClientIp, getCookieValue, getUserAgent } from "@/lib/cf-ip";
+import { checkRateLimit } from "@/lib/rate-limit";
+import { isAllowedOrigin } from "@/lib/origin-check";
+import { normaliseIgHandle, normalisePhoneUk } from "@/lib/business-types";
 
 export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
 type Body = {
   first_name?: string;
@@ -21,18 +26,24 @@ type Body = {
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-function normaliseHandle(raw: string): string {
-  const t = raw.trim().replace(/^@/, "");
-  const m = t.match(/instagram\.com\/([^/?#]+)/i);
-  return (m ? m[1] : t).toLowerCase();
-}
-
 function clean(v: string | undefined): string | null {
   const t = v?.trim();
   return t ? t : null;
 }
 
 export async function POST(request: Request) {
+  if (!isAllowedOrigin(request.headers)) {
+    return NextResponse.json({ ok: false, error: "Bad request" }, { status: 403 });
+  }
+
+  const rl = await checkRateLimit("waitlist", request.headers);
+  if (!rl.ok) {
+    return NextResponse.json(
+      { ok: false, error: "Too many submissions. Try again in a moment." },
+      { status: 429, headers: { "Retry-After": String(rl.retryAfterSeconds) } },
+    );
+  }
+
   let body: Body;
   try {
     body = (await request.json()) as Body;
@@ -42,72 +53,88 @@ export async function POST(request: Request) {
 
   const firstName = (body.first_name || body.name)?.trim() ?? "";
   const email = body.email?.trim().toLowerCase() ?? "";
-  const phone = body.phone?.trim() ?? "";
+  const phoneRaw = body.phone?.trim() ?? "";
   const handleRaw = body.instagram_handle?.trim() ?? "";
   const source = body.source?.trim() || "public";
 
-  if (!firstName) {
+  if (!firstName || firstName.length > 100) {
     return NextResponse.json({ ok: false, error: "First name required" }, { status: 400 });
   }
-  if (!EMAIL_RE.test(email)) {
+  if (!EMAIL_RE.test(email) || email.length > 200) {
     return NextResponse.json({ ok: false, error: "Valid email required" }, { status: 400 });
   }
-  if (!phone) {
-    return NextResponse.json({ ok: false, error: "Phone required" }, { status: 400 });
-  }
-  if (!handleRaw) {
+  const phoneCheck = normalisePhoneUk(phoneRaw);
+  if (!phoneCheck.ok) {
     return NextResponse.json(
-      { ok: false, error: "Instagram handle required" },
+      { ok: false, error: "Valid UK phone required" },
+      { status: 400 },
+    );
+  }
+  const igCheck = normaliseIgHandle(handleRaw);
+  if (!igCheck.ok) {
+    return NextResponse.json(
+      { ok: false, error: "Valid Instagram handle required" },
       { status: 400 },
     );
   }
 
-  const handle = normaliseHandle(handleRaw);
-  const landedAt = new Date().toISOString();
+  const nowIso = new Date().toISOString();
 
   await db.execute({
     sql: `INSERT INTO waitlist
             (email, name, first_name, phone, source, instagram_handle,
-             utm_source, utm_medium, utm_campaign, utm_content, utm_term, landed_at)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+             utm_source, utm_medium, utm_campaign, utm_content, utm_term, landed_at,
+             last_utm_source, last_utm_medium, last_utm_campaign, last_utm_content, last_utm_term, last_landed_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
           ON CONFLICT(email) DO UPDATE SET
             name = excluded.name,
             first_name = excluded.first_name,
             phone = excluded.phone,
             source = excluded.source,
             instagram_handle = excluded.instagram_handle,
-            utm_source = COALESCE(excluded.utm_source, waitlist.utm_source),
-            utm_medium = COALESCE(excluded.utm_medium, waitlist.utm_medium),
-            utm_campaign = COALESCE(excluded.utm_campaign, waitlist.utm_campaign),
-            utm_content = COALESCE(excluded.utm_content, waitlist.utm_content),
-            utm_term = COALESCE(excluded.utm_term, waitlist.utm_term)`,
+            last_utm_source = excluded.last_utm_source,
+            last_utm_medium = excluded.last_utm_medium,
+            last_utm_campaign = excluded.last_utm_campaign,
+            last_utm_content = excluded.last_utm_content,
+            last_utm_term = excluded.last_utm_term,
+            last_landed_at = excluded.last_landed_at`,
     args: [
       email,
       firstName,
       firstName,
-      phone,
+      phoneCheck.e164,
       source,
-      handle,
+      igCheck.handle,
       clean(body.utm_source),
       clean(body.utm_medium),
       clean(body.utm_campaign),
       clean(body.utm_content),
       clean(body.utm_term),
-      landedAt,
+      nowIso,
+      clean(body.utm_source),
+      clean(body.utm_medium),
+      clean(body.utm_campaign),
+      clean(body.utm_content),
+      clean(body.utm_term),
+      nowIso,
     ],
   });
 
-  const eventId = body.event_id?.trim() || `wl_${Date.now()}_${email}`;
-  await sendCapi({
-    event_name: "Lead",
-    event_id: eventId,
-    email,
-    phone,
-    first_name: firstName,
-    source_url: request.headers.get("referer") || undefined,
-    client_ip: request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || undefined,
-    client_user_agent: request.headers.get("user-agent") || undefined,
-  });
+  const eventId = body.event_id?.trim();
+  if (eventId) {
+    fireCapi({
+      event_name: "Lead",
+      event_id: eventId,
+      email,
+      phone_e164: phoneCheck.e164,
+      first_name: firstName,
+      source_url: request.headers.get("referer") || undefined,
+      client_ip: getClientIp(request.headers),
+      client_user_agent: getUserAgent(request.headers),
+      fbp: getCookieValue(request.headers, "_fbp"),
+      fbc: getCookieValue(request.headers, "_fbc"),
+    });
+  }
 
   return NextResponse.json({ ok: true });
 }

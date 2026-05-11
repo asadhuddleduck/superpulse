@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Lato } from "next/font/google";
 import MetaPixel from "@/components/MetaPixel";
+import ConsentBanner from "@/components/ConsentBanner";
 import "./waitlist.css";
 
 const lato = Lato({
@@ -30,6 +31,7 @@ export default function WaitlistLayout({
     <div className={`${lato.variable} waitlist-root`}>
       <MetaPixel />
       {children}
+      <ConsentBanner />
     </div>
   );
 }

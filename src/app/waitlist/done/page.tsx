@@ -1,15 +1,51 @@
 "use client";
 
-import { Suspense } from "react";
+import { Suspense, useEffect, useRef } from "react";
 import { useSearchParams } from "next/navigation";
 import WaitlistHeader from "@/components/waitlist/Header";
 import WaitlistFooter from "@/components/waitlist/Footer";
 import ConvergenceBackground from "@/components/waitlist/ConvergenceBackground";
+import { trackPixel } from "@/lib/meta-pixel-client";
+
+const PURCHASE_FIRED_PREFIX = "wl-purchase-97-fired:";
 
 function DoneInner() {
   const params = useSearchParams();
   const skipped = params.get("skipped") === "1";
   const upsell = params.get("upsell") === "1";
+  const pi = params.get("pi") ?? "";
+  const cs = params.get("cs") ?? "";
+  const firedRef = useRef(false);
+
+  useEffect(() => {
+    if (firedRef.current) return;
+    if (!upsell) return;
+    const eventId = pi || cs;
+    if (!eventId) return;
+    const firedKey = PURCHASE_FIRED_PREFIX + eventId;
+    let alreadyFired = false;
+    try {
+      alreadyFired = localStorage.getItem(firedKey) === "1";
+    } catch {
+      /* ignore */
+    }
+    if (alreadyFired) {
+      firedRef.current = true;
+      return;
+    }
+    trackPixel("Purchase", {
+      value: 97,
+      currency: "GBP",
+      content_name: "audit-97",
+      event_id: eventId,
+    });
+    try {
+      localStorage.setItem(firedKey, "1");
+    } catch {
+      /* ignore */
+    }
+    firedRef.current = true;
+  }, [upsell, pi, cs]);
 
   let title: string;
   let body: string;
