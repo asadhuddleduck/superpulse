@@ -12,11 +12,11 @@ const inter = Inter({
 const TITLE = 'The Qureskincare Playbook';
 const DESCRIPTION =
   'Zero to fifty million, fact-checked and packaged for your brand. Tap to open on your phone.';
-const OG_IMAGE = 'https://superpulse.io/proposal-og/sohail-hasani-2026-05-13.png';
-const PROPOSAL_URL = 'https://superpulse.io/proposal/sohail-hasani-2026-05-13';
+const OG_IMAGE = 'https://www.superpulse.io/proposal-og/sohail-hasani-2026-05-13.png';
+const PROPOSAL_URL = 'https://www.superpulse.io/proposal/sohail-hasani-2026-05-13';
 
 export const metadata: Metadata = {
-  metadataBase: new URL('https://superpulse.io'),
+  metadataBase: new URL('https://www.superpulse.io'),
   title: TITLE,
   description: DESCRIPTION,
   robots: { index: false, follow: false },
