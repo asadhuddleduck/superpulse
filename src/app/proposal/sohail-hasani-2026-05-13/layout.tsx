@@ -14,7 +14,7 @@ const DESCRIPTION =
   'Zero to fifty million, fact-checked and packaged for your brand. Tap to open on your phone.';
 const HOST = 'https://proposals.huddleduck.co.uk';
 const OG_IMAGE = `${HOST}/proposal-og/sohail-hasani-2026-05-13.png`;
-const PROPOSAL_URL = `${HOST}/proposal/sohail-hasani-2026-05-13`;
+const PROPOSAL_URL = `${HOST}/sohail-hasani-2026-05-13`;
 
 export const metadata: Metadata = {
   metadataBase: new URL(HOST),
@@ -22,6 +22,11 @@ export const metadata: Metadata = {
   description: DESCRIPTION,
   robots: { index: false, follow: false },
   alternates: { canonical: PROPOSAL_URL },
+  icons: {
+    icon: '/proposal-og/duck-favicon.png',
+    shortcut: '/proposal-og/duck-favicon.png',
+    apple: '/proposal-og/duck-apple-touch-icon.png',
+  },
   openGraph: {
     title: TITLE,
     description: DESCRIPTION,
