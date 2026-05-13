@@ -23,12 +23,20 @@ function bucketKey(scope: string, ip: string, windowSeconds: number): { key: str
   };
 }
 
+let warnedUnknownIp = false;
+
 export async function checkRateLimit(
   scope: keyof typeof DEFAULTS,
   headers: Headers,
 ): Promise<RateLimitResult> {
   const ip = getClientIp(headers) ?? "unknown";
-  if (ip === "unknown") return { ok: true };
+  if (ip === "unknown") {
+    if (!warnedUnknownIp) {
+      warnedUnknownIp = true;
+      console.warn("[rate-limit] client IP could not be resolved — rate limit bypassed for this request");
+    }
+    return { ok: true };
+  }
 
   const cfg = DEFAULTS[scope];
   const { key, windowStart } = bucketKey(scope, ip, cfg.windowSeconds);

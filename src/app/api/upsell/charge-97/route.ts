@@ -6,7 +6,10 @@ import { fireCapi } from "@/lib/meta-capi";
 import { getClientIp, getCookieValue, getUserAgent } from "@/lib/cf-ip";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { isAllowedOrigin } from "@/lib/origin-check";
+import { verifyUpsellToken } from "@/lib/upsell-token";
 import { logServerError, mapStripeErrorToUserSafe } from "@/lib/error-mapper";
+
+const UPSELL_COOKIE = "wl-upsell";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -54,6 +57,17 @@ export async function POST(request: Request) {
   const parentSessionId = body.parent_session_id?.trim() ?? "";
   if (!parentSessionId.startsWith("cs_")) {
     return NextResponse.json({ error: "Missing or invalid session id" }, { status: 400 });
+  }
+
+  const cookieRaw = getCookieValue(request.headers, UPSELL_COOKIE) ?? "";
+  const [cookieSessionId, cookieToken] = cookieRaw.split(".", 2);
+  if (
+    !cookieSessionId ||
+    !cookieToken ||
+    cookieSessionId !== parentSessionId ||
+    !verifyUpsellToken(parentSessionId, cookieToken)
+  ) {
+    return NextResponse.json({ error: "Session not verified. Reload and try again." }, { status: 403 });
   }
 
   const existing = await db.execute({
@@ -261,7 +275,7 @@ export async function POST(request: Request) {
     ],
   });
 
-  fireCapi({
+  await fireCapi({
     event_name: "Purchase",
     event_id: intent.id,
     email,

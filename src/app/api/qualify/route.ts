@@ -128,7 +128,7 @@ export async function POST(request: Request) {
   });
 
   if (body.event_id?.trim()) {
-    fireCapi({
+    await fireCapi({
       event_name: "CompleteRegistration",
       event_id: body.event_id.trim(),
       email,
@@ -143,7 +143,13 @@ export async function POST(request: Request) {
   }
 
   if (choice === "no") {
-    return NextResponse.json({ ok: true, qualified: !!qualified, redirect: "/waitlist/done?skipped=1" });
+    const params = new URLSearchParams({ skipped: "1" });
+    if (qualified) params.set("priority", "1");
+    return NextResponse.json({
+      ok: true,
+      qualified: !!qualified,
+      redirect: `/waitlist/done?${params.toString()}`,
+    });
   }
 
   const priceId = process.env.STRIPE_PRICE_AUDIT_27;
@@ -159,20 +165,6 @@ export async function POST(request: Request) {
   }
 
   const idempotencyKey = `qa27:${email}:${Math.floor(Date.now() / 60000)}`;
-  fireCapi({
-    event_name: "InitiateCheckout",
-    event_id: `ic:${email}:${Date.now()}`,
-    email,
-    phone_e164: trustedPhone || undefined,
-    first_name: trustedName || undefined,
-    value: 27,
-    currency: "GBP",
-    source_url: request.headers.get("referer") || undefined,
-    client_ip: getClientIp(request.headers),
-    client_user_agent: getUserAgent(request.headers),
-    fbp: getCookieValue(request.headers, "_fbp"),
-    fbc: getCookieValue(request.headers, "_fbc"),
-  });
 
   try {
     const session = await stripe.checkout.sessions.create(
@@ -208,6 +200,20 @@ export async function POST(request: Request) {
       logServerError("qualify.session", new Error("no session url"));
       return NextResponse.json({ error: "Payment setup error. Try again." }, { status: 502 });
     }
+    await fireCapi({
+      event_name: "InitiateCheckout",
+      event_id: `ic:${email}:${Date.now()}`,
+      email,
+      phone_e164: trustedPhone || undefined,
+      first_name: trustedName || undefined,
+      value: 27,
+      currency: "GBP",
+      source_url: request.headers.get("referer") || undefined,
+      client_ip: getClientIp(request.headers),
+      client_user_agent: getUserAgent(request.headers),
+      fbp: getCookieValue(request.headers, "_fbp"),
+      fbc: getCookieValue(request.headers, "_fbc"),
+    });
     return NextResponse.json({
       ok: true,
       qualified: !!qualified,

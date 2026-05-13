@@ -13,14 +13,16 @@ function DoneInner() {
   const params = useSearchParams();
   const skipped = params.get("skipped") === "1";
   const upsell = params.get("upsell") === "1";
+  const priority = params.get("priority") === "1";
   const pi = params.get("pi") ?? "";
   const cs = params.get("cs") ?? "";
+  const sessionId = params.get("session_id") ?? "";
   const firedRef = useRef(false);
 
   useEffect(() => {
     if (firedRef.current) return;
     if (!upsell) return;
-    const eventId = pi || cs;
+    const eventId = pi || cs || sessionId;
     if (!eventId) return;
     const firedKey = PURCHASE_FIRED_PREFIX + eventId;
     let alreadyFired = false;
@@ -45,11 +47,15 @@ function DoneInner() {
       /* ignore */
     }
     firedRef.current = true;
-  }, [upsell, pi, cs]);
+  }, [upsell, pi, cs, sessionId]);
 
   let title: string;
   let body: string;
-  if (skipped) {
+  if (skipped && priority) {
+    title = "You’re on the priority list.";
+    body =
+      "Based on what you told us, we’ll prioritise you ahead of cold signups. Expect a call from one of us to set up a short personal demo.";
+  } else if (skipped) {
     title = "You’re on the list.";
     body =
       "We’ll be in touch from SuperPulse before we open to the public. If your business looks like a strong fit, expect a call from one of us to set up a short personal demo.";

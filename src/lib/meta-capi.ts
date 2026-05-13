@@ -88,8 +88,10 @@ export async function sendCapi(payload: CapiPayload): Promise<{ ok: boolean; sta
   }
 }
 
-export function fireCapi(payload: CapiPayload): void {
-  void sendCapi(payload).catch((err) => {
-    console.error("[capi fire-and-forget]", err);
-  });
+export async function fireCapi(payload: CapiPayload): Promise<void> {
+  try {
+    await sendCapi(payload);
+  } catch (err) {
+    console.error("[capi]", err);
+  }
 }

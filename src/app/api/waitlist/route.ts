@@ -12,7 +12,6 @@ export const dynamic = "force-dynamic";
 
 type Body = {
   first_name?: string;
-  name?: string;
   email?: string;
   phone?: string;
   instagram_handle?: string;
@@ -52,7 +51,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: false, error: "Bad request" }, { status: 400 });
   }
 
-  const firstName = (body.first_name || body.name)?.trim() ?? "";
+  const firstName = body.first_name?.trim() ?? "";
   const email = body.email?.trim().toLowerCase() ?? "";
   const phoneRaw = body.phone?.trim() ?? "";
   const handleRaw = body.instagram_handle?.trim() ?? "";
@@ -127,7 +126,7 @@ export async function POST(request: Request) {
     ],
   });
 
-  if (isNewSignup) {
+  if (isNewSignup && source !== "healthcheck") {
     const utmCampaign = clean(body.utm_campaign);
     const utmSource = clean(body.utm_source);
     const utmLine = utmCampaign || utmSource
@@ -144,8 +143,8 @@ export async function POST(request: Request) {
   }
 
   const eventId = body.event_id?.trim();
-  if (eventId) {
-    fireCapi({
+  if (eventId && source !== "healthcheck") {
+    await fireCapi({
       event_name: "Lead",
       event_id: eventId,
       email,

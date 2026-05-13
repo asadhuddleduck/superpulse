@@ -14,12 +14,13 @@ function UpsellInner() {
   const sessionId = params.get("session_id") ?? "";
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [ready, setReady] = useState(false);
   const submittingRef = useRef(false);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
     if (!sessionId) {
-      window.location.replace("/waitlist/done?skipped=1");
+      window.location.replace("/waitlist");
       return;
     }
     const firedKey = PURCHASE_FIRED_PREFIX + sessionId;
@@ -42,6 +43,20 @@ function UpsellInner() {
         /* ignore */
       }
     }
+
+    fetch("/api/upsell/init", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ session_id: sessionId }),
+    })
+      .then((res) => {
+        if (!res.ok) {
+          setError("Could not verify your audit session. Reload the page.");
+        } else {
+          setReady(true);
+        }
+      })
+      .catch(() => setError("Network error verifying your session. Reload the page."));
   }, [sessionId]);
 
   async function handleBuy() {
@@ -115,8 +130,8 @@ function UpsellInner() {
 
             {error && <p className="wl-error">{error}</p>}
 
-            <button type="button" onClick={handleBuy} disabled={loading} className="wl-btn">
-              {loading ? "Charging your card…" : "Yes, add the Loom · £97"}
+            <button type="button" onClick={handleBuy} disabled={loading || !ready} className="wl-btn">
+              {loading ? "Charging your card…" : ready ? "Yes, add the Loom · £97" : "Verifying…"}
             </button>
 
             <p className="wl-fine">

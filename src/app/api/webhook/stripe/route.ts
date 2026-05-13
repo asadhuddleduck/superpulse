@@ -69,10 +69,7 @@ export async function POST(request: NextRequest) {
     }
   } catch (err) {
     logServerError("webhook", err);
-    return NextResponse.json(
-      { error: err instanceof Error ? err.message : "Webhook handler error" },
-      { status: 500 },
-    );
+    return NextResponse.json({ error: "Webhook handler error" }, { status: 500 });
   }
 
   return NextResponse.json({ received: true });
@@ -262,20 +259,8 @@ async function handleAuditPayment(session: Stripe.Checkout.Session) {
     ],
   });
 
-  if (email) {
-    try {
-      await db.execute({
-        sql: `INSERT OR IGNORE INTO waitlist (email, name, first_name, phone, source, instagram_handle, landed_at)
-              VALUES (?, ?, ?, ?, 'webhook-backfill', ?, ?)`,
-        args: [email, name || "Unknown", name || null, phoneForDb || "", ig || null, new Date().toISOString()],
-      });
-    } catch {
-      /* not critical */
-    }
-  }
-
   if (email && sessionId) {
-    fireCapi({
+    await fireCapi({
       event_name: "Purchase",
       event_id: sessionId,
       email,

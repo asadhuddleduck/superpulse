@@ -4,28 +4,38 @@ const ALLOWED_HOSTS = [
   "localhost",
 ];
 
-const ALLOWED_HOST_SUFFIXES = [
-  ".vercel.app",
-];
+function parsedPreviewHosts(): string[] {
+  const raw = process.env.ALLOWED_PREVIEW_HOSTS;
+  if (!raw) return [];
+  return raw.split(",").map((h) => h.trim().toLowerCase()).filter(Boolean);
+}
 
-function hostOf(value: string | null): string | null {
+function parsedUrl(value: string | null): URL | null {
   if (!value) return null;
   try {
-    return new URL(value).host;
+    return new URL(value);
   } catch {
     return null;
   }
 }
 
-function hostAllowed(host: string | null): boolean {
-  if (!host) return false;
-  const noPort = host.split(":")[0];
-  if (ALLOWED_HOSTS.includes(noPort)) return true;
-  return ALLOWED_HOST_SUFFIXES.some((suffix) => noPort.endsWith(suffix));
+function isProd(): boolean {
+  return process.env.VERCEL_ENV === "production" || process.env.NODE_ENV === "production";
+}
+
+function urlAllowed(url: URL | null): boolean {
+  if (!url) return false;
+  const host = url.host.split(":")[0].toLowerCase();
+  if (isProd() && url.protocol !== "https:" && host !== "localhost") return false;
+  if (ALLOWED_HOSTS.includes(host)) return true;
+  return parsedPreviewHosts().includes(host);
 }
 
 export function isAllowedOrigin(headers: Headers): boolean {
-  const origin = headers.get("origin");
-  const referer = headers.get("referer");
-  return hostAllowed(hostOf(origin)) || hostAllowed(hostOf(referer));
+  const origin = parsedUrl(headers.get("origin"));
+  const referer = parsedUrl(headers.get("referer"));
+  if (!origin && !referer) return false;
+  if (origin && !urlAllowed(origin)) return false;
+  if (referer && !urlAllowed(referer)) return false;
+  return true;
 }
