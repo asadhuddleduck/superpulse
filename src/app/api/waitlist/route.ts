@@ -133,7 +133,7 @@ export async function POST(request: Request) {
     const utmLine = utmCampaign || utmSource
       ? `\n*Source:* ${[utmSource, utmCampaign].filter(Boolean).join(" / ")}`
       : "";
-    notifySlack(
+    await notifySlack(
       `🎉 New SuperPulse waitlist signup\n` +
         `*Name:* ${firstName}\n` +
         `*Email:* ${email}\n` +

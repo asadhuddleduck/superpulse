@@ -143,7 +143,7 @@ export async function POST(request: Request) {
   }
 
   if (choice === "no") {
-    return NextResponse.json({ ok: true, qualified: !!qualified, redirect: "/waitlist/done" });
+    return NextResponse.json({ ok: true, qualified: !!qualified, redirect: "/waitlist/done?skipped=1" });
   }
 
   const priceId = process.env.STRIPE_PRICE_AUDIT_27;
