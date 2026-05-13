@@ -12,19 +12,21 @@ const inter = Inter({
 const TITLE = 'The Qureskincare Playbook';
 const DESCRIPTION =
   'Zero to fifty million, fact-checked and packaged for your brand. Tap to open on your phone.';
-const OG_IMAGE = 'https://www.superpulse.io/proposal-og/sohail-hasani-2026-05-13.png';
-const PROPOSAL_URL = 'https://www.superpulse.io/proposal/sohail-hasani-2026-05-13';
+const HOST = 'https://proposals.huddleduck.co.uk';
+const OG_IMAGE = `${HOST}/proposal-og/sohail-hasani-2026-05-13.png`;
+const PROPOSAL_URL = `${HOST}/proposal/sohail-hasani-2026-05-13`;
 
 export const metadata: Metadata = {
-  metadataBase: new URL('https://www.superpulse.io'),
+  metadataBase: new URL(HOST),
   title: TITLE,
   description: DESCRIPTION,
   robots: { index: false, follow: false },
+  alternates: { canonical: PROPOSAL_URL },
   openGraph: {
     title: TITLE,
     description: DESCRIPTION,
     url: PROPOSAL_URL,
-    siteName: 'Superpulse',
+    siteName: 'Huddle Duck',
     type: 'article',
     images: [
       {
