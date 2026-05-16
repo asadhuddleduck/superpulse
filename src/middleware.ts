@@ -5,7 +5,6 @@ const COOKIE_NAME = "sp_gate";
 const PUBLIC_PATH_PREFIXES = [
   "/waitlist",
   "/privacy",
-  "/proposal",
   "/gate",
   "/api/",
   "/_next/",
@@ -13,8 +12,6 @@ const PUBLIC_PATH_PREFIXES = [
 ];
 
 const PUBLIC_FILES = new Set(["/robots.txt", "/sitemap.xml"]);
-
-const PROPOSALS_HOST = "proposals.huddleduck.co.uk";
 
 async function expectedToken(password: string): Promise<string> {
   const data = new TextEncoder().encode(`sp-gate-v1:${password}`);
@@ -32,21 +29,6 @@ function isPublicPath(pathname: string): boolean {
 
 export async function middleware(req: NextRequest) {
   const { pathname, search } = req.nextUrl;
-  const host = (req.headers.get("host") || "").toLowerCase();
-
-  // proposals.huddleduck.co.uk — bare slugs map to /proposal/<slug>, always public.
-  // proposals.huddleduck.co.uk/sohail-hasani-2026-05-13 → /proposal/sohail-hasani-2026-05-13
-  if (host === PROPOSALS_HOST) {
-    if (pathname === "/" || pathname === "") {
-      return NextResponse.next();
-    }
-    if (!pathname.startsWith("/proposal/")) {
-      const url = req.nextUrl.clone();
-      url.pathname = `/proposal${pathname}`;
-      return NextResponse.rewrite(url);
-    }
-    return NextResponse.next();
-  }
 
   if (isPublicPath(pathname)) return NextResponse.next();
 
