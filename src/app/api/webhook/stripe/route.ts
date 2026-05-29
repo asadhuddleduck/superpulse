@@ -13,6 +13,11 @@ import { decryptIfNeeded } from "@/lib/crypto";
 import { db } from "@/lib/db";
 import { fireCapi } from "@/lib/meta-capi";
 import { logServerError } from "@/lib/error-mapper";
+import { notifySlack } from "@/lib/slack";
+
+function gbp(pennies: number | null | undefined): string {
+  return `£${((pennies ?? 0) / 100).toFixed(2)}`;
+}
 
 export const dynamic = "force-dynamic";
 
@@ -101,6 +106,7 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
       `Subscription activated (£300/mo)`,
       { customerId, subscriptionId },
     );
+    void notifySlack(`🟢 Subscription reactivated (£300/mo)\n*Email:* ${email}`);
     return;
   }
 
@@ -116,6 +122,9 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
     "subscription_changed",
     `Subscription activated (£300/mo) — awaiting Instagram connection`,
     { customerId, subscriptionId, email },
+  );
+  void notifySlack(
+    `🟢 New SuperPulse subscription (£300/mo)\n*Email:* ${email}\nAwaiting Instagram connection.`,
   );
 }
 
@@ -197,6 +206,9 @@ async function handlePaymentFailed(invoice: Stripe.Invoice) {
     `Payment failed (invoice ${invoice.id}) — subscription past due`,
     { invoiceId: invoice.id, amountDue: invoice.amount_due },
   );
+  void notifySlack(
+    `🔴 Payment failed — subscription past due\n*Email:* ${tenant.email ?? customerId}\n*Amount due:* ${gbp(invoice.amount_due)}`,
+  );
 }
 
 async function handleAuditPayment(session: Stripe.Checkout.Session) {
@@ -273,6 +285,13 @@ async function handleAuditPayment(session: Stripe.Checkout.Session) {
         : undefined,
     });
   }
+
+  const label = product === "audit-97" ? "£97 Loom upsell" : "£27 audit";
+  void notifySlack(
+    `💷 ${label} purchased (${gbp(amountTotal)})\n*Email:* ${email || "unknown"}` +
+      (name ? `\n*Name:* ${name}` : "") +
+      (ig ? `\n*Instagram:* @${ig}` : ""),
+  );
 }
 
 async function handlePaymentIntentSucceeded(intent: Stripe.PaymentIntent) {
@@ -325,6 +344,24 @@ async function handlePaymentIntentSucceeded(intent: Stripe.PaymentIntent) {
       parentSessionId,
     ],
   });
+
+  if (email) {
+    await fireCapi({
+      event_name: "Purchase",
+      event_id: `oneclick:${intent.id}`,
+      email,
+      phone_e164: phoneE164,
+      first_name: name || undefined,
+      value: (intent.amount_received ?? intent.amount ?? 0) / 100,
+      currency: (intent.currency || "gbp").toUpperCase(),
+    });
+  }
+
+  void notifySlack(
+    `💷 £97 Loom upsell purchased (${gbp(intent.amount_received ?? intent.amount)})\n*Email:* ${email || "unknown"}` +
+      (name ? `\n*Name:* ${name}` : "") +
+      (ig ? `\n*Instagram:* @${ig}` : ""),
+  );
 }
 
 async function handleChargeRefunded(charge: Stripe.Charge) {
@@ -336,6 +373,9 @@ async function handleChargeRefunded(charge: Stripe.Charge) {
     sql: `UPDATE audit_purchases SET refunded = 1 WHERE stripe_payment_intent_id = ?`,
     args: [piId],
   });
+  void notifySlack(
+    `↩️ Refund issued (${gbp(charge.amount_refunded)})\n*Email:* ${charge.billing_details?.email ?? charge.receipt_email ?? piId}`,
+  );
 }
 
 async function handleDisputeCreated(dispute: Stripe.Dispute) {
@@ -343,4 +383,7 @@ async function handleDisputeCreated(dispute: Stripe.Dispute) {
     ? dispute.payment_intent
     : dispute.payment_intent?.id ?? null;
   console.warn("[stripe.dispute]", piId, dispute.reason, dispute.amount);
+  void notifySlack(
+    `⚠️ Dispute opened (${gbp(dispute.amount)})\n*Reason:* ${dispute.reason}\n*Payment:* ${piId ?? "unknown"}`,
+  );
 }
