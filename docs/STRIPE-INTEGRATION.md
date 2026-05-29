@@ -34,11 +34,22 @@ CREATE INDEX IF NOT EXISTS idx_tenants_stripe_customer_id ON tenants(stripe_cust
 3. Create Coupon `FIRSTMONTHFREE` — 100% off, duration=once, applicable to monthly subscriptions.
 4. Create Product **"SuperPulse Onboarding Handhold"** for the £90 service.
 5. Create Price `STRIPE_PRICE_ONBOARDING_HANDHOLD` — £90 one-off.
-6. Register webhook endpoint at `https://superpulse.io/api/webhook/stripe` with events:
+6. Register webhook endpoint at `https://www.superpulse.io/api/webhook/stripe` (**MUST be the `www` host** — see warning below) with events:
    - `checkout.session.completed`
+   - `payment_intent.succeeded`
    - `customer.subscription.updated`
    - `customer.subscription.deleted`
    - `invoice.payment_failed`
+   - `charge.refunded`
+   - `charge.dispute.created`
+
+> **CRITICAL (incident 29 May 2026):** Do NOT register the apex `superpulse.io` host.
+> The apex 307-redirects to `www.superpulse.io`, and **Stripe does not follow redirects on webhook
+> delivery** — it treats the 307 as a failed delivery and the event never reaches the handler.
+> This silently dropped 3 live £27 audit payments (no DB row, no CAPI, no Slack) until 29 May 2026.
+> Re-point the endpoint to `www` and backfill lost payments via `scripts/backfill-audit-purchases.mjs`.
+> Always probe a webhook URL with `curl -X POST <url>` and confirm `400 Missing signature` (handler
+> alive), not `307`.
 
 ## Env vars
 
@@ -130,12 +141,18 @@ Event handlers:
 
 | Event | Action |
 |---|---|
-| `checkout.session.completed` | Create or update tenant, set `subscription_status='active'`, set `stripe_customer_id`, set `stripe_subscription_id`, set `email` from `customer_details.email`. Write `audit_events` row. |
+| `checkout.session.completed` (mode=subscription) | Create or update tenant, set `subscription_status='active'`, set `stripe_customer_id`, set `stripe_subscription_id`, set `email` from `customer_details.email`. Write `audit_events` row. **Slack alert.** |
+| `checkout.session.completed` (mode=payment) | Record £27/£97 audit purchase → `audit_purchases` (idempotent on `stripe_session_id`) + CAPI Purchase + **Slack alert.** |
+| `payment_intent.succeeded` | Record £97 one-click upsell (audit-97) → `audit_purchases` + CAPI + **Slack alert.** |
 | `customer.subscription.updated` | Sync `subscription_status` (`trialing`/`active`/`past_due`/`canceled`). |
 | `customer.subscription.deleted` | Set `subscription_status='canceled'`, pause all active campaigns via `updateCampaignStatus(id, 'PAUSED', token)`. Write audit event. |
-| `invoice.payment_failed` | Set `subscription_status='past_due'`, send `failureAlert` email (subtask 7). After 7 days unresolved: pause campaigns. |
+| `invoice.payment_failed` | Set `subscription_status='past_due'`. **Slack alert.** After 7 days unresolved: pause campaigns. |
+| `charge.refunded` | Mark `audit_purchases.refunded = 1`. **Slack alert.** |
+| `charge.dispute.created` | Log dispute. **Slack alert.** |
 
-Webhook signature verification using `stripe.webhooks.constructEvent` and `STRIPE_WEBHOOK_SECRET`. Reject any request without valid signature with 400.
+Every money event posts to Slack via `notifySlack` (`SLACK_WEBHOOK_URL`, same channel as waitlist signups).
+
+Webhook signature verification using `stripe.webhooks.constructEventAsync` and `STRIPE_WEBHOOK_SECRET`. Reject any request without valid signature with 400.
 
 ## Cron gate
 
