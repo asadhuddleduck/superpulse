@@ -292,7 +292,9 @@ The 13 Apr 2026 NEC waitlist (password-gated, name+email+phone only) was retired
 1. Visitor lands on `/waitlist` → fills form (name, email, phone, business type dropdown, # locations, IG handle) → row inserted into Turso `waitlist`.
 2. Redirect to `/waitlist/audit?email=…&name=…&ig=…` → £27 button → Stripe Checkout (live mode) → success URL is `/waitlist/upsell?session_id=…`.
 3. `/waitlist/upsell` → £97 button → Stripe Checkout → success URL is `/waitlist/done?session_id=…&upsell=1`. Skip link → `/waitlist/done?session_id=…` (audit-only thank you).
-4. Webhook handler (`src/app/api/webhook/stripe/route.ts` → `handleAuditPayment`) inserts both purchases into `audit_purchases` (idempotent on `stripe_session_id`).
+4. Webhook handler (`src/app/api/webhook/stripe/route.ts` → `handleAuditPayment`) inserts both purchases into `audit_purchases` (idempotent on `stripe_session_id`), fires Meta CAPI Purchase, and posts a Slack alert. **All money events Slack-alert** (audits, £300/mo subs, refunds, disputes, failed payments) via `notifySlack` (`SLACK_WEBHOOK_URL`).
+
+> **Webhook MUST point at `https://www.superpulse.io/api/webhook/stripe`** — the apex `superpulse.io` 307-redirects and Stripe does not follow redirects on delivery, so apex = silently dropped payments. Incident 29 May 2026: 3 live £27 payments lost this way, backfilled via `scripts/backfill-audit-purchases.mjs`. See `docs/STRIPE-INTEGRATION.md`.
 
 ### Stripe products (live mode, created 7 May 2026 via `scripts/create-audit-prices.mjs`)
 - £27 audit: `prod_UTQhPPzQv3xJQg` / price `price_1TUTqXEMAaEi0IoguFsAN99O` → env `STRIPE_PRICE_AUDIT_27`
