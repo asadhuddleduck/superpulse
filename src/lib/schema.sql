@@ -313,3 +313,31 @@ CREATE INDEX IF NOT EXISTS idx_reel_ads_adset ON reel_ads(location_adset_id, sta
 CREATE INDEX IF NOT EXISTS idx_location_adsets_campaign ON location_adsets(tenant_campaign_id);
 CREATE INDEX IF NOT EXISTS idx_ai_decisions_tenant_time ON ai_decisions(tenant_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_v8_intents_pending ON v8_intents(tenant_id, status, created_at);
+
+-- Waitlist email sequence (welcome + 10-week nurture). See src/lib/email/.
+CREATE TABLE IF NOT EXISTS email_sequence_state (
+  email TEXT PRIMARY KEY,
+  anchor_at TEXT NOT NULL,                 -- offsets count from here (join date / backfill date)
+  position INTEGER NOT NULL DEFAULT -1,    -- last step sent; -1 = none
+  status TEXT NOT NULL DEFAULT 'active',   -- active | completed | unsubscribed
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS email_sends (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  email TEXT NOT NULL,
+  step INTEGER NOT NULL,
+  variant TEXT,
+  resend_id TEXT,
+  status TEXT NOT NULL,                     -- sent | error
+  error TEXT,
+  sent_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_email_sends_email ON email_sends(email, step);
+
+CREATE TABLE IF NOT EXISTS email_unsubscribes (
+  email TEXT PRIMARY KEY,
+  reason TEXT,
+  unsubscribed_at TEXT NOT NULL DEFAULT (datetime('now'))
+);

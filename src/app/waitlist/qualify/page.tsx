@@ -76,7 +76,21 @@ export default function QualifyPage() {
   const [hydrated, setHydrated] = useState(false);
 
   useEffect(() => {
-    const found = readLead();
+    let found = readLead();
+    // Fallback for arrivals from an email CTA (no sessionStorage yet): seed the
+    // lead from ?email=&name=&ig= query params so the audit flow works.
+    if (!found) {
+      const sp = new URLSearchParams(window.location.search);
+      const qEmail = sp.get("email");
+      if (qEmail) {
+        found = { email: qEmail, firstName: sp.get("name") ?? "", ig: sp.get("ig") ?? "" };
+        try {
+          sessionStorage.setItem(LEAD_KEY, JSON.stringify(found));
+        } catch {
+          /* ignore */
+        }
+      }
+    }
     if (!found) {
       window.location.replace("/waitlist");
       return;

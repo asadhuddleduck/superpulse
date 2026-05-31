@@ -1,6 +1,7 @@
-import { NextResponse } from "next/server";
+import { NextResponse, after } from "next/server";
 import { db } from "@/lib/db";
 import { fireCapi } from "@/lib/meta-capi";
+import { startSequenceWithWelcome } from "@/lib/email/sequence";
 import { getClientIp, getCookieValue, getUserAgent } from "@/lib/cf-ip";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { isAllowedOrigin } from "@/lib/origin-check";
@@ -140,6 +141,16 @@ export async function POST(request: Request) {
         `*Instagram:* @${igCheck.handle}` +
         utmLine,
     );
+
+    // Welcome email + enrol in the waitlist sequence. Best-effort, post-response.
+    // No-op unless EMAIL_SEQUENCE_ENABLED=1, so this is inert until go-live.
+    after(async () => {
+      try {
+        await startSequenceWithWelcome(email, firstName, igCheck.handle, nowIso);
+      } catch (err) {
+        console.error("[waitlist] welcome email failed:", err instanceof Error ? err.message : String(err));
+      }
+    });
   }
 
   const eventId = body.event_id?.trim();
