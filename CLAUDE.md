@@ -430,3 +430,17 @@ Recent activity feed below shows last 10 `audit_events` rows in human-readable f
 - Multi-advertiser ads: hard opt-out at the Ad level (`multi_advertiser_ads: { has_opted_out: true }`).
 - Advantage+ creative: full opt-out via `degrees_of_freedom_spec.creative_features_spec` (9 enhancement keys, see `src/lib/facebook.ts:417-427`).
 - Ad creative identity: **`actor_id` is canonical** in this codebase (NOT `object_id`). Empirically verified working 9 Apr 2026 on `act_1059094086326037`. Meta's IG Reels adcreatives example uses `object_id`, and the fbts-code-auditor recommended that swap, but the live-verified config wins. Fallback procedure (if identity ever breaks): swap to `object_id` per `docs/ARCHITECTURE.md` §11 Check 4.
+
+## Waitlist Email Sequence (live 31 May 2026)
+
+Lifecycle nurture for waitlist members. Lives in `src/lib/email/` + `src/app/api/cron/email-sequence/` + `src/app/api/email/unsubscribe/`.
+
+- **Shape:** welcome (day 0, immediate) → audit email (day 3, **branches** on whether they bought the £27 audit) → 10 weekly nurture emails (a designed arc). 12 emails total. `STEPS` + `renderStep()` in `src/lib/email/templates.ts` are the single source of truth for schedule + copy; `processDue()` in `sequence.ts` is the engine.
+- **Sends:** transactional Resend (raw fetch, no SDK) from the **verified huddleduck.co.uk** domain, display name "Asad from SuperPulse". Per-recipient so copy can branch. NOT Broadcasts.
+- **Triggers:** live signups get the welcome via `after()` in `api/waitlist/route.ts`; everyone else is driven by the daily cron (`0 9 * * *`), anchored to each person's join date. One email per recipient per run.
+- **Tables:** `email_sequence_state` (email PK, anchor_at, position, status), `email_sends` (audit log), `email_unsubscribes`. Branch checks `audit_purchases` at send time.
+- **Gating:** all sends are behind `EMAIL_SEQUENCE_ENABLED=1` (Vercel). Unset = total no-op. Other env: `RESEND_API_KEY` (shared with duck-emails), `EMAIL_FROM`, `EMAIL_UNSUB_SECRET`.
+- **Copy rules:** light theme (cross-client consistency), no "AI" word, AI-TELLS-scrubbed, owner-to-owner UK voice. The audit is a **profile-review PDF** (DP, bio, link, highlights, pinned posts/reels, reels + hooks/CTAs → follower-to-sales), NOT "which posts to boost". Every email carries a recall strip (join date + Instagram @mr.asadshah source) for deliverability.
+- **Unsubscribe:** one-click (RFC 8058) via `api/email/unsubscribe` (HMAC token over email). Suppression honoured everywhere.
+- **Scripts:** `scripts/backfill-email-sequence.mjs` (enrol existing waitlist, staggered anchors, `--live`), `scripts/render-emails.ts` (preview to `.email-preview/`), `scripts/apply-email-schema.mjs`, `scripts/run-due-once.ts` (one-shot kickoff that mirrors the cron). Preview/review before any change to prospect copy.
+- **Scaling note:** transactional caps at ~100/day on the Resend free tier. Fine at ~60 recipients with join-anchored spread. Past a few hundred active, stagger harder or move to Broadcasts.
