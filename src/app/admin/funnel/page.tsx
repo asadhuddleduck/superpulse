@@ -1,9 +1,27 @@
 import { notFound } from "next/navigation";
+import { cookies } from "next/headers";
+import crypto from "crypto";
 import { getFunnelMetrics } from "./metrics";
 import { FUNNEL, APP_JOURNEY, WEBHOOK_NOTE, NOT_SUPERPULSE } from "./data";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
+
+// Defense-in-depth on top of the middleware admin gate. Fails CLOSED: no key
+// configured = no access. Reads only the HttpOnly cookie (set by middleware
+// after the one-time ?key= handoff), never the URL.
+async function authorized(): Promise<boolean> {
+  const key = process.env.ADMIN_DASH_KEY;
+  if (!key) return false;
+  const expected = crypto.createHash("sha256").update(`sp-admin-v1:${key}`).digest("hex");
+  const cookie = (await cookies()).get("sp_admin")?.value;
+  if (!cookie || cookie.length !== expected.length) return false;
+  try {
+    return crypto.timingSafeEqual(Buffer.from(cookie), Buffer.from(expected));
+  } catch {
+    return false;
+  }
+}
 
 const YELLOW = "#F7CE46";
 const GREEN = "#1EBA8F";
@@ -29,10 +47,8 @@ function Arrow({ label }: { label: string }) {
   );
 }
 
-export default async function FunnelDashboard({ searchParams }: { searchParams: Promise<{ key?: string }> }) {
-  const { key } = await searchParams;
-  const required = process.env.ADMIN_DASH_KEY;
-  if (required && key !== required) notFound();
+export default async function FunnelDashboard() {
+  if (!(await authorized())) notFound();
 
   const m = await getFunnelMetrics();
 
