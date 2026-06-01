@@ -11,13 +11,21 @@ export interface SendArgs {
   to: string;
   subject: string;
   html: string;
-  unsubUrl: string;
+  unsubUrl?: string; // marketing emails set this; transactional ones (receipts) don't
 }
 
 export async function sendEmail(args: SendArgs): Promise<{ id: string }> {
   const key = process.env.RESEND_API_KEY?.trim();
   if (!key) throw new Error("RESEND_API_KEY not set");
   const from = process.env.EMAIL_FROM?.trim() || DEFAULT_FROM;
+
+  // RFC 8058 one-click unsubscribe — only for marketing sends, not receipts.
+  const headers = args.unsubUrl
+    ? {
+        "List-Unsubscribe": `<${args.unsubUrl}>`,
+        "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
+      }
+    : undefined;
 
   const res = await fetch(RESEND_ENDPOINT, {
     method: "POST",
@@ -30,11 +38,7 @@ export async function sendEmail(args: SendArgs): Promise<{ id: string }> {
       to: [args.to],
       subject: args.subject,
       html: args.html,
-      // RFC 8058 one-click unsubscribe — keeps us out of spam folders.
-      headers: {
-        "List-Unsubscribe": `<${args.unsubUrl}>`,
-        "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
-      },
+      ...(headers ? { headers } : {}),
     }),
   });
 

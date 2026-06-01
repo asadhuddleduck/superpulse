@@ -8,6 +8,7 @@ import { checkRateLimit } from "@/lib/rate-limit";
 import { isAllowedOrigin } from "@/lib/origin-check";
 import { verifyUpsellToken } from "@/lib/upsell-token";
 import { logServerError, mapStripeErrorToUserSafe } from "@/lib/error-mapper";
+import { sendAuditConfirmation } from "@/lib/email/confirmation";
 
 const UPSELL_COOKIE = "wl-upsell";
 
@@ -254,7 +255,7 @@ export async function POST(request: Request) {
     );
   }
 
-  await db.execute({
+  const oneclickIns = await db.execute({
     sql: `INSERT INTO audit_purchases
             (stripe_session_id, stripe_payment_intent_id, stripe_customer_id,
              email, name, phone, instagram_handle, tier, amount_total, currency,
@@ -289,6 +290,10 @@ export async function POST(request: Request) {
     fbp: getCookieValue(request.headers, "_fbp"),
     fbc: getCookieValue(request.headers, "_fbc"),
   });
+
+  if (oneclickIns.rowsAffected > 0 && email) {
+    void sendAuditConfirmation(email, name.split(" ")[0] ?? "", "audit-97");
+  }
 
   return NextResponse.json({
     ok: true,
