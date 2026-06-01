@@ -6,6 +6,7 @@ const PUBLIC_PATH_PREFIXES = [
   "/waitlist",
   "/privacy",
   "/gate",
+  "/admin", // internal funnel dashboard — gated by its own ADMIN_DASH_KEY, not the site gate
   "/api/",
   "/_next/",
   "/favicon",

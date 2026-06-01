@@ -444,3 +444,12 @@ Lifecycle nurture for waitlist members. Lives in `src/lib/email/` + `src/app/api
 - **Unsubscribe:** one-click (RFC 8058) via `api/email/unsubscribe` (HMAC token over email). Suppression honoured everywhere.
 - **Scripts:** `scripts/backfill-email-sequence.mjs` (enrol existing waitlist, staggered anchors, `--live`), `scripts/render-emails.ts` (preview to `.email-preview/`), `scripts/apply-email-schema.mjs`, `scripts/run-due-once.ts` (one-shot kickoff that mirrors the cron). Preview/review before any change to prospect copy.
 - **Scaling note:** transactional caps at ~100/day on the Resend free tier. Fine at ~60 recipients with join-anchored spread. Past a few hundred active, stagger harder or move to Broadcasts.
+
+## Internal Funnel Dashboard (built 1 Jun 2026)
+
+`/admin/funnel?key=<ADMIN_DASH_KEY>` — read-only internal view of the whole customer journey + live metrics. Fires NO tracking (root layout has no pixel; the pixel is only in `MetaPixel.tsx` on the waitlist pages). Built so the founder can review the funnel + copy + numbers without walking the live site and polluting pixels/insights.
+
+- **Files:** `src/app/admin/funnel/{page.tsx, data.ts, metrics.ts}`. `data.ts` = static map of pages/copy/flow/decisions (update when funnel copy changes); `metrics.ts` = live Turso queries; `page.tsx` = server component, dark theme.
+- **Gate:** `/admin` is whitelisted in `middleware.ts` (bypasses the site gate) and protected by its own `ADMIN_DASH_KEY` (Vercel + .env.local) via `?key=`. Wrong/no key → 404.
+- **Shows:** KPIs (waitlist/quiz/qualified/£27/£97/subs/MRR), conversion ladder, the ad funnel step-by-step (copy + decisions + data writes), the email sequence panel, the SaaS journey states, and a "what's NOT SuperPulse" note (the legacy AI Ad Engine products share the same Stripe + Resend account).
+- **Not yet:** page screenshots/visual previews (shows copy text only), Resend open-rate aggregation (needs Resend webhooks → events table). Both are fast-follows.
