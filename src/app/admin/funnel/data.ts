@@ -91,7 +91,10 @@ export const FUNNEL: FunnelStep[] = [
       { condition: "Paid", target: "→ £97 upsell (/waitlist/upsell)" },
       { condition: "Cancelled", target: "→ back to Qualifier" },
     ],
-    writes: ["Stripe records the payment → app webhook writes audit_purchases (tier=audit-27)"],
+    writes: [
+      "Stripe records the payment → app webhook writes audit_purchases (tier=audit-27)",
+      "Buyer gets a branded SuperPulse confirmation email (audit PDF in 24h) — added 1 Jun 2026",
+    ],
   },
   {
     n: 4,
@@ -143,7 +146,7 @@ export const WEBHOOK_NOTE = {
   title: "Stripe webhook (behind the scenes)",
   route: "/api/webhook/stripe",
   detail:
-    "Stripe calls this server-to-server on every payment. It writes the real purchase records (audit_purchases), fires the CAPI Purchase event, and Slack-alerts every money event (£27, £97, refunds, disputes, new £300/mo subs, failed payments). MUST point at www.superpulse.io (the apex silently drops events — cost 3 lost payments on 29 May).",
+    "Stripe calls this server-to-server on every payment. It writes the real purchase records (audit_purchases), fires the CAPI Purchase event, and Slack-alerts every money event (£27, £97, refunds, disputes, new £300/mo subs, failed payments), and (since 1 Jun 2026) emails the buyer a branded SuperPulse audit confirmation (PDF in 24h). MUST point at www.superpulse.io (the apex silently drops events — cost 3 lost payments on 29 May).",
 };
 
 // The SaaS side: what happens after someone subscribes to the £300/mo product.
@@ -214,5 +217,5 @@ export const APP_JOURNEY: AppState[] = [
 export const NOT_SUPERPULSE = {
   title: "AI Ad Engine Trial — NOT part of SuperPulse",
   detail:
-    "The 'AI Ad Engine Trial' (£497) and 'AI Ad Engine Unlimited' you see in Stripe are the OLD Huddle Duck agency offer (sold at start.huddleduck.co.uk). They live in the SAME Stripe account and send from the SAME Resend account (huddleduck.co.uk) as SuperPulse, which is why everything shows up mixed together. None of it is part of the SuperPulse waitlist funnel.",
+    "The 'AI Ad Engine Trial' (£497) and 'AI Ad Engine Unlimited' you see in Stripe are the OLD Huddle Duck agency offer (sold at start.huddleduck.co.uk). They live in the SAME Stripe account and send from the SAME Resend account (huddleduck.co.uk) as SuperPulse, which is why everything shows up mixed together. None of it is part of the SuperPulse waitlist funnel. FIXED 1 Jun 2026: until then, the shared-account landing-page webhook was wrongly sending SuperPulse £27 audit buyers an 'AI Ad Engine Trial onboarding' email and firing a fake £497 Meta Purchase event. It's now guarded to ignore SuperPulse purchases. SuperPulse now sends its own correct audit confirmation. If you see those old AI Ad Engine emails to a SuperPulse buyer dated before 1 Jun, that's the cause.",
 };
