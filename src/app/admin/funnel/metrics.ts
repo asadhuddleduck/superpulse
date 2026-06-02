@@ -55,6 +55,18 @@ export interface FunnelMetrics {
     waitlistToAudit: number;
     auditToSub: number;
   };
+  v8: {
+    callVolume15d: number; // toward Meta's 1500-calls/15d App Review threshold
+    callSuccessRate: number; // 0-100 (must stay >85 for App Review)
+    appUsagePeak: number; // latest x-app-usage peak %, 0 if none
+    breakerTrips24h: number;
+    pendingIntents: number;
+    campaignsActive: number;
+    adsetsLive: number;
+    adsLive: number;
+    provisioning: number; // tenants mid-build
+    provisioned: number; // tenants built
+  };
 }
 
 export async function getFunnelMetrics(): Promise<FunnelMetrics> {
@@ -125,6 +137,36 @@ export async function getFunnelMetrics(): Promise<FunnelMetrics> {
   const enrolled = n((await one(`SELECT COUNT(*) c FROM email_sequence_state`)).c);
   const completions = n((await one(`SELECT COUNT(*) c FROM email_sequence_state WHERE status='completed'`)).c);
 
+  // --- v8 engine live ---
+  const cv = await one(
+    `SELECT COUNT(*) total, SUM(CASE WHEN status_code>=400 OR error IS NOT NULL THEN 1 ELSE 0 END) errors FROM api_call_log WHERE created_at >= datetime('now','-15 days')`,
+  );
+  const cvTotal = n(cv.total);
+  const cvErrors = n(cv.errors);
+  const auRow = await one(
+    `SELECT app_usage_json FROM rate_limit_log WHERE app_usage_json IS NOT NULL ORDER BY captured_at DESC LIMIT 1`,
+  );
+  let appUsagePeak = 0;
+  try {
+    if (auRow.app_usage_json) {
+      const u = JSON.parse(String(auRow.app_usage_json));
+      appUsagePeak = Math.max(n(u.call_count), n(u.total_cputime), n(u.total_time));
+    }
+  } catch {
+    appUsagePeak = 0;
+  }
+  const breakerTrips24h = n(
+    (await one(`SELECT COUNT(*) c FROM audit_events WHERE event_type='v8_circuit_breaker_tripped' AND created_at >= datetime('now','-1 day')`)).c,
+  );
+  const pendingIntents = n((await one(`SELECT COUNT(*) c FROM v8_intents WHERE status='pending'`)).c);
+  const campaignsActive = n((await one(`SELECT COUNT(*) c FROM tenant_campaigns WHERE status='ACTIVE'`)).c);
+  const adsetsLive = n((await one(`SELECT COUNT(*) c FROM location_adsets WHERE status='ACTIVE'`)).c);
+  const adsLive = n((await one(`SELECT COUNT(*) c FROM reel_ads WHERE status='ACTIVE'`)).c);
+  const provStates = await rows(
+    `SELECT provisioning_status s, COUNT(*) c FROM tenants WHERE provisioning_status IN ('provisioning','provisioned') GROUP BY s`,
+  );
+  const provMap = new Map(provStates.map((r) => [String(r.s), n(r.c)]));
+
   return {
     waitlist,
     signupsByDay,
@@ -159,6 +201,18 @@ export async function getFunnelMetrics(): Promise<FunnelMetrics> {
       a27To97: pct(audit97, audit27),
       waitlistToAudit: pct(anyAuditBuyers, waitlist),
       auditToSub: pct(auditToSub, anyAuditBuyers),
+    },
+    v8: {
+      callVolume15d: cvTotal,
+      callSuccessRate: cvTotal === 0 ? 100 : Math.round((1000 * (cvTotal - cvErrors)) / cvTotal) / 10,
+      appUsagePeak,
+      breakerTrips24h,
+      pendingIntents,
+      campaignsActive,
+      adsetsLive,
+      adsLive,
+      provisioning: provMap.get("provisioning") ?? 0,
+      provisioned: provMap.get("provisioned") ?? 0,
     },
   };
 }

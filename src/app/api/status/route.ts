@@ -8,6 +8,7 @@ import {
   getRecentErrorForTenant,
 } from "@/lib/queries/api-calls";
 import { getRecentEvents } from "@/lib/queries/audit-events";
+import { getProvisioningProgress } from "@/lib/queries/v8";
 
 export const dynamic = "force-dynamic";
 
@@ -38,6 +39,7 @@ export async function GET() {
     scanLastRun,
     lastError,
     recentActivity,
+    provisioningProgress,
   ] = await Promise.all([
     countPostsByTenant(tenant.id),
     getCampaignCounts(tenant.id),
@@ -45,6 +47,7 @@ export async function GET() {
     getLastSuccessfulCallByEndpoint(tenant.id, "%/media%"),
     getRecentErrorForTenant(tenant.id),
     getRecentEvents(tenant.id, 10),
+    getProvisioningProgress(tenant.id),
   ]);
 
   const health = computeHealth(scanLastRun, lastError !== null);
@@ -60,6 +63,10 @@ export async function GET() {
     impressions: perf.totalImpressions,
     lastError,
     health,
+    // v8: honest provisioning status. null for v7/legacy tenants (no v8 campaign).
+    provisioning: provisioningProgress
+      ? { state: tenant.provisioningStatus, ...provisioningProgress }
+      : null,
     recentActivity: recentActivity.map((e) => ({
       eventType: e.eventType,
       message: e.message,

@@ -214,6 +214,35 @@ export default async function FunnelDashboard() {
         </div>
       </section>
 
+      {/* v8 engine live */}
+      <section className="mb-10 rounded-xl border border-neutral-800 bg-neutral-900/40 p-5">
+        <h2 className="mb-3 text-sm font-bold uppercase tracking-wider text-neutral-400">v8 boost engine (live)</h2>
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <Kpi
+            label="App Review calls"
+            value={`${m.v8.callVolume15d}/1500`}
+            sub={`15d · ${m.v8.callSuccessRate}% ok`}
+            accent={m.v8.callSuccessRate >= 85 ? GREEN : "#e0726e"}
+          />
+          <Kpi
+            label="App usage peak"
+            value={`${m.v8.appUsagePeak}%`}
+            sub="last 1h sample"
+            accent={m.v8.appUsagePeak > 50 ? "#e0726e" : m.v8.appUsagePeak > 35 ? YELLOW : undefined}
+          />
+          <Kpi label="Breaker trips" value={String(m.v8.breakerTrips24h)} sub="last 24h" accent={m.v8.breakerTrips24h ? YELLOW : undefined} />
+          <Kpi label="Intent queue" value={String(m.v8.pendingIntents)} sub="pending" />
+          <Kpi label="Campaigns active" value={String(m.v8.campaignsActive)} accent={m.v8.campaignsActive ? GREEN : undefined} />
+          <Kpi label="Ad sets live" value={String(m.v8.adsetsLive)} />
+          <Kpi label="Ads live" value={String(m.v8.adsLive)} accent={m.v8.adsLive ? GREEN : undefined} />
+          <Kpi label="Provisioning" value={`${m.v8.provisioning}+${m.v8.provisioned}`} sub="building + built" />
+        </div>
+        <p className="mt-3 text-xs text-neutral-500">
+          Gated by V8_ENGINE_ENABLED. Call volume tracks toward Meta&apos;s 1,500-calls/15-day Advanced-Access
+          threshold; success rate must stay above 85%. App usage &gt;50% halts both lanes, &gt;35% halts creation.
+        </p>
+      </section>
+
       {/* Not SuperPulse */}
       <section className="mb-6 rounded-xl border p-4" style={{ borderColor: "#5a4a1f", background: "#1a160a" }}>
         <div className="text-sm font-bold" style={{ color: YELLOW }}>

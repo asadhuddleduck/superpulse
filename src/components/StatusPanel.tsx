@@ -15,6 +15,13 @@ interface StatusPayload {
   impressions: number;
   lastError: { endpoint: string; error: string; at: string } | null;
   health: Health;
+  provisioning?: {
+    state: string | null;
+    locationsTotal: number;
+    adsetsCreated: number;
+    adsActive: number;
+    adsTotal: number;
+  } | null;
   recentActivity: Array<{
     eventType: string;
     message: string;
@@ -112,6 +119,11 @@ export default function StatusPanel() {
 
   return (
     <section className="mb-10 space-y-4">
+      {/* Provisioning banner — honest "X/N ready" while the engine builds. */}
+      {data.provisioning && data.provisioning.state && data.provisioning.state !== "active" ? (
+        <ProvisioningBanner p={data.provisioning} />
+      ) : null}
+
       {/* Hero strip */}
       <div className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-6">
         <div className="flex items-center gap-2 mb-5">
@@ -158,6 +170,39 @@ export default function StatusPanel() {
         )}
       </div>
     </section>
+  );
+}
+
+function ProvisioningBanner({
+  p,
+}: {
+  p: { state: string | null; locationsTotal: number; adsetsCreated: number; adsActive: number; adsTotal: number };
+}) {
+  let message: string;
+  let tone = "border-viridian/30 bg-viridian/5 text-viridian";
+  if (p.state === "provision_failed") {
+    message = "We hit a snag setting up your locations. Our team has been alerted.";
+    tone = "border-red-500/30 bg-red-500/5 text-red-300";
+  } else if (p.state === "provisioned") {
+    if (p.adsTotal > 0 && p.adsActive < p.adsTotal) {
+      message = `All ${p.locationsTotal} locations set up. Final checks before your first boosts go live.`;
+    } else {
+      message = `Live across ${p.locationsTotal} location${p.locationsTotal === 1 ? "" : "s"}.`;
+    }
+  } else {
+    message = `Setting up your ${p.locationsTotal} location${p.locationsTotal === 1 ? "" : "s"}… ${p.adsetsCreated}/${p.locationsTotal} ready`;
+  }
+  const fillPct =
+    p.locationsTotal > 0 ? Math.min(100, Math.round((p.adsetsCreated / p.locationsTotal) * 100)) : 0;
+  return (
+    <div className={`rounded-xl border p-4 text-sm ${tone}`}>
+      <p className="font-medium">{message}</p>
+      {p.state === "provisioning" ? (
+        <div className="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-zinc-800">
+          <div className="h-full rounded-full bg-viridian transition-all" style={{ width: `${fillPct}%` }} />
+        </div>
+      ) : null}
+    </div>
   );
 }
 
