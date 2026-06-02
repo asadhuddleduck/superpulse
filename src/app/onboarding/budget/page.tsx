@@ -41,9 +41,9 @@ export default async function BudgetPage() {
         <BudgetForm locationCount={n} minPerLocationDailyPennies={PER_ADSET_FLOOR} />
 
         <p className="mt-6 text-xs text-zinc-500 leading-relaxed">
-          Start small. Most owners run £1–£3 per location per day. You can change
-          it any time, and SuperPulse keeps every location balanced within a 3×
-          range so none runs away.
+          We recommend £5 per location per day — enough to deliver steadily in
+          every area. You can change it any time, and SuperPulse keeps every
+          location balanced within a 3× range so none runs away.
         </p>
       </main>
     </div>

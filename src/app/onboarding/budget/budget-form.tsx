@@ -9,13 +9,15 @@ interface Props {
   minPerLocationDailyPennies: number;
 }
 
+const RECOMMENDED_PER_LOCATION_GBP = 5; // SuperPulse's recommended starting budget
+
 function gbp(pennies: number): string {
   return `£${(pennies / 100).toLocaleString("en-GB", { maximumFractionDigits: 0 })}`;
 }
 
 export function BudgetForm({ locationCount, minPerLocationDailyPennies }: Props) {
   const minGBP = minPerLocationDailyPennies / 100;
-  const [perLoc, setPerLoc] = useState<string>("2"); // £/location/day
+  const [perLoc, setPerLoc] = useState<string>(String(RECOMMENDED_PER_LOCATION_GBP)); // £/location/day
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -51,7 +53,10 @@ export function BudgetForm({ locationCount, minPerLocationDailyPennies }: Props)
   return (
     <form onSubmit={onSubmit} className="space-y-4">
       <label className="block">
-        <span className="text-sm text-zinc-400">Budget per location, per day</span>
+        <span className="flex items-center justify-between">
+          <span className="text-sm text-zinc-400">Budget per location, per day</span>
+          <span className="text-xs font-medium text-viridian">Recommended £{RECOMMENDED_PER_LOCATION_GBP}/day</span>
+        </span>
         <div className="mt-2 flex items-center rounded-lg border border-zinc-800 bg-zinc-900/40 px-4 focus-within:border-viridian">
           <span className="text-zinc-500 text-lg">£</span>
           <input
@@ -62,7 +67,7 @@ export function BudgetForm({ locationCount, minPerLocationDailyPennies }: Props)
             value={perLoc}
             onChange={(e) => setPerLoc(e.target.value)}
             className="w-full bg-transparent px-2 py-3 text-lg text-white outline-none"
-            placeholder="2"
+            placeholder={String(RECOMMENDED_PER_LOCATION_GBP)}
           />
           <span className="text-zinc-500 text-sm whitespace-nowrap">/day each</span>
         </div>
