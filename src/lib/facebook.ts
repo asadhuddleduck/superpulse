@@ -105,8 +105,10 @@ export async function exchangeForLongLivedToken(
 export async function fetchMe(
   token: string
 ): Promise<{ id: string; name: string; email?: string }> {
-  const url = `${GRAPH_API}/me?fields=id,name,email&access_token=${token}`;
-  const res = await fetch(url);
+  // Token via Authorization header, not the query string, so it can never leak
+  // into a URL that lands in a log/error (security review, 2026-06-02).
+  const url = `${GRAPH_API}/me?fields=id,name,email`;
+  const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
   await captureRateLimits(res, url);
   if (!res.ok) {
     const error = await res.text();
@@ -202,19 +204,36 @@ export interface IGMediaItem {
 /**
  * Fetch recent media for an Instagram Business Account.
  */
+const IG_MEDIA_PAGE_LIMIT = 50;
+const IG_MEDIA_MAX_PAGES = 6; // 300 most-recent media — generous for a 60-min scan
+
 export async function fetchIGMedia(
   igUserId: string,
   token: string
 ): Promise<IGMediaItem[]> {
-  const url = `${GRAPH_API}/${igUserId}/media?fields=id,caption,media_type,media_product_type,media_url,thumbnail_url,timestamp,like_count,comments_count&limit=25&access_token=${token}`;
-  const res = await fetch(url);
-  await captureRateLimits(res, url);
-  if (!res.ok) {
-    const error = await res.text();
-    throw new Error(`Failed to fetch IG media: ${error}`);
+  // Cursor-paginated so a chain posting >25 Reels between scans isn't truncated.
+  // Token via header; cursors rebuilt without it so no token reaches a URL.
+  const headers = { Authorization: `Bearer ${token}` };
+  const fields =
+    "id,caption,media_type,media_product_type,media_url,thumbnail_url,timestamp,like_count,comments_count";
+  const base = `${GRAPH_API}/${igUserId}/media?fields=${fields}&limit=${IG_MEDIA_PAGE_LIMIT}`;
+  let url: string | null = base;
+  const out: IGMediaItem[] = [];
+  let pages = 0;
+  while (url && pages < IG_MEDIA_MAX_PAGES) {
+    const res = await fetch(url, { headers });
+    await captureRateLimits(res, url);
+    if (!res.ok) {
+      const error = await res.text();
+      throw new Error(`Failed to fetch IG media: ${error}`);
+    }
+    const data = await res.json();
+    out.push(...((data.data ?? []) as IGMediaItem[]));
+    const after = data.paging?.cursors?.after as string | undefined;
+    url = after ? `${base}&after=${encodeURIComponent(after)}` : null;
+    pages++;
   }
-  const data = await res.json();
-  return data.data ?? [];
+  return out;
 }
 
 // ---------------------------------------------------------------------------
@@ -330,8 +349,8 @@ export async function fetchCampaigns(
     created_time: string;
   }[]
 > {
-  const url = `${GRAPH_API}/act_${adAccountId}/campaigns?fields=id,name,status,daily_budget,created_time&effective_status=['ACTIVE','PAUSED']&access_token=${token}`;
-  const res = await fetch(url);
+  const url = `${GRAPH_API}/act_${adAccountId}/campaigns?fields=id,name,status,daily_budget,created_time&effective_status=['ACTIVE','PAUSED']`;
+  const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
   await captureRateLimits(res, url);
   if (!res.ok) {
     const error = await res.text();
@@ -780,6 +799,9 @@ export interface AdInsightEntry {
  * of the chosen level. Default datePreset `last_7d`; pass `yesterday` from
  * the daily reconcile cron for a post-midnight final snapshot.
  */
+const INSIGHTS_PAGE_LIMIT = 500;
+const INSIGHTS_MAX_PAGES = 20; // 10k rows ≫ any single tenant's adsets/ads
+
 export async function fetchAdInsights(
   adAccountId: string,
   token: string,
@@ -787,13 +809,120 @@ export async function fetchAdInsights(
 ): Promise<AdInsightEntry[]> {
   const datePreset = options.datePreset ?? "last_7d";
   const level = options.level ?? "campaign";
-  const url = `${GRAPH_API}/act_${adAccountId}/insights?fields=impressions,reach,clicks,spend,actions,campaign_id,adset_id,ad_id&date_preset=${datePreset}&level=${level}&access_token=${token}`;
-  const res = await fetch(url);
-  await captureRateLimits(res, url);
-  if (!res.ok) {
-    const error = await res.text();
-    throw new Error(`Failed to fetch ad insights: ${error}`);
+  // Cursor-paginated. Without this, ad-level insights for a 62-adset / many-ad
+  // tenant silently truncate at Meta's default page size — corrupting every
+  // monitor stop-condition and decide budget call. Token via header.
+  const headers = { Authorization: `Bearer ${token}` };
+  const base = `${GRAPH_API}/act_${adAccountId}/insights?fields=impressions,reach,clicks,spend,actions,campaign_id,adset_id,ad_id&date_preset=${datePreset}&level=${level}&limit=${INSIGHTS_PAGE_LIMIT}`;
+  let url: string | null = base;
+  const out: AdInsightEntry[] = [];
+  let pages = 0;
+  while (url && pages < INSIGHTS_MAX_PAGES) {
+    const res = await fetch(url, { headers });
+    await captureRateLimits(res, url);
+    if (!res.ok) {
+      const error = await res.text();
+      throw new Error(`Failed to fetch ad insights: ${error}`);
+    }
+    const data = await res.json();
+    out.push(...((data.data ?? []) as AdInsightEntry[]));
+    const after = data.paging?.cursors?.after as string | undefined;
+    url = after ? `${base}&after=${encodeURIComponent(after)}` : null;
+    pages++;
   }
-  const data = await res.json();
-  return data.data ?? [];
+  if (pages >= INSIGHTS_MAX_PAGES && url) {
+    console.warn(`[fetchAdInsights] hit ${INSIGHTS_MAX_PAGES}-page cap for act_${adAccountId} level=${level} — results truncated`);
+  }
+  return out;
+}
+
+// ---------------------------------------------------------------------------
+// Batch API (additive — NOT yet wired into the creation lane; adopt post-soak)
+// ---------------------------------------------------------------------------
+
+export const BATCH_MAX_OPS = 50;
+
+export interface BatchOp {
+  method: "POST" | "GET" | "DELETE";
+  /** Version-less relative path, e.g. `act_123/adsets` — no leading slash, no host. */
+  relativeUrl: string;
+  body?: Record<string, unknown>;
+}
+export interface BatchOpResult {
+  index: number;
+  code: number;
+  ok: boolean;
+  body: unknown;
+  error: string | null;
+}
+export interface BatchResult {
+  results: BatchOpResult[];
+  okCount: number;
+  errorCount: number;
+}
+
+/**
+ * Meta Batch API — up to 50 ops/request. Collapses a 62-location cold provision
+ * from ~250 single calls to ~8 batch requests. Chunks sequentially so each
+ * chunk's rate-limit headers are captured between chunks.
+ *
+ * NEVER throws on a per-op failure (returns per-op results); throws only on a
+ * non-200 OUTER response (whole batch rejected — auth/malformed). Ops are NOT
+ * atomic: if op 30 of 62 fails, ops 1-29 already created real Meta nodes, so the
+ * caller MUST persist each created id and reconcile/cleanup the failures.
+ *
+ * Additive: the steady-state single-call fns stay. The creation lane keeps the
+ * proven single-call path until this is validated in the soak, then adopts it
+ * to drop a 62-location provision from ~days to ~1 hour. Token via header.
+ */
+export async function batchWrite(ops: BatchOp[], token: string): Promise<BatchResult> {
+  const results: BatchOpResult[] = [];
+  for (let start = 0; start < ops.length; start += BATCH_MAX_OPS) {
+    const chunk = ops.slice(start, start + BATCH_MAX_OPS);
+    const batchParam = chunk.map((op) => ({
+      method: op.method,
+      relative_url: op.relativeUrl,
+      body: op.body
+        ? Object.entries(op.body)
+            .map(
+              ([k, v]) =>
+                `${encodeURIComponent(k)}=${encodeURIComponent(typeof v === "object" ? JSON.stringify(v) : String(v))}`,
+            )
+            .join("&")
+        : undefined,
+    }));
+    const form = new URLSearchParams();
+    form.set("batch", JSON.stringify(batchParam));
+    const res = await fetch(GRAPH_API, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/x-www-form-urlencoded" },
+      body: form.toString(),
+    });
+    await captureRateLimits(res, `${GRAPH_API}/?batch_size=${chunk.length}`);
+    if (!res.ok) {
+      const error = await res.text();
+      throw new Error(`Batch request failed (${res.status}): ${error}`);
+    }
+    const arr = (await res.json()) as Array<{ code: number; body: string } | null>;
+    arr.forEach((entry, i) => {
+      const index = start + i;
+      if (!entry) {
+        results.push({ index, code: 0, ok: false, body: null, error: "null batch entry (op timed out)" });
+        return;
+      }
+      let parsed: unknown = null;
+      try {
+        parsed = entry.body ? JSON.parse(entry.body) : null;
+      } catch {
+        parsed = entry.body;
+      }
+      const ok = entry.code >= 200 && entry.code < 300;
+      const error = ok
+        ? null
+        : (parsed as { error?: { message?: string } })?.error?.message ?? `HTTP ${entry.code}`;
+      results.push({ index, code: entry.code, ok, body: parsed, error });
+    });
+  }
+  const okCount = results.filter((r) => r.ok).length;
+  return { results, okCount, errorCount: results.length - okCount };
 }
