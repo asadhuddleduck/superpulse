@@ -245,10 +245,138 @@ export async function recordReelAdRetirement(metaAdId: string, reason: string): 
     sql: `UPDATE reel_ads
             SET status         = 'PAUSED',
                 retired_at     = CURRENT_TIMESTAMP,
-                retired_reason = ?
+                retired_reason = ?,
+                provision_state = 'rejected'
           WHERE meta_ad_id = ?`,
     args: [reason, metaAdId],
   });
+}
+
+// ---------------------------------------------------------------------------
+// v8 provisioning + activation helpers (added 2026-06-02)
+// ---------------------------------------------------------------------------
+
+/** Set status (+ derived provision_state) on a single reel ad by Meta ad id. */
+export async function setReelAdStatus(metaAdId: string, status: string): Promise<void> {
+  await db.execute({
+    sql: `UPDATE reel_ads SET status = ?, provision_state = ? WHERE meta_ad_id = ?`,
+    args: [status, status === "ACTIVE" ? "active" : "created", metaAdId],
+  });
+}
+
+/** Set status (+ derived provision_state) on a single adset by Meta adset id. */
+export async function setLocationAdsetStatus(metaAdsetId: string, status: string): Promise<void> {
+  await db.execute({
+    sql: `UPDATE location_adsets SET status = ?, provision_state = ? WHERE meta_adset_id = ?`,
+    args: [status, status === "ACTIVE" ? "active" : "created", metaAdsetId],
+  });
+}
+
+/** Set campaign status by tenant id (one campaign per tenant). */
+export async function setTenantCampaignStatus(tenantId: string, status: string): Promise<void> {
+  await db.execute({
+    sql: `UPDATE tenant_campaigns SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE tenant_id = ?`,
+    args: [status, tenantId],
+  });
+}
+
+/** Stamp the 3× spread guardrail bounds (from budget-plan) onto an adset. */
+export async function recordAdsetGuardrails(
+  metaAdsetId: string,
+  minDailyBudgetPennies: number,
+  maxDailyBudgetPennies: number,
+): Promise<void> {
+  await db.execute({
+    sql: `UPDATE location_adsets
+            SET min_daily_budget_pennies = ?, max_daily_budget_pennies = ?, provision_state = 'created'
+          WHERE meta_adset_id = ?`,
+    args: [minDailyBudgetPennies, maxDailyBudgetPennies, metaAdsetId],
+  });
+}
+
+/**
+ * Set of "<location_adset_id>:<post_id>" keys for every reel_ad under a campaign
+ * (retired included — a retired/rejected pair must NOT be recreated). Used by
+ * the provision diff to find which (adset, post) pairs still need an ad.
+ */
+export async function getReelAdPairKeys(tenantCampaignId: number): Promise<Set<string>> {
+  const res = await db.execute({
+    sql: `SELECT ra.location_adset_id AS la_id, ra.post_id AS post_id
+            FROM reel_ads ra
+            JOIN location_adsets la ON la.id = ra.location_adset_id
+           WHERE la.tenant_campaign_id = ?`,
+    args: [tenantCampaignId],
+  });
+  return new Set(res.rows.map((r) => `${Number(r.la_id)}:${String(r.post_id)}`));
+}
+
+/** True if a reel_ad row already exists for this (adset, post) pair — CREATE_AD idempotency. */
+export async function reelAdExists(locationAdsetId: number, postId: string): Promise<boolean> {
+  const res = await db.execute({
+    sql: `SELECT 1 FROM reel_ads WHERE location_adset_id = ? AND post_id = ? LIMIT 1`,
+    args: [locationAdsetId, postId],
+  });
+  return res.rows.length > 0;
+}
+
+/** PAUSED, not-yet-retired reel ads with a creative — monitor's review-poll set. */
+export async function getPausedReelAdsForTenant(tenantId: string): Promise<ReelAdJoinedRow[]> {
+  const res = await db.execute({
+    sql: `SELECT
+            ra.*,
+            la.meta_adset_id    AS meta_adset_id,
+            tc.meta_campaign_id AS meta_campaign_id
+          FROM reel_ads ra
+          JOIN location_adsets la ON la.id = ra.location_adset_id
+          JOIN tenant_campaigns tc ON tc.id = la.tenant_campaign_id
+          WHERE tc.tenant_id = ?
+            AND ra.status = 'PAUSED'
+            AND ra.retired_at IS NULL
+            AND ra.meta_creative_id IS NOT NULL`,
+    args: [tenantId],
+  });
+  return res.rows.map((r) => {
+    const row = r as unknown as Record<string, unknown>;
+    return {
+      ...rowToReelAd(row),
+      metaAdsetId: row.meta_adset_id as string,
+      metaCampaignId: row.meta_campaign_id as string,
+    };
+  });
+}
+
+/** Provisioning progress for a tenant (StatusPanel + admin funnel). null when no v8 campaign. */
+export async function getProvisioningProgress(tenantId: string): Promise<{
+  locationsTotal: number;
+  adsetsCreated: number;
+  adsActive: number;
+  adsTotal: number;
+} | null> {
+  const camp = await db.execute({
+    sql: `SELECT id FROM tenant_campaigns WHERE tenant_id = ? LIMIT 1`,
+    args: [tenantId],
+  });
+  if (!camp.rows.length) return null;
+  const campaignId = Number(camp.rows[0].id);
+  const [locs, adsets, ads] = await Promise.all([
+    db.execute({ sql: `SELECT COUNT(*) AS n FROM locations WHERE tenant_id = ?`, args: [tenantId] }),
+    db.execute({ sql: `SELECT COUNT(*) AS n FROM location_adsets WHERE tenant_campaign_id = ?`, args: [campaignId] }),
+    db.execute({
+      sql: `SELECT
+              COUNT(*) AS total,
+              SUM(CASE WHEN status = 'ACTIVE' THEN 1 ELSE 0 END) AS active
+            FROM reel_ads ra
+            JOIN location_adsets la ON la.id = ra.location_adset_id
+            WHERE la.tenant_campaign_id = ?`,
+      args: [campaignId],
+    }),
+  ]);
+  return {
+    locationsTotal: Number(locs.rows[0]?.n ?? 0),
+    adsetsCreated: Number(adsets.rows[0]?.n ?? 0),
+    adsActive: Number(ads.rows[0]?.active ?? 0),
+    adsTotal: Number(ads.rows[0]?.total ?? 0),
+  };
 }
 
 // ---------------------------------------------------------------------------

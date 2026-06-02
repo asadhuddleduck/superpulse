@@ -18,6 +18,11 @@ export interface Tenant {
   stripeSubscriptionId: string | null;
   email: string | null;
   legacy: boolean;
+  // v8 provisioning + budget intake (added 2026-06-02). NULL on every existing
+  // tenant — a separate axis from `status` so the live dashboard gate is untouched.
+  provisioningStatus: string | null;
+  monthlyAdBudgetPennies: number | null;
+  budgetApprovedAt: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -39,6 +44,9 @@ function rowToTenant(row: Record<string, unknown>): Tenant {
     stripeSubscriptionId: (row.stripe_subscription_id as string | null) ?? null,
     email: (row.email as string | null) ?? null,
     legacy: Number(row.legacy ?? 0) === 1,
+    provisioningStatus: (row.provisioning_status as string | null) ?? null,
+    monthlyAdBudgetPennies: row.monthly_ad_budget_pennies == null ? null : Number(row.monthly_ad_budget_pennies),
+    budgetApprovedAt: (row.budget_approved_at as string | null) ?? null,
     createdAt: row.created_at as string,
     updatedAt: (row.updated_at as string) ?? (row.created_at as string),
   };
@@ -113,6 +121,61 @@ export async function getActiveTenants(): Promise<Tenant[]> {
           legacy = 1
           OR subscription_status IN ('active', 'trialing')
         )
+    `,
+    args: [],
+  });
+  return result.rows.map(rowToTenant);
+}
+
+// ---------------------------------------------------------------------------
+// v8 provisioning + budget intake (added 2026-06-02)
+// ---------------------------------------------------------------------------
+
+/** Set the budget-intake / provisioning axis. Does NOT touch tenants.status. */
+export async function setProvisioningStatus(
+  id: string,
+  status: "pending_locations" | "pending_budget" | "provisioning" | "provisioned" | "provision_failed",
+): Promise<void> {
+  await db.execute({
+    sql: `UPDATE tenants SET provisioning_status = ?, updated_at = ? WHERE id = ?`,
+    args: [status, new Date().toISOString(), id],
+  });
+}
+
+/**
+ * Record the client-approved monthly ad budget and flip the tenant into
+ * provisioning. Caller MUST have run validateTenantBudget first.
+ */
+export async function setTenantBudget(id: string, monthlyAdBudgetPennies: number): Promise<void> {
+  const now = new Date().toISOString();
+  await db.execute({
+    sql: `UPDATE tenants
+            SET monthly_ad_budget_pennies = ?,
+                budget_approved_at        = ?,
+                provisioning_status       = 'provisioning',
+                updated_at                = ?
+          WHERE id = ?`,
+    args: [monthlyAdBudgetPennies, now, now, id],
+  });
+}
+
+/**
+ * Tenants the provision cron processes: active, budget approved, NOT legacy
+ * (legacy clients never migrate to v8 — V8-SPEC §25), token present.
+ *
+ * Includes BOTH 'provisioning' (initial build in flight) AND 'provisioned'
+ * (initial build done) — the latter so newly-posted Reels keep getting ads on
+ * the ongoing diff. 'provision_failed' is excluded until the client re-approves
+ * a viable budget (which flips them back to 'provisioning').
+ */
+export async function getTenantsAwaitingProvision(): Promise<Tenant[]> {
+  const result = await db.execute({
+    sql: `
+      SELECT * FROM tenants
+      WHERE status = 'active'
+        AND provisioning_status IN ('provisioning', 'provisioned')
+        AND COALESCE(legacy, 0) = 0
+        AND meta_access_token IS NOT NULL
     `,
     args: [],
   });

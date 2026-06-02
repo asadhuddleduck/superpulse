@@ -15,6 +15,8 @@ import { writeAuditEvent } from "@/lib/queries/audit-events";
 // score = engagement / ageHours. Reel-specific quality signals (skip_rate,
 // avg_watch_time) deferred per V8-SPEC §"Open questions".
 
+export const maxDuration = 60;
+
 interface TenantScanResult {
   tenantId: string;
   reelsScanned: number;

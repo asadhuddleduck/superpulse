@@ -20,7 +20,16 @@ export type AuditEventType =
   | "v8_intent_executed"
   | "v8_intent_skipped"
   | "v8_circuit_breaker_tripped"
-  | "v8_ad_retired";
+  | "v8_ad_retired"
+  // v8 provisioning lane (added 2026-06-02).
+  | "v8_provision_started"
+  | "v8_provision_adset_created"
+  | "v8_provision_ad_created"
+  | "v8_provision_activated"
+  | "v8_provision_completed"
+  | "v8_provision_failed"
+  | "v8_batch_error"
+  | "insights_pagination_capped";
 
 export interface AuditEventRow {
   id: number;

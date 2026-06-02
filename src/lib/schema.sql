@@ -341,3 +341,29 @@ CREATE TABLE IF NOT EXISTS email_unsubscribes (
   reason TEXT,
   unsubscribed_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
+
+-- ===========================================================================
+-- v8 provisioning + budget intake (added 2026-06-02). All additive: every new
+-- column defaults NULL/pending for existing rows, so legacy + active tenants
+-- behave identically. runSchema() swallows "duplicate column"/"already exists".
+-- ===========================================================================
+
+-- Budget-intake axis. provisioning_status is SEPARATE from tenants.status
+-- (which is load-bearing for the live dashboard gate) — it is NULL for every
+-- existing tenant, so no existing tenant is ever redirected or re-provisioned.
+-- Values: NULL | pending_locations | pending_budget | provisioning | provisioned | provision_failed
+ALTER TABLE tenants ADD COLUMN provisioning_status TEXT;
+ALTER TABLE tenants ADD COLUMN monthly_ad_budget_pennies INTEGER;
+ALTER TABLE tenants ADD COLUMN budget_approved_at TEXT;
+CREATE INDEX IF NOT EXISTS idx_tenants_provisioning ON tenants(provisioning_status);
+
+-- Provisioning-progress markers on the v8 creation tables (observability + a
+-- cheap "what's still PAUSED" read). pending -> created -> active; reel_ads may
+-- also be in_review | rejected. NULL/pending for any pre-existing soak rows.
+ALTER TABLE location_adsets ADD COLUMN provision_state TEXT DEFAULT 'pending';
+ALTER TABLE reel_ads ADD COLUMN provision_state TEXT DEFAULT 'pending';
+
+-- Indexes for the provision-cron diff + the creation-lane intent drain at
+-- 62-adset scale (intent_type-scoped, distinct from idx_v8_intents_pending).
+CREATE INDEX IF NOT EXISTS idx_reel_ads_postid ON reel_ads(post_id);
+CREATE INDEX IF NOT EXISTS idx_v8_intents_type_pending ON v8_intents(tenant_id, intent_type, status);
