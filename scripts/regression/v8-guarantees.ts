@@ -25,9 +25,12 @@ async function main() {
   console.log("[regression] v8 non-breaking guarantees\n");
 
   // --- 1. Budget math (pure) ---
-  const { validateTenantBudget, planAdsetBudgets, PER_ADSET_FLOOR } = await import("@/lib/v8/budget-plan");
+  const { validateTenantBudget, planAdsetBudgets, PER_ADSET_FLOOR, monthlyFromPerLocationDaily } = await import("@/lib/v8/budget-plan");
   const v300 = validateTenantBudget(30000, 62); // £300/mo across 62
   assert(!v300.ok, "£300/mo across 62 locations is rejected");
+  // Per-location-per-day input round-trips exactly to the per-adset daily budget.
+  const m2 = monthlyFromPerLocationDaily(200, 62); // £2/day/location
+  assert(planAdsetBudgets(m2, 62).perAdsetDailyPennies === 200, "£2/day/location → £2/day per adset (round-trip)");
   assert(v300.minMonthlyPennies >= 180000 && v300.minMonthlyPennies <= 190000, `62-location min ≈ £1,884/mo (got £${(v300.minMonthlyPennies / 100).toFixed(0)})`);
   const plan = planAdsetBudgets(v300.minMonthlyPennies, 62);
   assert(plan.perAdsetDailyPennies === PER_ADSET_FLOOR, "even split floors at £1/day/adset");

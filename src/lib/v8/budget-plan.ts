@@ -17,6 +17,16 @@ export const META_MIN_ADSET_PENNIES = 100; // £1.00/day
 export const PER_ADSET_FLOOR = Math.max(FLOOR_PENNIES, META_MIN_ADSET_PENNIES);
 export const DAYS_PER_MONTH = 30.4;
 
+/**
+ * Convert a per-location, per-day figure (what the client actually inputs — a
+ * small, friendly number like £2) into the stored monthly total. Round-trips
+ * exactly back through planAdsetBudgets for integer-penny inputs, so the engine
+ * contract (monthly_ad_budget_pennies) is unchanged.
+ */
+export function monthlyFromPerLocationDaily(perLocationDailyPennies: number, locationCount: number): number {
+  return Math.round(perLocationDailyPennies * Math.max(1, locationCount) * DAYS_PER_MONTH);
+}
+
 export interface AdsetBudgetPlan {
   /** Even split, floored at PER_ADSET_FLOOR. Written to each location_adsets row. */
   perAdsetDailyPennies: number;

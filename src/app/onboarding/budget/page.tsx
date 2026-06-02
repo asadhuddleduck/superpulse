@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { getTenantCookie } from "@/lib/auth";
 import { getTenantById } from "@/lib/queries/tenants";
 import { getLocationsForTenant } from "@/lib/queries/locations";
-import { validateTenantBudget } from "@/lib/v8/budget-plan";
+import { PER_ADSET_FLOOR } from "@/lib/v8/budget-plan";
 import { BudgetForm } from "./budget-form";
 
 export const metadata: Metadata = {
@@ -22,8 +22,6 @@ export default async function BudgetPage() {
 
   const locations = await getLocationsForTenant(tenantId);
   const n = locations.length;
-  // n must be >= 1 to reach this step; the locations gate enforces it.
-  const floor = validateTenantBudget(0, Math.max(1, n));
 
   return (
     <div className="flex flex-1 flex-col items-center justify-center min-h-screen bg-black px-6 py-12">
@@ -34,22 +32,18 @@ export default async function BudgetPage() {
             <span className="text-sandstorm">Pulse</span>
           </h1>
           <p className="mt-3 text-zinc-400 leading-relaxed">
-            Set the monthly ad budget SuperPulse can spend across your{" "}
-            {n} location{n === 1 ? "" : "s"}. This is your Meta ad spend, billed
-            on your own ad account — separate from your SuperPulse subscription.
+            How much should each location spend per day? Every location runs as
+            its own local ad set. This is your Meta ad spend, billed on your own
+            ad account — separate from your SuperPulse subscription.
           </p>
         </header>
 
-        <BudgetForm
-          locationCount={n}
-          minMonthlyPennies={floor.minMonthlyPennies}
-          minDailyPennies={floor.minDailyPennies}
-        />
+        <BudgetForm locationCount={n} minPerLocationDailyPennies={PER_ADSET_FLOOR} />
 
         <p className="mt-6 text-xs text-zinc-500 leading-relaxed">
-          Every location runs as its own local ad set. Meta needs at least about
-          £1/day per location to deliver, so your budget has to cover all{" "}
-          {n} of them. You can change this later.
+          Start small. Most owners run £1–£3 per location per day. You can change
+          it any time, and SuperPulse keeps every location balanced within a 3×
+          range so none runs away.
         </p>
       </main>
     </div>

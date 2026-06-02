@@ -2,16 +2,15 @@ import { NextRequest, NextResponse } from "next/server";
 import { getTenantCookie } from "@/lib/auth";
 import { getTenantById, setTenantBudget } from "@/lib/queries/tenants";
 import { getLocationsForTenant } from "@/lib/queries/locations";
-import { validateTenantBudget } from "@/lib/v8/budget-plan";
+import { validateTenantBudget, monthlyFromPerLocationDaily, PER_ADSET_FLOOR } from "@/lib/v8/budget-plan";
 import { writeAuditEvent } from "@/lib/queries/audit-events";
 
 interface BudgetBody {
-  monthlyBudgetPennies?: unknown;
+  // The client inputs a small per-location, per-day figure (e.g. £2). We derive
+  // and store the monthly total so the engine contract is unchanged.
+  perLocationDailyPennies?: unknown;
 }
 
-// Records the client-approved monthly ad budget and flips provisioning_status
-// → 'provisioning' (the provision cron then builds campaign + N adsets). Rejects
-// budgets that can't fund the per-adset minimum across the tenant's locations.
 export async function POST(request: NextRequest) {
   const tenantId = await getTenantCookie();
   if (!tenantId) return NextResponse.json({ error: "Not signed in" }, { status: 401 });
@@ -23,10 +22,19 @@ export async function POST(request: NextRequest) {
   }
 
   const body = (await request.json().catch(() => ({}))) as BudgetBody;
-  const monthlyBudgetPennies =
-    typeof body.monthlyBudgetPennies === "number" ? Math.round(body.monthlyBudgetPennies) : NaN;
-  if (!Number.isFinite(monthlyBudgetPennies) || monthlyBudgetPennies <= 0) {
-    return NextResponse.json({ error: "Enter a monthly budget" }, { status: 400 });
+  const perLocationDailyPennies =
+    typeof body.perLocationDailyPennies === "number" ? Math.round(body.perLocationDailyPennies) : NaN;
+  if (!Number.isFinite(perLocationDailyPennies) || perLocationDailyPennies <= 0) {
+    return NextResponse.json({ error: "Enter a daily budget per location" }, { status: 400 });
+  }
+  if (perLocationDailyPennies < PER_ADSET_FLOOR) {
+    return NextResponse.json(
+      {
+        error: `Meta needs at least £${(PER_ADSET_FLOOR / 100).toFixed(0)}/day per location to deliver.`,
+        minPerLocationDailyPennies: PER_ADSET_FLOOR,
+      },
+      { status: 400 },
+    );
   }
 
   const locations = await getLocationsForTenant(tenantId);
@@ -34,20 +42,19 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Add at least one location first" }, { status: 400 });
   }
 
+  const monthlyBudgetPennies = monthlyFromPerLocationDaily(perLocationDailyPennies, locations.length);
+  // Belt-and-braces: the stored monthly must still clear the per-adset floor.
   const check = validateTenantBudget(monthlyBudgetPennies, locations.length);
   if (!check.ok) {
-    return NextResponse.json(
-      { error: check.message, minMonthlyPennies: check.minMonthlyPennies, minDailyPennies: check.minDailyPennies },
-      { status: 400 },
-    );
+    return NextResponse.json({ error: check.message }, { status: 400 });
   }
 
   await setTenantBudget(tenantId, monthlyBudgetPennies);
   await writeAuditEvent(
     tenantId,
     "budget_approved",
-    `Budget approved: £${(monthlyBudgetPennies / 100).toFixed(0)}/mo across ${locations.length} locations`,
-    { monthlyBudgetPennies, locations: locations.length },
+    `Budget approved: £${(perLocationDailyPennies / 100).toFixed(2)}/day per location × ${locations.length} = £${(monthlyBudgetPennies / 100).toFixed(0)}/mo`,
+    { perLocationDailyPennies, monthlyBudgetPennies, locations: locations.length },
   );
 
   return NextResponse.json({ ok: true });
