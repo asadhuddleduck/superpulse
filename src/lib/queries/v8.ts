@@ -364,7 +364,7 @@ export async function getProvisioningProgress(tenantId: string): Promise<{
     db.execute({
       sql: `SELECT
               COUNT(*) AS total,
-              SUM(CASE WHEN status = 'ACTIVE' THEN 1 ELSE 0 END) AS active
+              SUM(CASE WHEN ra.status = 'ACTIVE' THEN 1 ELSE 0 END) AS active
             FROM reel_ads ra
             JOIN location_adsets la ON la.id = ra.location_adset_id
             WHERE la.tenant_campaign_id = ?`,
