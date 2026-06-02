@@ -38,6 +38,18 @@ export default async function DashboardLayout({
     redirect("/onboarding/select-ad-account");
   }
 
+  // v8 provisioning gates (additive, flag-gated). provisioning_status is NULL
+  // for every existing tenant (legacy + active + in-flight) → no redirect, the
+  // live funnel is byte-identical with V8_ENGINE_ENABLED off.
+  if (process.env.V8_ENGINE_ENABLED === "on" && !tenant.legacy) {
+    if (tenant.provisioningStatus === "pending_locations") {
+      redirect("/onboarding/locations");
+    }
+    if (tenant.provisioningStatus === "pending_budget") {
+      redirect("/onboarding/budget");
+    }
+  }
+
   let user: { id: string; name: string; email?: string };
   try {
     user = await fetchMe(tenant.metaAccessToken);

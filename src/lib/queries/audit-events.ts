@@ -29,7 +29,8 @@ export type AuditEventType =
   | "v8_provision_completed"
   | "v8_provision_failed"
   | "v8_batch_error"
-  | "insights_pagination_capped";
+  | "insights_pagination_capped"
+  | "budget_approved";
 
 export interface AuditEventRow {
   id: number;
