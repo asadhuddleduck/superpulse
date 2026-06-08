@@ -506,6 +506,63 @@ export async function deleteCampaign(
  * DO NOT use POST_ENGAGEMENT + ON_POST — those ads silently fail to appear
  * in Ads Manager even though the API returns success IDs.
  */
+/**
+ * Single source of truth for the ad-set creation payload (targeting, budget,
+ * placements). Shared by the single-call `createAdSet` and the Batch-API
+ * `provisionAdsetsBatch` (src/lib/v8/batch-provision.ts) so the two paths can
+ * NEVER drift on targeting/placement config. `access_token` is added by the
+ * caller (single-call puts it in the body; batch puts it in the Authorization
+ * header), so it is deliberately NOT included here.
+ */
+export interface AdSetCreateSpec {
+  campaignId: string;
+  name: string;
+  /** Per-adset daily budget in POUNDS (converted to pence here). */
+  dailyBudgetPounds: number;
+  radiusMiles: number;
+  lat: number;
+  lng: number;
+  pageId: string;
+}
+
+export function buildAdSetCreateBody(spec: AdSetCreateSpec): Record<string, unknown> {
+  return {
+    name: spec.name,
+    campaign_id: spec.campaignId,
+    daily_budget: Math.round(spec.dailyBudgetPounds * 100), // pence
+    billing_event: "IMPRESSIONS",
+    optimization_goal: "VISIT_INSTAGRAM_PROFILE",
+    destination_type: "INSTAGRAM_PROFILE",
+    promoted_object: { page_id: spec.pageId },
+    bid_strategy: "LOWEST_COST_WITHOUT_CAP",
+    targeting: {
+      geo_locations: {
+        custom_locations: [
+          {
+            latitude: spec.lat,
+            longitude: spec.lng,
+            radius: spec.radiusMiles,
+            distance_unit: "mile",
+          },
+        ],
+      },
+      publisher_platforms: ["instagram"],
+      // Restrict placements to Reels + Stories on mobile only (per AD-CONFIG-TWEAKS).
+      // profile_reels omitted: verified against Meta v25.0 targeting-spec docs on
+      // 28 Apr 2026 — not in the documented enum (stream, story, reels, explore,
+      // explore_home, ig_search). The "reels" position covers profile-reel surfaces.
+      instagram_positions: ["reels", "story"],
+      device_platforms: ["mobile"],
+      // Opt out of Advantage Audience (the modern "Detailed Targeting Expansion").
+      // Meta defaults this to 1 if omitted — confirmed via live GET on a paused
+      // SuperPulse campaign 2026-05-04 (R2 inspection). With it ON, Meta expands
+      // the audience beyond our 5-mile geo-radius, defeating the locality promise.
+      targeting_automation: { advantage_audience: 0 },
+    },
+    status: "PAUSED",
+  };
+}
+
 export async function createAdSet(
   campaignId: string,
   adAccountId: string,
@@ -522,39 +579,15 @@ export async function createAdSet(
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      name,
-      campaign_id: campaignId,
-      daily_budget: Math.round(dailyBudget * 100), // pence
-      billing_event: "IMPRESSIONS",
-      optimization_goal: "VISIT_INSTAGRAM_PROFILE",
-      destination_type: "INSTAGRAM_PROFILE",
-      promoted_object: { page_id: pageId },
-      bid_strategy: "LOWEST_COST_WITHOUT_CAP",
-      targeting: {
-        geo_locations: {
-          custom_locations: [
-            {
-              latitude: lat,
-              longitude: lng,
-              radius: radiusMiles,
-              distance_unit: "mile",
-            },
-          ],
-        },
-        publisher_platforms: ["instagram"],
-        // Restrict placements to Reels + Stories on mobile only (per AD-CONFIG-TWEAKS).
-        // profile_reels omitted: verified against Meta v25.0 targeting-spec docs on
-        // 28 Apr 2026 — not in the documented enum (stream, story, reels, explore,
-        // explore_home, ig_search). The "reels" position covers profile-reel surfaces.
-        instagram_positions: ["reels", "story"],
-        device_platforms: ["mobile"],
-        // Opt out of Advantage Audience (the modern "Detailed Targeting Expansion").
-        // Meta defaults this to 1 if omitted — confirmed via live GET on a paused
-        // SuperPulse campaign 2026-05-04 (R2 inspection). With it ON, Meta expands
-        // the audience beyond our 5-mile geo-radius, defeating the locality promise.
-        targeting_automation: { advantage_audience: 0 },
-      },
-      status: "PAUSED",
+      ...buildAdSetCreateBody({
+        campaignId,
+        name,
+        dailyBudgetPounds: dailyBudget,
+        radiusMiles,
+        lat,
+        lng,
+        pageId,
+      }),
       access_token: token,
     }),
   });

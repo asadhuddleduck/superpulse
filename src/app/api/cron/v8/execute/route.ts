@@ -45,6 +45,11 @@ import {
   CREATION_BREAKER_THRESHOLD,
 } from "@/lib/v8/circuit-breaker";
 import { getLocationsForTenant, type Location } from "@/lib/queries/locations";
+import {
+  provisionAdsetsBatch,
+  type AdSetProvisionSpec,
+  type AdSetProvisionOutcome,
+} from "@/lib/v8/batch-provision";
 import { classifyMetaError } from "@/lib/meta-errors";
 import { markPostIneligible } from "@/lib/queries/posts";
 import { logApiCall } from "@/lib/queries/api-calls";
@@ -282,7 +287,28 @@ async function processCreationIntents(
   const plan = planAdsetBudgets(tenant.monthlyAdBudgetPennies ?? 0, Math.max(1, locations.length));
   let campaignStatus = campaign.status;
 
-  for (const intent of intents) {
+  // Flag-gated Batch-API pre-pass (V8_BATCH_CREATION). OFF by default → returns
+  // null and the single-call loop below runs over ALL intents, byte-identical to
+  // the proven path. ON → PROVISION_ADSET intents are created in one Batch
+  // request, their DB writes done here, and they are excluded from the loop;
+  // CREATE_AD/ACTIVATE_AD always stay single-call (creative/identity + cascade
+  // ordering don't batch). Unvalidated against live Meta until the soak.
+  const batchedIntentIds = await maybeBatchProvisionAdsets(
+    intents,
+    tenant,
+    token,
+    campaign,
+    adAccountId,
+    locationsById,
+    plan,
+    adsetsByMetaId,
+    result,
+  );
+  const loopIntents = batchedIntentIds
+    ? intents.filter((i) => !batchedIntentIds.has(i.id))
+    : intents;
+
+  for (const intent of loopIntents) {
     try {
       if (intent.intentType === "PROVISION_ADSET") {
         const payload = intent.payload as ProvisionAdsetPayload;
@@ -406,6 +432,112 @@ async function processCreationIntents(
       });
     }
   }
+}
+
+// Flag-gated Batch-API provisioning for PROVISION_ADSET intents. Returns the set
+// of intent ids it has fully handled (done/skipped/errored) so the caller's
+// single-call loop skips them; returns null when the flag is OFF so the loop runs
+// unchanged. The success-side DB writes mirror the single-call PROVISION_ADSET
+// branch exactly (upsert → guardrails → cache → done → audit). On a whole-batch
+// rejection the un-skipped intents are left for the single-call loop to retry.
+// NOTE: throughput is still bounded by MAX_CREATION_PER_TICK on the drain; raise
+// that during a soak to let one Batch request carry more than a handful of ops.
+async function maybeBatchProvisionAdsets(
+  intents: IntentRow[],
+  tenant: Tenant,
+  token: string,
+  campaign: TenantCampaignRow,
+  adAccountId: string,
+  locationsById: Map<number, Location>,
+  plan: ReturnType<typeof planAdsetBudgets>,
+  adsetsByMetaId: Map<string, LocationAdsetRow>,
+  result: TenantExecuteResult,
+): Promise<Set<number> | null> {
+  if (process.env.V8_BATCH_CREATION !== "on") return null;
+  if (!tenant.pageId) return null;
+  const provision = intents.filter((i) => i.intentType === "PROVISION_ADSET");
+  if (provision.length < 2) return null; // 0-1 adsets → no batch win; let the loop do it
+  const cleanAdAccountId = adAccountId.startsWith("act_") ? adAccountId.slice(4) : adAccountId;
+
+  const handled = new Set<number>();
+  const specs: AdSetProvisionSpec[] = [];
+  for (const intent of provision) {
+    const payload = intent.payload as ProvisionAdsetPayload;
+    const loc = locationsById.get(payload.locationId);
+    if (!loc) {
+      await markIntentSkipped(intent.id, `location ${payload.locationId} gone`);
+      result.skipped++;
+      handled.add(intent.id);
+      continue;
+    }
+    specs.push({
+      intentId: intent.id,
+      locationId: loc.id,
+      campaignId: campaign.metaCampaignId,
+      name: `SuperPulse | ${loc.name}`,
+      dailyBudgetPounds: plan.perAdsetDailyPennies / 100,
+      radiusMiles: loc.radiusMiles,
+      lat: loc.latitude,
+      lng: loc.longitude,
+      pageId: tenant.pageId,
+    });
+  }
+  if (specs.length === 0) return handled;
+
+  let outcomes: AdSetProvisionOutcome[];
+  const callStart = Date.now();
+  try {
+    outcomes = await provisionAdsetsBatch(specs, adAccountId, token);
+  } catch (err) {
+    // Whole-batch rejection (auth/malformed). Don't claim these intents — leave
+    // them for the single-call loop to retry this tick so one bad batch can't
+    // stall provisioning.
+    await writeAuditEvent(tenant.id, "v8_intent_skipped", "adset batch rejected, falling back to single-call", {
+      error: (err instanceof Error ? err.message : String(err)).slice(0, 200),
+      count: specs.length,
+    });
+    return handled; // only the missing-location skips; specs fall through to the loop
+  }
+
+  const durationMs = Date.now() - callStart;
+  for (const o of outcomes) {
+    handled.add(o.intentId);
+    await logApiCall({
+      tenantId: tenant.id,
+      endpoint: `/act_${cleanAdAccountId}/adsets`,
+      method: "POST",
+      statusCode: o.ok ? 200 : 500,
+      durationMs,
+      error: o.ok ? undefined : o.error ?? undefined,
+    });
+    if (o.ok && o.metaAdsetId) {
+      await upsertLocationAdset({ tenantCampaignId: campaign.id, locationId: o.locationId, metaAdsetId: o.metaAdsetId, status: "PAUSED", dailyBudgetPennies: plan.perAdsetDailyPennies });
+      await recordAdsetGuardrails(o.metaAdsetId, plan.minDailyBudgetPennies, plan.maxDailyBudgetPennies);
+      adsetsByMetaId.set(o.metaAdsetId, {
+        id: 0,
+        tenantCampaignId: campaign.id,
+        locationId: o.locationId,
+        metaAdsetId: o.metaAdsetId,
+        status: "PAUSED",
+        dailyBudgetPennies: plan.perAdsetDailyPennies,
+        minDailyBudgetPennies: plan.minDailyBudgetPennies,
+        maxDailyBudgetPennies: plan.maxDailyBudgetPennies,
+        currentSpendTodayPennies: 0,
+        lastGuardrailWriteAt: null,
+        createdAt: new Date().toISOString(),
+      });
+      await markIntentDone(o.intentId);
+      result.done++;
+      result.created++;
+      await writeAuditEvent(tenant.id, "v8_provision_adset_created", `Ad set created (batch) for location ${o.locationId}`, { metaAdsetId: o.metaAdsetId, locationId: o.locationId, batch: true });
+    } else {
+      // Per-op failure → mark errored; the provision cron re-enqueues next tick.
+      await markIntentErrored(o.intentId, o.error ?? "adset batch op failed");
+      result.errored++;
+      await writeAuditEvent(tenant.id, "v8_intent_skipped", "adset batch op failed", { intentId: o.intentId, locationId: o.locationId, error: (o.error ?? "").slice(0, 200) });
+    }
+  }
+  return handled;
 }
 
 const TENANT_CONCURRENCY = 5;
