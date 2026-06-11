@@ -31,6 +31,17 @@ export default function PricingPage({
       </header>
 
       <main className="max-w-2xl mx-auto px-6 py-16">
+        <div className="mb-8 rounded-lg border border-sandstorm/30 bg-sandstorm/5 px-4 py-3 text-sm text-zinc-200">
+          <strong className="text-sandstorm">SuperPulse is waitlist only right now.</strong>{" "}
+          You can subscribe today, but a paid account still joins the waitlist.
+          We bring accounts live in order and email you when yours is switched
+          on. Not ready to subscribe?{" "}
+          <Link href="/waitlist" className="text-viridian hover:underline">
+            Join the free waitlist
+          </Link>
+          .
+        </div>
+
         <PastDueBanner searchParams={searchParams} />
 
         <h1 className="text-3xl sm:text-4xl font-bold mb-3">
