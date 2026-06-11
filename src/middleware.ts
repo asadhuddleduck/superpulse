@@ -10,6 +10,12 @@ const PUBLIC_PATH_PREFIXES = [
   "/api/",
   "/_next/",
   "/favicon",
+  // Public purchase path (11 Jun 2026): buy → onboard → dashboard without the
+  // beta gate. Dashboard + onboarding still enforce their own auth/tenant state.
+  "/pricing",
+  "/onboarding",
+  "/login",
+  "/dashboard",
 ];
 
 const PUBLIC_FILES = new Set(["/robots.txt", "/sitemap.xml"]);
