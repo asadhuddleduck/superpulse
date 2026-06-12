@@ -10,6 +10,8 @@ const DEFAULTS: Record<string, LimitConfig> = {
   waitlist: { windowSeconds: 60, maxHits: 10 },
   qualify: { windowSeconds: 60, maxHits: 5 },
   upsell: { windowSeconds: 60, maxHits: 3 },
+  demo: { windowSeconds: 60, maxHits: 3 },
+  "audit-offer": { windowSeconds: 60, maxHits: 5 },
 };
 
 export type RateLimitResult = { ok: true } | { ok: false; retryAfterSeconds: number };

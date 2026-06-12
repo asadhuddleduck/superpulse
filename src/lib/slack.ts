@@ -1,5 +1,12 @@
 let warnedMissingEnv = false;
 
+// Slack incoming webhooks parse mrkdwn in `text`: literal < > enable
+// <!channel> pings and <url|label> spoofed links. Escape every interpolated
+// user-supplied value before building a notifySlack message.
+export function escapeSlackText(value: string): string {
+  return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
 export async function notifySlack(text: string): Promise<void> {
   const webhookUrl = process.env.SLACK_WEBHOOK_URL?.trim();
   if (!webhookUrl) {

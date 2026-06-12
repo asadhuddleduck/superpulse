@@ -367,3 +367,15 @@ ALTER TABLE reel_ads ADD COLUMN provision_state TEXT DEFAULT 'pending';
 -- 62-adset scale (intent_type-scoped, distinct from idx_v8_intents_pending).
 CREATE INDEX IF NOT EXISTS idx_reel_ads_postid ON reel_ads(post_id);
 CREATE INDEX IF NOT EXISTS idx_v8_intents_type_pending ON v8_intents(tenant_id, intent_type, status);
+
+-- ===========================================================================
+-- Demo branch (added 2026-06-12). locations_count >= 3 at quiz time unlocks a
+-- 1 on 1 demo offer before the £27 audit offer. demo_qualified freezes the
+-- rule at submission time. demo_offer_choice: 'yes' | 'no' | NULL (never
+-- shown). demo_requested_at is set once, on the first yes, and gates the
+-- Slack alert so re-submits never double-fire. Written ONLY by /api/demo —
+-- the quiz upsert must never touch demo_offer_choice / demo_requested_at.
+-- ===========================================================================
+ALTER TABLE qualifier_responses ADD COLUMN demo_qualified INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE qualifier_responses ADD COLUMN demo_offer_choice TEXT;
+ALTER TABLE qualifier_responses ADD COLUMN demo_requested_at TEXT;

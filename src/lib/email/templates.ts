@@ -32,7 +32,11 @@ const C = {
   body: "#3C3C45", // body text
   mist: "#73737E", // muted
 };
-const AUDIT_BASE = "https://www.superpulse.io/waitlist/qualify";
+// Points at the offer page (not the quiz): email arrivals carry buying
+// intent and the offer page hydrates the lead from these query params.
+// Re-routing them through the quiz risked silently downgrading a recorded
+// locations count to the form default.
+const AUDIT_BASE = "https://www.superpulse.io/waitlist/offer";
 const FONT =
   "Inter,-apple-system,'SF Pro Display','Helvetica Neue',Helvetica,Arial,sans-serif";
 

@@ -48,38 +48,89 @@ export const FUNNEL: FunnelStep[] = [
     writes: [
       "Turso: waitlist row (upsert by email) + UTM first/last touch",
       "Meta Pixel + CAPI: Lead event",
-      "Slack: '🎉 New SuperPulse waitlist signup'",
       "Email: welcome + enrols in the 10-week nurture sequence",
+      "(Slack signup alert removed 12 Jun 2026 — Slack is demo requests + purchases only)",
     ],
   },
   {
     n: 2,
     id: "qualify",
-    title: "Qualifier + £27 audit offer",
+    title: "Qualifier (quiz only)",
     route: "/waitlist/qualify",
     purpose:
-      "Asks 4 quick questions to 'jump the queue', then offers the £27 Instagram audit. The qualify answers only change the thank-you copy — they do NOT block the audit offer.",
+      "Asks the questions, then BRANCHES on locations count: 3+ locations get the one-to-one demo offer first, 1-2 locations go straight to the £27 offer. The tick answers still only set the 'qualified' priority flag for thank-you copy.",
     copy: [
       "Headline: Four quick questions. Helps us move you up the list.",
+      "Fields: Business type · How many locations?",
       "Ticks: Has IG business profile · Posts weekly · Has Meta Business Manager · Has run Meta ads",
-      "Offer: Want to jump the queue? £27 audit · Inbox in 24h",
-      "Offer heading: Audit your Instagram while you wait",
-      "Offer sub: One of the team writes you a short plain-English PDF: the 3 posts to put money behind first, why locals will walk in, and a 30-day plan even if you never use SuperPulse.",
-      "Fine print: You'll be on the waitlist either way. Card only charged again if you add the £97 Loom next.",
+      "Fine print: Takes about 30 seconds. You're on the waitlist either way.",
     ],
-    cta: "Yes, send me the £27 audit  /  No thanks, keep my spot",
+    cta: "Submit my answers",
     next: [
-      { condition: "Yes → Stripe £27 checkout", target: "→ Stripe Checkout £27" },
-      { condition: "No → skip", target: "→ Thank-you (audit skipped)" },
+      { condition: "3+ locations (first time)", target: "→ Demo offer (/waitlist/demo)" },
+      { condition: "1-2 locations", target: "→ £27 offer (/waitlist/offer)" },
+      {
+        condition: "Re-take with a recorded demo choice",
+        target: "→ £27 offer, demo framing preserved (no second demo pitch)",
+      },
     ],
     writes: [
-      "Turso: qualifier_responses (answers + qualified flag + yes/no)",
-      "Meta Pixel + CAPI: CompleteRegistration (+ InitiateCheckout if Yes)",
-      "Stripe (if Yes): £27 Checkout session, card saved for one-click £97",
+      "Turso: qualifier_responses (answers + qualified flag + demo_qualified). Never touches a recorded demo/audit choice.",
+      "Meta Pixel + CAPI: CompleteRegistration",
     ],
   },
   {
     n: 3,
+    id: "demo",
+    title: "Demo offer (3+ locations only)",
+    route: "/waitlist/demo",
+    purpose:
+      "The better-audience filter. Multi-location leads are offered a free one-to-one demo instead of being funnelled straight into the £27 PDF. Request-only for now (no calendar) — the team follows up within a few hours.",
+    copy: [
+      "Eyebrow: Multi-location businesses skip the queue",
+      "Headline: You can skip the queue. We'd like to show you SuperPulse one to one.",
+      "Card: One to one demo · Free · No card needed",
+      "Sub: Say yes and someone will be in touch within the next few hours. 15 to 20 minutes on a call, looking at your Instagram together.",
+      "Fine print: Free, card never asked for. In touch within the next few hours, usually phone or WhatsApp.",
+    ],
+    cta: "Yes, book my demo  /  No thanks, keep my spot on the waitlist",
+    next: [
+      { condition: "Yes", target: "→ £27 offer with 'upgrade your demo' framing (?demo=1)" },
+      { condition: "No", target: "→ £27 offer, standard framing" },
+    ],
+    writes: [
+      "Turso: demo_offer_choice + demo_requested_at (set once, first yes)",
+      "Slack: '📞 SuperPulse demo request' — FIRST opt-in only, never re-fires",
+      "Meta Pixel + CAPI: Schedule (opt-ins only)",
+    ],
+  },
+  {
+    n: 4,
+    id: "offer",
+    title: "£27 review offer (two framings)",
+    route: "/waitlist/offer",
+    purpose:
+      "The £27 Instagram review (same product as the old inline audit offer). Demo requesters see it as a demo upgrade ('read it before we talk'); everyone else as something to do while they wait. Email CTAs deep-link here directly.",
+    copy: [
+      "Demo framing: One thing before your demo. Want your Instagram reviewed first? · Upgrade your demo · £27 · Inbox in 24h",
+      "Waitlist framing: You're on the list. We'll let you know when we can take you on. · While you wait · £27 review · Inbox in 24h",
+      "Bullets: 3 posts to put money behind first · posting vs fast-growing local businesses · 5 caption and hook fixes · money back if we miss 24h",
+      "Fine print: Card only charged again if you add the £97 Loom next.",
+    ],
+    cta: "Yes, add/send the £27 review  /  No thanks",
+    next: [
+      { condition: "Yes → Stripe £27 checkout", target: "→ Stripe Checkout £27" },
+      { condition: "No (demo requested)", target: "→ Thank-you (demo variant)" },
+      { condition: "No (no demo)", target: "→ Thank-you (skipped / priority)" },
+    ],
+    writes: [
+      "Turso: audit_offer_choice on qualifier_responses",
+      "Meta Pixel + CAPI: InitiateCheckout (shared event id, deduped)",
+      "Stripe (if Yes): £27 Checkout session, card saved for one-click £97",
+    ],
+  },
+  {
+    n: 5,
     id: "stripe-27",
     title: "Stripe Checkout — £27",
     route: "checkout.stripe.com (hosted)",
@@ -89,7 +140,7 @@ export const FUNNEL: FunnelStep[] = [
     cta: "Pay £27",
     next: [
       { condition: "Paid", target: "→ £97 upsell (/waitlist/upsell)" },
-      { condition: "Cancelled", target: "→ back to Qualifier" },
+      { condition: "Cancelled", target: "→ back to £27 offer (framing preserved)" },
     ],
     writes: [
       "Stripe records the payment → app webhook writes audit_purchases (tier=audit-27)",
@@ -97,7 +148,7 @@ export const FUNNEL: FunnelStep[] = [
     ],
   },
   {
-    n: 4,
+    n: 6,
     id: "upsell",
     title: "£97 Loom upsell",
     route: "/waitlist/upsell",
@@ -123,14 +174,15 @@ export const FUNNEL: FunnelStep[] = [
     ],
   },
   {
-    n: 5,
+    n: 7,
     id: "done",
-    title: "Thank-you (4 variants)",
+    title: "Thank-you (5 variants)",
     route: "/waitlist/done",
     purpose:
-      "End of the funnel. Shows one of 4 messages depending on what they did. Fires the £97 Purchase pixel if they bought it.",
+      "End of the funnel. Shows one of 5 messages depending on what they did. Fires the £97 Purchase pixel if they bought it. Purchase variants append the demo line when a demo was requested.",
     copy: [
-      "Priority (qualified, skipped audit): 'You're on the priority list.' Expect a call to set up a demo.",
+      "Demo requested (no purchase): 'Demo request received.' Someone will be in touch within the next few hours.",
+      "Priority (qualified, skipped): 'You're on the priority list.' You'll hear from us before we open to the public.",
       "Standard (skipped): 'You're on the list.' We'll be in touch before we open to the public.",
       "Bought £97: 'Loom and audit booked.' Both land in your inbox inside 24h.",
       "Bought £27: 'Audit booked.' Your audit PDF lands inside 24h.",

@@ -28,6 +28,16 @@ export interface FunnelMetrics {
   qualified: number;
   qualifiedRate: number;
   auditYesRate: number;
+  demoOffered: number;
+  demoRequested: number;
+  demoOptInRate: number;
+  recentDemoRequests: {
+    email: string;
+    name: string;
+    businessType: string;
+    locations: number;
+    requestedAt: string;
+  }[];
   audit27: number;
   audit27Revenue: number;
   audit97: number;
@@ -85,11 +95,36 @@ export async function getFunnelMetrics(): Promise<FunnelMetrics> {
   ).map((r) => ({ source: String(r.src), count: n(r.c) }));
 
   const qRow = await one(
-    `SELECT COUNT(*) total, SUM(qualified) q, SUM(CASE WHEN audit_offer_choice='yes' THEN 1 ELSE 0 END) yes FROM qualifier_responses`,
+    `SELECT COUNT(*) total, SUM(qualified) q,
+       SUM(CASE WHEN audit_offer_choice='yes' THEN 1 ELSE 0 END) yes,
+       SUM(CASE WHEN COALESCE(demo_qualified,0)=1 OR demo_offer_choice IS NOT NULL THEN 1 ELSE 0 END) demo_offered,
+       SUM(CASE WHEN demo_requested_at IS NOT NULL THEN 1 ELSE 0 END) demo_requested
+     FROM qualifier_responses`,
   );
   const qualifyCompletions = n(qRow.total);
   const qualified = n(qRow.q);
   const auditYes = n(qRow.yes);
+  const demoOffered = n(qRow.demo_offered);
+  const demoRequested = n(qRow.demo_requested);
+
+  // The DB row is the source of truth on a time-boxed promise ("in touch
+  // within a few hours") — a dropped Slack webhook must not become a ghosted
+  // lead, so the dashboard lists recent requests for manual follow-up.
+  const recentDemoRequests = (
+    await rows(
+      `SELECT q.email, COALESCE(w.first_name,'') name, COALESCE(q.business_type,'') bt,
+         COALESCE(q.locations_count,0) loc, q.demo_requested_at ts
+       FROM qualifier_responses q LEFT JOIN waitlist w ON w.email = q.email
+       WHERE q.demo_requested_at IS NOT NULL
+       ORDER BY q.demo_requested_at DESC LIMIT 10`,
+    )
+  ).map((r) => ({
+    email: String(r.email),
+    name: String(r.name),
+    businessType: String(r.bt),
+    locations: n(r.loc),
+    requestedAt: String(r.ts),
+  }));
 
   const a27 = await one(
     `SELECT COUNT(*) c, COALESCE(SUM(amount_total),0) g FROM audit_purchases WHERE tier='audit-27' AND refunded=0`,
@@ -175,6 +210,10 @@ export async function getFunnelMetrics(): Promise<FunnelMetrics> {
     qualified,
     qualifiedRate: pct(qualified, qualifyCompletions),
     auditYesRate: pct(auditYes, qualifyCompletions),
+    demoOffered,
+    demoRequested,
+    demoOptInRate: pct(demoRequested, demoOffered),
+    recentDemoRequests,
     audit27,
     audit27Revenue: n(a27.g) / 100,
     audit97,

@@ -12,6 +12,7 @@ const PURCHASE_FIRED_PREFIX = "wl-purchase-27-fired:";
 function UpsellInner() {
   const params = useSearchParams();
   const sessionId = params.get("session_id") ?? "";
+  const demo = params.get("demo") === "1";
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [ready, setReady] = useState(false);
@@ -77,7 +78,13 @@ function UpsellInner() {
         setLoading(false);
         return;
       }
-      window.location.href = data.redirect;
+      // Keep the demo flag alive through the server-built done redirect so the
+      // thank-you page can keep the "in touch within a few hours" promise.
+      const target =
+        demo && typeof data.redirect === "string" && data.redirect.startsWith("/waitlist/done")
+          ? `${data.redirect}&demo=1`
+          : data.redirect;
+      window.location.href = target;
     } catch {
       setError("Network error. Try again.");
       submittingRef.current = false;
@@ -141,7 +148,10 @@ function UpsellInner() {
             </p>
 
             <p className="wl-skip">
-              <a href={`/waitlist/done?session_id=${sessionId}`} className="wl-skip-link">
+              <a
+                href={`/waitlist/done?session_id=${sessionId}${demo ? "&demo=1" : ""}`}
+                className="wl-skip-link"
+              >
                 No thanks, just send the £27 audit
               </a>
             </p>

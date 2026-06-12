@@ -173,6 +173,21 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Server config error. Try again later." }, { status: 500 });
   }
 
+  // Demo state is derived server-side (write-once demo_requested_at) so the
+  // 3DS fallback's Stripe-hosted URLs keep the demo line on the done page.
+  let demoRequested = false;
+  if (email) {
+    try {
+      const dr = await db.execute({
+        sql: `SELECT demo_requested_at FROM qualifier_responses WHERE email = ? LIMIT 1`,
+        args: [email],
+      });
+      demoRequested = !!(dr.rows[0] as { demo_requested_at?: string | null } | undefined)?.demo_requested_at;
+    } catch {
+      /* not critical — worst case the done page drops the demo copy line */
+    }
+  }
+
   if (!paymentMethodId) {
     return await fallbackToCheckout(
       parentSessionId,
@@ -182,6 +197,7 @@ export async function POST(request: Request) {
       ig,
       amountPennies,
       baseUrl,
+      demoRequested,
     );
   }
 
@@ -228,6 +244,7 @@ export async function POST(request: Request) {
         ig,
         amountPennies,
         baseUrl,
+        demoRequested,
       );
     }
     logServerError("charge-97.confirm", err);
@@ -244,6 +261,7 @@ export async function POST(request: Request) {
       ig,
       amountPennies,
       baseUrl,
+      demoRequested,
     );
   }
 
@@ -310,6 +328,7 @@ async function fallbackToCheckout(
   ig: string,
   amountPennies: number,
   baseUrl: string,
+  demoRequested: boolean,
 ): Promise<NextResponse> {
   const priceId = process.env.STRIPE_PRICE_AUDIT_97;
   if (!priceId) {
@@ -317,14 +336,15 @@ async function fallbackToCheckout(
     return NextResponse.json({ error: "Payment setup error." }, { status: 500 });
   }
 
+  const demoParam = demoRequested ? "&demo=1" : "";
   try {
     const session = await stripe.checkout.sessions.create(
       {
         mode: "payment",
         customer: customerId,
         line_items: [{ price: priceId, quantity: 1 }],
-        success_url: `${baseUrl}/waitlist/done?session_id=${parentSessionId}&upsell=1&cs={CHECKOUT_SESSION_ID}`,
-        cancel_url: `${baseUrl}/waitlist/upsell?session_id=${parentSessionId}`,
+        success_url: `${baseUrl}/waitlist/done?session_id=${parentSessionId}&upsell=1${demoParam}&cs={CHECKOUT_SESSION_ID}`,
+        cancel_url: `${baseUrl}/waitlist/upsell?session_id=${parentSessionId}${demoParam}`,
         automatic_tax: { enabled: true },
         metadata: {
           product: "audit-97",
@@ -344,7 +364,8 @@ async function fallbackToCheckout(
           },
         },
       },
-      { idempotencyKey: `fb97:${parentSessionId}` },
+      // Branch in the key: same key with different URLs hard-errors at Stripe.
+      { idempotencyKey: `fb97:${parentSessionId}:${demoRequested ? 1 : 0}` },
     );
     if (!session.url) {
       return NextResponse.json({ error: "Payment setup error." }, { status: 502 });

@@ -262,10 +262,12 @@ Ahmed-type: Local restaurant/takeaway owner, 2-5K followers, posts 3-4x/week, £
 - `src/app/login/page.tsx` — Facebook Login OAuth page
 - `src/app/dashboard/page.tsx` — Protected dashboard (shows user, Pages, linked IG accounts)
 - `src/app/privacy/page.tsx` — Privacy policy page (renders docs/PRIVACY-POLICY.md)
-- `src/app/waitlist/page.tsx` — Public lead-capture (name, email, phone, business type, locations count, IG handle). Posts to `/api/waitlist`, redirects to `/waitlist/audit`.
-- `src/app/waitlist/audit/page.tsx` — £27 IG profile audit offer page (post-join upsell). Button posts to `/api/checkout/audit-27`.
-- `src/app/waitlist/upsell/page.tsx` — £97 Loom walkthrough upsell (post-£27 only, gated on `session_id` query param). Posts to `/api/checkout/audit-97`.
-- `src/app/waitlist/done/page.tsx` — Variant thank-you page (skipped / audit / loom+audit copy).
+- `src/app/waitlist/page.tsx` — Public lead-capture (name, email, phone, IG handle). Posts to `/api/waitlist`, redirects to `/waitlist/qualify`.
+- `src/app/waitlist/qualify/page.tsx` — Quiz only (business type, locations count, 4 ticks). Posts to `/api/qualify`, which branches: 3+ locations → `/waitlist/demo`, else `/waitlist/offer`.
+- `src/app/waitlist/demo/page.tsx` — Free 1-on-1 demo offer (3+ locations). Posts to `/api/demo`.
+- `src/app/waitlist/offer/page.tsx` — £27 IG review offer (demo-upgrade or while-you-wait framing). Posts to `/api/audit-offer` (Stripe Checkout lives there).
+- `src/app/waitlist/upsell/page.tsx` — £97 Loom walkthrough upsell (post-£27 only, gated on `session_id` query param). Posts to `/api/upsell/charge-97`.
+- `src/app/waitlist/done/page.tsx` — Variant thank-you page (demo / skipped / priority / audit / loom+audit copy).
 - `src/app/waitlist/layout.tsx` — Sub-layout with Lato font + scoped CSS, wraps children in `.waitlist-root`
 - `src/app/waitlist/waitlist.css` — Scoped landing-page design system (prefixed with `.waitlist-root` to avoid clashes with the rest of the app)
 - `src/app/api/waitlist/route.ts` — POST handler. Validates fields, upserts into `waitlist` table.
@@ -282,17 +284,22 @@ Ahmed-type: Local restaurant/takeaway owner, 2-5K followers, posts 3-4x/week, £
 
 The 13 Apr 2026 NEC waitlist (password-gated, name+email+phone only) was retired on 7 May 2026 and replaced with a public lead-capture + paid audit upsell funnel for cold Meta-ad traffic. Audience expanded from QSR/restaurants to **any local business that lives or dies on locals knowing they exist** (restaurants, takeaways, cafes, barbers, hairdressers, dentists, aesthetics clinics, gyms, opticians, etc).
 
-### URLs
+### URLs (demo branch added 12 Jun 2026)
 - `superpulse.io/waitlist` — public form (no password)
-- `superpulse.io/waitlist/audit` — £27 IG profile audit offer (post-join)
-- `superpulse.io/waitlist/upsell` — £97 Loom walkthrough on top (post-£27, gated by `session_id` query param)
-- `superpulse.io/waitlist/done` — variant thank-you copy (skipped / audit / loom+audit)
+- `superpulse.io/waitlist/qualify` — quiz ONLY (business type, # locations, 4 ticks). Branches on locations: 3+ → demo offer, 1-2 → £27 offer
+- `superpulse.io/waitlist/demo` — free 1-on-1 demo offer (3+ locations only, request-only, no calendar). Opt-in → Slack `📞 SuperPulse demo request` + CAPI Schedule
+- `superpulse.io/waitlist/offer` — £27 IG review offer, two framings: `?demo=1` = "upgrade your demo", plain = "while you wait". Email CTAs deep-link here
+- `superpulse.io/waitlist/upsell` — £97 Loom walkthrough on top (post-£27, gated by `session_id` query param; `&demo=1` passes through)
+- `superpulse.io/waitlist/done` — variant thank-you copy (demo / skipped / priority / audit / loom+audit)
 
 ### Funnel flow
-1. Visitor lands on `/waitlist` → fills form (name, email, phone, business type dropdown, # locations, IG handle) → row inserted into Turso `waitlist`.
-2. Redirect to `/waitlist/audit?email=…&name=…&ig=…` → £27 button → Stripe Checkout (live mode) → success URL is `/waitlist/upsell?session_id=…`.
-3. `/waitlist/upsell` → £97 button → Stripe Checkout → success URL is `/waitlist/done?session_id=…&upsell=1`. Skip link → `/waitlist/done?session_id=…` (audit-only thank you).
-4. Webhook handler (`src/app/api/webhook/stripe/route.ts` → `handleAuditPayment`) inserts both purchases into `audit_purchases` (idempotent on `stripe_session_id`), fires Meta CAPI Purchase, and posts a Slack alert. **All money events Slack-alert** (audits, £300/mo subs, refunds, disputes, failed payments) via `notifySlack` (`SLACK_WEBHOOK_URL`).
+1. Visitor lands on `/waitlist` → fills form (name, email, phone, IG handle) → row upserted into Turso `waitlist`. NO Slack alert (removed 12 Jun 2026 — Slack is demo requests + purchases only).
+2. Redirect to `/waitlist/qualify` → quiz → `/api/qualify` stores answers + `demo_qualified` (locations ≥ 3) and branches: 3+ → `/waitlist/demo`, else `/waitlist/offer`. Re-takes with a recorded demo choice skip the demo pitch. Quiz upsert NEVER touches `demo_offer_choice`/`demo_requested_at`/`audit_offer_choice`.
+3. `/waitlist/demo` → `/api/demo` re-checks `demo_qualified` from the DB. First opt-in sets `demo_requested_at` once + fires the Slack alert (never re-fires) + CAPI Schedule. Both choices land on `/waitlist/offer` (`?demo=1` if opted in).
+4. `/waitlist/offer` → `/api/audit-offer` records `audit_offer_choice` and creates the £27 Stripe Checkout (idempotency key includes the demo branch; cancel_url returns to the same offer variant). Success URL is `/waitlist/upsell?session_id=…[&demo=1]`.
+5. `/waitlist/upsell` → £97 button → Stripe Checkout → success URL is `/waitlist/done?session_id=…&upsell=1`. Skip link → `/waitlist/done?session_id=…[&demo=1]`.
+6. Webhook handler (`src/app/api/webhook/stripe/route.ts` → `handleAuditPayment`) inserts both purchases into `audit_purchases` (idempotent on `stripe_session_id`), fires Meta CAPI Purchase, and posts a Slack alert. **All money events Slack-alert** (audits, £300/mo subs, refunds, disputes, failed payments) via `notifySlack` (`SLACK_WEBHOOK_URL`).
+7. Demo follow-up list (source of truth if a Slack webhook drops): `/admin/funnel` "Demo requests" panel reads `demo_requested_at` from `qualifier_responses`.
 
 > **Webhook MUST point at `https://www.superpulse.io/api/webhook/stripe`** — the apex `superpulse.io` 307-redirects and Stripe does not follow redirects on delivery, so apex = silently dropped payments. Incident 29 May 2026: 3 live £27 payments lost this way, backfilled via `scripts/backfill-audit-purchases.mjs`. See `docs/STRIPE-INTEGRATION.md`.
 
