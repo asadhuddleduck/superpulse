@@ -262,10 +262,12 @@ Ahmed-type: Local restaurant/takeaway owner, 2-5K followers, posts 3-4x/week, £
 - `src/app/login/page.tsx` — Facebook Login OAuth page
 - `src/app/dashboard/page.tsx` — Protected dashboard (shows user, Pages, linked IG accounts)
 - `src/app/privacy/page.tsx` — Privacy policy page (renders docs/PRIVACY-POLICY.md)
-- `src/app/waitlist/page.tsx` — Public lead-capture (name, email, phone, business type, locations count, IG handle). Posts to `/api/waitlist`, redirects to `/waitlist/audit`.
-- `src/app/waitlist/audit/page.tsx` — £27 IG profile audit offer page (post-join upsell). Button posts to `/api/checkout/audit-27`.
-- `src/app/waitlist/upsell/page.tsx` — £97 Loom walkthrough upsell (post-£27 only, gated on `session_id` query param). Posts to `/api/checkout/audit-97`.
-- `src/app/waitlist/done/page.tsx` — Variant thank-you page (skipped / audit / loom+audit copy).
+- `src/app/waitlist/page.tsx` — Public lead-capture (name, email, phone, IG handle). Posts to `/api/waitlist`, redirects to `/waitlist/qualify`.
+- `src/app/waitlist/qualify/page.tsx` — Quiz only (business type, locations count, 4 ticks). Posts to `/api/qualify`, which branches: 3+ locations → `/waitlist/demo`, else `/waitlist/offer`.
+- `src/app/waitlist/demo/page.tsx` — Free 1-on-1 demo offer (3+ locations). Posts to `/api/demo`.
+- `src/app/waitlist/offer/page.tsx` — £27 IG review offer (demo-upgrade or while-you-wait framing). Posts to `/api/audit-offer` (Stripe Checkout lives there).
+- `src/app/waitlist/upsell/page.tsx` — £97 Loom walkthrough upsell (post-£27 only, gated on `session_id` query param). Posts to `/api/upsell/charge-97`.
+- `src/app/waitlist/done/page.tsx` — Variant thank-you page (demo / skipped / priority / audit / loom+audit copy).
 - `src/app/waitlist/layout.tsx` — Sub-layout with Lato font + scoped CSS, wraps children in `.waitlist-root`
 - `src/app/waitlist/waitlist.css` — Scoped landing-page design system (prefixed with `.waitlist-root` to avoid clashes with the rest of the app)
 - `src/app/api/waitlist/route.ts` — POST handler. Validates fields, upserts into `waitlist` table.
@@ -282,17 +284,22 @@ Ahmed-type: Local restaurant/takeaway owner, 2-5K followers, posts 3-4x/week, £
 
 The 13 Apr 2026 NEC waitlist (password-gated, name+email+phone only) was retired on 7 May 2026 and replaced with a public lead-capture + paid audit upsell funnel for cold Meta-ad traffic. Audience expanded from QSR/restaurants to **any local business that lives or dies on locals knowing they exist** (restaurants, takeaways, cafes, barbers, hairdressers, dentists, aesthetics clinics, gyms, opticians, etc).
 
-### URLs
+### URLs (demo branch added 12 Jun 2026)
 - `superpulse.io/waitlist` — public form (no password)
-- `superpulse.io/waitlist/audit` — £27 IG profile audit offer (post-join)
-- `superpulse.io/waitlist/upsell` — £97 Loom walkthrough on top (post-£27, gated by `session_id` query param)
-- `superpulse.io/waitlist/done` — variant thank-you copy (skipped / audit / loom+audit)
+- `superpulse.io/waitlist/qualify` — quiz ONLY (business type, # locations, 4 ticks). Branches on locations: 3+ → demo offer, 1-2 → £27 offer
+- `superpulse.io/waitlist/demo` — free 1-on-1 demo offer (3+ locations only, request-only, no calendar). Opt-in → Slack `📞 SuperPulse demo request` + CAPI Schedule
+- `superpulse.io/waitlist/offer` — £27 IG review offer, two framings: `?demo=1` = "upgrade your demo", plain = "while you wait". Email CTAs deep-link here
+- `superpulse.io/waitlist/upsell` — £97 Loom walkthrough on top (post-£27, gated by `session_id` query param; `&demo=1` passes through)
+- `superpulse.io/waitlist/done` — variant thank-you copy (demo / skipped / priority / audit / loom+audit)
 
 ### Funnel flow
-1. Visitor lands on `/waitlist` → fills form (name, email, phone, business type dropdown, # locations, IG handle) → row inserted into Turso `waitlist`.
-2. Redirect to `/waitlist/audit?email=…&name=…&ig=…` → £27 button → Stripe Checkout (live mode) → success URL is `/waitlist/upsell?session_id=…`.
-3. `/waitlist/upsell` → £97 button → Stripe Checkout → success URL is `/waitlist/done?session_id=…&upsell=1`. Skip link → `/waitlist/done?session_id=…` (audit-only thank you).
-4. Webhook handler (`src/app/api/webhook/stripe/route.ts` → `handleAuditPayment`) inserts both purchases into `audit_purchases` (idempotent on `stripe_session_id`), fires Meta CAPI Purchase, and posts a Slack alert. **All money events Slack-alert** (audits, £300/mo subs, refunds, disputes, failed payments) via `notifySlack` (`SLACK_WEBHOOK_URL`).
+1. Visitor lands on `/waitlist` → fills form (name, email, phone, IG handle) → row upserted into Turso `waitlist`. NO Slack alert (removed 12 Jun 2026 — Slack is demo requests + purchases only).
+2. Redirect to `/waitlist/qualify` → quiz → `/api/qualify` stores answers + `demo_qualified` (locations ≥ 3) and branches: 3+ → `/waitlist/demo`, else `/waitlist/offer`. Re-takes with a recorded demo choice skip the demo pitch. Quiz upsert NEVER touches `demo_offer_choice`/`demo_requested_at`/`audit_offer_choice`.
+3. `/waitlist/demo` → `/api/demo` re-checks `demo_qualified` from the DB. First opt-in sets `demo_requested_at` once + fires the Slack alert (never re-fires) + CAPI Schedule. Both choices land on `/waitlist/offer` (`?demo=1` if opted in).
+4. `/waitlist/offer` → `/api/audit-offer` records `audit_offer_choice` and creates the £27 Stripe Checkout (idempotency key includes the demo branch; cancel_url returns to the same offer variant). Success URL is `/waitlist/upsell?session_id=…[&demo=1]`.
+5. `/waitlist/upsell` → £97 button → Stripe Checkout → success URL is `/waitlist/done?session_id=…&upsell=1`. Skip link → `/waitlist/done?session_id=…[&demo=1]`.
+6. Webhook handler (`src/app/api/webhook/stripe/route.ts` → `handleAuditPayment`) inserts both purchases into `audit_purchases` (idempotent on `stripe_session_id`), fires Meta CAPI Purchase, and posts a Slack alert. **All money events Slack-alert** (audits, £300/mo subs, refunds, disputes, failed payments) via `notifySlack` (`SLACK_WEBHOOK_URL`).
+7. Demo follow-up list (source of truth if a Slack webhook drops): `/admin/funnel` "Demo requests" panel reads `demo_requested_at` from `qualifier_responses`.
 
 > **Webhook MUST point at `https://www.superpulse.io/api/webhook/stripe`** — the apex `superpulse.io` 307-redirects and Stripe does not follow redirects on delivery, so apex = silently dropped payments. Incident 29 May 2026: 3 live £27 payments lost this way, backfilled via `scripts/backfill-audit-purchases.mjs`. See `docs/STRIPE-INTEGRATION.md`.
 
@@ -430,3 +437,26 @@ Recent activity feed below shows last 10 `audit_events` rows in human-readable f
 - Multi-advertiser ads: hard opt-out at the Ad level (`multi_advertiser_ads: { has_opted_out: true }`).
 - Advantage+ creative: full opt-out via `degrees_of_freedom_spec.creative_features_spec` (9 enhancement keys, see `src/lib/facebook.ts:417-427`).
 - Ad creative identity: **`actor_id` is canonical** in this codebase (NOT `object_id`). Empirically verified working 9 Apr 2026 on `act_1059094086326037`. Meta's IG Reels adcreatives example uses `object_id`, and the fbts-code-auditor recommended that swap, but the live-verified config wins. Fallback procedure (if identity ever breaks): swap to `object_id` per `docs/ARCHITECTURE.md` §11 Check 4.
+
+## Waitlist Email Sequence (live 31 May 2026)
+
+Lifecycle nurture for waitlist members. Lives in `src/lib/email/` + `src/app/api/cron/email-sequence/` + `src/app/api/email/unsubscribe/`.
+
+- **Shape:** welcome (day 0, immediate) → audit email (day 3, **branches** on whether they bought the £27 audit) → 10 weekly nurture emails (a designed arc). 12 emails total. `STEPS` + `renderStep()` in `src/lib/email/templates.ts` are the single source of truth for schedule + copy; `processDue()` in `sequence.ts` is the engine.
+- **Sends:** transactional Resend (raw fetch, no SDK) from the **verified huddleduck.co.uk** domain, display name "Asad from SuperPulse". Per-recipient so copy can branch. NOT Broadcasts.
+- **Triggers:** live signups get the welcome via `after()` in `api/waitlist/route.ts`; everyone else is driven by the daily cron (`0 9 * * *`), anchored to each person's join date. One email per recipient per run.
+- **Tables:** `email_sequence_state` (email PK, anchor_at, position, status), `email_sends` (audit log), `email_unsubscribes`. Branch checks `audit_purchases` at send time.
+- **Gating:** all sends are behind `EMAIL_SEQUENCE_ENABLED=1` (Vercel). Unset = total no-op. Other env: `RESEND_API_KEY` (shared with duck-emails), `EMAIL_FROM`, `EMAIL_UNSUB_SECRET`.
+- **Copy rules:** light theme (cross-client consistency), no "AI" word, AI-TELLS-scrubbed, owner-to-owner UK voice. The audit is a **profile-review PDF** (DP, bio, link, highlights, pinned posts/reels, reels + hooks/CTAs → follower-to-sales), NOT "which posts to boost". Every email carries a recall strip (join date + Instagram @mr.asadshah source) for deliverability.
+- **Unsubscribe:** one-click (RFC 8058) via `api/email/unsubscribe` (HMAC token over email). Suppression honoured everywhere.
+- **Scripts:** `scripts/backfill-email-sequence.mjs` (enrol existing waitlist, staggered anchors, `--live`), `scripts/render-emails.ts` (preview to `.email-preview/`), `scripts/apply-email-schema.mjs`, `scripts/run-due-once.ts` (one-shot kickoff that mirrors the cron). Preview/review before any change to prospect copy.
+- **Scaling note:** transactional caps at ~100/day on the Resend free tier. Fine at ~60 recipients with join-anchored spread. Past a few hundred active, stagger harder or move to Broadcasts.
+
+## Internal Funnel Dashboard (built 1 Jun 2026)
+
+`/admin/funnel?key=<ADMIN_DASH_KEY>` — read-only internal view of the whole customer journey + live metrics. Fires NO tracking (root layout has no pixel; the pixel is only in `MetaPixel.tsx` on the waitlist pages). Built so the founder can review the funnel + copy + numbers without walking the live site and polluting pixels/insights.
+
+- **Files:** `src/app/admin/funnel/{page.tsx, data.ts, metrics.ts}`. `data.ts` = static map of pages/copy/flow/decisions (update when funnel copy changes); `metrics.ts` = live Turso queries; `page.tsx` = server component, dark theme.
+- **Gate:** `/admin` is whitelisted in `middleware.ts` (bypasses the site gate) and protected by its own `ADMIN_DASH_KEY` (Vercel + .env.local) via `?key=`. Wrong/no key → 404.
+- **Shows:** KPIs (waitlist/quiz/qualified/£27/£97/subs/MRR), conversion ladder, the ad funnel step-by-step (copy + decisions + data writes), the email sequence panel, the SaaS journey states, and a "what's NOT SuperPulse" note (the legacy AI Ad Engine products share the same Stripe + Resend account).
+- **Not yet:** page screenshots/visual previews (shows copy text only), Resend open-rate aggregation (needs Resend webhooks → events table). Both are fast-follows.

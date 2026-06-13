@@ -21,6 +21,8 @@ import { getAnthropic, HAIKU_MODEL } from "@/lib/anthropic";
 // build snapshot, ONE Anthropic Haiku call (prompt-cached system block),
 // validate output, insert ai_decisions row, enqueue v8_intents. NO Meta writes.
 
+export const maxDuration = 120;
+
 const CIRCUIT_BREAKER_THRESHOLD = 50; // X-App-Usage % above which we skip
 const APP_USAGE_FRESH_MS = 60 * 60 * 1000; // 1h lookback
 

@@ -1,11 +1,11 @@
-import { NextResponse } from "next/server";
+import { NextResponse, after } from "next/server";
 import { db } from "@/lib/db";
 import { fireCapi } from "@/lib/meta-capi";
+import { startSequenceWithWelcome } from "@/lib/email/sequence";
 import { getClientIp, getCookieValue, getUserAgent } from "@/lib/cf-ip";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { isAllowedOrigin } from "@/lib/origin-check";
 import { normaliseIgHandle, normalisePhoneUk } from "@/lib/business-types";
-import { notifySlack } from "@/lib/slack";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -96,7 +96,6 @@ export async function POST(request: Request) {
             name = excluded.name,
             first_name = excluded.first_name,
             phone = excluded.phone,
-            source = excluded.source,
             instagram_handle = excluded.instagram_handle,
             last_utm_source = excluded.last_utm_source,
             last_utm_medium = excluded.last_utm_medium,
@@ -126,20 +125,19 @@ export async function POST(request: Request) {
     ],
   });
 
+  // Slack signup alerts removed 12 Jun 2026 — Slack now fires only on demo
+  // requests (/api/demo) and purchases (Stripe webhook). Realtime signup
+  // visibility lives at /admin/funnel (signups by day).
   if (isNewSignup && source !== "healthcheck") {
-    const utmCampaign = clean(body.utm_campaign);
-    const utmSource = clean(body.utm_source);
-    const utmLine = utmCampaign || utmSource
-      ? `\n*Source:* ${[utmSource, utmCampaign].filter(Boolean).join(" / ")}`
-      : "";
-    await notifySlack(
-      `🎉 New SuperPulse waitlist signup\n` +
-        `*Name:* ${firstName}\n` +
-        `*Email:* ${email}\n` +
-        `*Phone:* ${phoneCheck.e164}\n` +
-        `*Instagram:* @${igCheck.handle}` +
-        utmLine,
-    );
+    // Welcome email + enrol in the waitlist sequence. Best-effort, post-response.
+    // No-op unless EMAIL_SEQUENCE_ENABLED=1, so this is inert until go-live.
+    after(async () => {
+      try {
+        await startSequenceWithWelcome(email, firstName, igCheck.handle, nowIso);
+      } catch (err) {
+        console.error("[waitlist] welcome email failed:", err instanceof Error ? err.message : String(err));
+      }
+    });
   }
 
   const eventId = body.event_id?.trim();

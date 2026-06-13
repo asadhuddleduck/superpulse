@@ -1,12 +1,10 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { stripe } from "@/lib/stripe";
 import { fireCapi } from "@/lib/meta-capi";
 import { getClientIp, getCookieValue, getUserAgent } from "@/lib/cf-ip";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { isAllowedOrigin } from "@/lib/origin-check";
 import { isBusinessType, clampLocations } from "@/lib/business-types";
-import { logServerError, mapStripeErrorToUserSafe } from "@/lib/error-mapper";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -21,11 +19,15 @@ type Body = {
   posts_actively?: boolean;
   has_business_manager?: boolean;
   has_run_ads?: boolean;
+  // Sent by pre-deploy clients; ignored — the £27 choice is recorded by
+  // /api/audit-offer now.
   audit_offer_choice?: "yes" | "no";
   event_id?: string;
 };
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+const DEMO_MIN_LOCATIONS = 3;
 
 export async function POST(request: Request) {
   if (!isAllowedOrigin(request.headers)) {
@@ -67,10 +69,10 @@ export async function POST(request: Request) {
   const postsActively = body.posts_actively ? 1 : 0;
   const hasBusinessManager = body.has_business_manager ? 1 : 0;
   const hasRunAds = body.has_run_ads ? 1 : 0;
-  const choice = body.audit_offer_choice === "yes" ? "yes" : "no";
 
   const otherTicks = postsActively + hasBusinessManager + hasRunAds;
   const qualified = hasInstagram === 1 && otherTicks >= 2 ? 1 : 0;
+  const demoQualified = locations >= DEMO_MIN_LOCATIONS ? 1 : 0;
 
   const waitlistRow = await db.execute({
     sql: `SELECT email, first_name, phone, instagram_handle FROM waitlist WHERE email = ?`,
@@ -89,14 +91,22 @@ export async function POST(request: Request) {
 
   const trustedName = (wl.first_name ?? "").toString().trim();
   const trustedPhone = (wl.phone ?? "").toString().trim();
-  const trustedIg = (wl.instagram_handle ?? "").toString().trim();
+
+  // Re-takers (email CTAs link back to the quiz) keep their recorded demo
+  // choice — never re-pitch the demo interstitial to someone who already
+  // answered it.
+  const prior = await db.execute({
+    sql: `SELECT demo_offer_choice FROM qualifier_responses WHERE email = ?`,
+    args: [email],
+  });
+  const priorDemoChoice = (prior.rows[0]?.demo_offer_choice ?? null) as string | null;
 
   const nowIso = new Date().toISOString();
   await db.execute({
     sql: `INSERT INTO qualifier_responses
             (email, business_type, locations_count,
              has_instagram, posts_actively, has_business_manager, has_run_ads,
-             qualified, audit_offer_choice, updated_at)
+             qualified, demo_qualified, updated_at)
           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
           ON CONFLICT(email) DO UPDATE SET
             business_type = excluded.business_type,
@@ -106,7 +116,7 @@ export async function POST(request: Request) {
             has_business_manager = excluded.has_business_manager,
             has_run_ads = excluded.has_run_ads,
             qualified = excluded.qualified,
-            audit_offer_choice = excluded.audit_offer_choice,
+            demo_qualified = excluded.demo_qualified,
             updated_at = excluded.updated_at`,
     args: [
       email,
@@ -117,7 +127,7 @@ export async function POST(request: Request) {
       hasBusinessManager,
       hasRunAds,
       qualified,
-      choice,
+      demoQualified,
       nowIso,
     ],
   });
@@ -142,86 +152,18 @@ export async function POST(request: Request) {
     });
   }
 
-  if (choice === "no") {
-    const params = new URLSearchParams({ skipped: "1" });
-    if (qualified) params.set("priority", "1");
-    return NextResponse.json({
-      ok: true,
-      qualified: !!qualified,
-      redirect: `/waitlist/done?${params.toString()}`,
-    });
+  let redirect: string;
+  if (demoQualified && priorDemoChoice === null) {
+    redirect = "/waitlist/demo";
+  } else if (demoQualified && priorDemoChoice === "yes") {
+    redirect = "/waitlist/offer?demo=1";
+  } else {
+    redirect = "/waitlist/offer";
   }
 
-  const priceId = process.env.STRIPE_PRICE_AUDIT_27;
-  if (!priceId) {
-    logServerError("qualify", new Error("STRIPE_PRICE_AUDIT_27 not set"));
-    return NextResponse.json({ error: "Payment setup error. Try again later." }, { status: 500 });
-  }
-
-  const baseUrl = process.env.NEXT_PUBLIC_BASE_URL;
-  if (!baseUrl) {
-    logServerError("qualify", new Error("NEXT_PUBLIC_BASE_URL not set"));
-    return NextResponse.json({ error: "Server config error. Try again later." }, { status: 500 });
-  }
-
-  const idempotencyKey = `qa27:${email}:${Math.floor(Date.now() / 60000)}`;
-
-  try {
-    const session = await stripe.checkout.sessions.create(
-      {
-        mode: "payment",
-        customer_email: email,
-        customer_creation: "always",
-        line_items: [{ price: priceId, quantity: 1 }],
-        success_url: `${baseUrl}/waitlist/upsell?session_id={CHECKOUT_SESSION_ID}`,
-        cancel_url: `${baseUrl}/waitlist/qualify`,
-        automatic_tax: { enabled: true },
-        metadata: {
-          product: "audit-27",
-          email,
-          name: trustedName,
-          instagram_handle: trustedIg,
-        },
-        payment_intent_data: {
-          setup_future_usage: "off_session",
-          receipt_email: email,
-          metadata: {
-            product: "audit-27",
-            email,
-            name: trustedName,
-            instagram_handle: trustedIg,
-          },
-        },
-      },
-      { idempotencyKey },
-    );
-
-    if (!session.url) {
-      logServerError("qualify.session", new Error("no session url"));
-      return NextResponse.json({ error: "Payment setup error. Try again." }, { status: 502 });
-    }
-    await fireCapi({
-      event_name: "InitiateCheckout",
-      event_id: `ic:${email}:${Date.now()}`,
-      email,
-      phone_e164: trustedPhone || undefined,
-      first_name: trustedName || undefined,
-      value: 27,
-      currency: "GBP",
-      source_url: request.headers.get("referer") || undefined,
-      client_ip: getClientIp(request.headers),
-      client_user_agent: getUserAgent(request.headers),
-      fbp: getCookieValue(request.headers, "_fbp"),
-      fbc: getCookieValue(request.headers, "_fbc"),
-    });
-    return NextResponse.json({
-      ok: true,
-      qualified: !!qualified,
-      redirect: session.url,
-    });
-  } catch (err) {
-    logServerError("qualify.stripe", err);
-    const mapped = mapStripeErrorToUserSafe(err);
-    return NextResponse.json(mapped.body, { status: mapped.status });
-  }
+  return NextResponse.json({
+    ok: true,
+    qualified: !!qualified,
+    redirect,
+  });
 }

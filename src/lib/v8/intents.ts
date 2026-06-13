@@ -9,9 +9,16 @@ import { db } from "@/lib/db";
 // pending it never comes back. Retries happen via fresh decide ticks creating
 // fresh intents, not via re-queuing.
 
-export type IntentType = "BUDGET_TILT" | "STOP_AD";
+export type IntentType =
+  | "BUDGET_TILT"
+  | "STOP_AD"
+  // Creation lane (added 2026-06-02).
+  | "PROVISION_ADSET"
+  | "CREATE_AD"
+  | "ACTIVATE_AD";
 export type IntentStatus = "pending" | "done" | "skipped" | "errored";
 
+// Steady-state lane payloads.
 export interface BudgetTiltPayload {
   metaAdsetId: string;
   newDailyBudgetPennies: number;
@@ -23,12 +30,43 @@ export interface StopAdPayload {
   reason: string;
 }
 
+// Creation lane payloads (added 2026-06-02).
+export interface ProvisionAdsetPayload {
+  locationId: number;
+  reason: string;
+}
+
+export interface CreateAdPayload {
+  locationAdsetId: number;
+  metaAdsetId: string;
+  postId: string;
+  reason: string;
+}
+
+export interface ActivateAdPayload {
+  metaAdId: string;
+  locationAdsetId: number;
+  reason: string;
+}
+
+export type IntentPayload =
+  | BudgetTiltPayload
+  | StopAdPayload
+  | ProvisionAdsetPayload
+  | CreateAdPayload
+  | ActivateAdPayload;
+
+// The two drain lanes. Kept separate so a creation burst can't starve the
+// steady-state budget/stop lane (and vice-versa).
+export const STEADY_STATE_INTENT_TYPES: IntentType[] = ["BUDGET_TILT", "STOP_AD"];
+export const CREATION_INTENT_TYPES: IntentType[] = ["PROVISION_ADSET", "CREATE_AD", "ACTIVATE_AD"];
+
 export interface IntentRow {
   id: number;
   tenantId: string;
   aiDecisionId: number | null;
   intentType: IntentType;
-  payload: BudgetTiltPayload | StopAdPayload;
+  payload: IntentPayload;
   status: IntentStatus;
   error: string | null;
   createdAt: string;
@@ -53,7 +91,7 @@ export async function enqueueIntent(input: {
   tenantId: string;
   aiDecisionId: number | null;
   intentType: IntentType;
-  payload: BudgetTiltPayload | StopAdPayload;
+  payload: IntentPayload;
 }): Promise<number> {
   const res = await db.execute({
     sql: `INSERT INTO v8_intents
@@ -75,12 +113,42 @@ export async function enqueueIntent(input: {
 // queue. If you ever move execute off Vercel cron, swap to a SELECT-then-
 // UPDATE-status='in_flight' two-step.
 export async function drainPendingIntents(tenantId: string, limit: number = 3): Promise<IntentRow[]> {
+  const placeholders = STEADY_STATE_INTENT_TYPES.map(() => "?").join(", ");
   const res = await db.execute({
     sql: `SELECT * FROM v8_intents
-          WHERE tenant_id = ? AND status = 'pending'
+          WHERE tenant_id = ? AND status = 'pending' AND intent_type IN (${placeholders})
           ORDER BY created_at ASC
           LIMIT ?`,
-    args: [tenantId, limit],
+    args: [tenantId, ...STEADY_STATE_INTENT_TYPES, limit],
+  });
+  return res.rows.map((r) => rowToIntent(r as unknown as Record<string, unknown>));
+}
+
+// Creation lane drain — same contract as drainPendingIntents but scoped to the
+// PROVISION_ADSET/CREATE_AD/ACTIVATE_AD types via idx_v8_intents_type_pending.
+// Kept as a separate query so a 62-adset provisioning burst can't starve the
+// BUDGET_TILT/STOP_AD lane (and vice-versa). Higher default limit.
+export async function drainPendingCreationIntents(tenantId: string, limit: number = 8): Promise<IntentRow[]> {
+  const placeholders = CREATION_INTENT_TYPES.map(() => "?").join(", ");
+  const res = await db.execute({
+    sql: `SELECT * FROM v8_intents
+          WHERE tenant_id = ? AND status = 'pending' AND intent_type IN (${placeholders})
+          ORDER BY created_at ASC
+          LIMIT ?`,
+    args: [tenantId, ...CREATION_INTENT_TYPES, limit],
+  });
+  return res.rows.map((r) => rowToIntent(r as unknown as Record<string, unknown>));
+}
+
+// All pending creation-lane intents for a tenant (no limit). The provision cron
+// reads these once per tick and dedupes its enqueue diff against them in memory,
+// so it never queues a second pending intent for an already-queued target.
+export async function getPendingCreationIntents(tenantId: string): Promise<IntentRow[]> {
+  const placeholders = CREATION_INTENT_TYPES.map(() => "?").join(", ");
+  const res = await db.execute({
+    sql: `SELECT * FROM v8_intents
+          WHERE tenant_id = ? AND status = 'pending' AND intent_type IN (${placeholders})`,
+    args: [tenantId, ...CREATION_INTENT_TYPES],
   });
   return res.rows.map((r) => rowToIntent(r as unknown as Record<string, unknown>));
 }

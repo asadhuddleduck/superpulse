@@ -101,6 +101,22 @@ export async function markPostIneligible(
   });
 }
 
+/**
+ * Eligible Reel post ids for a tenant: media_type='VIDEO' (the v8 scan stores
+ * every REEL as VIDEO) AND still boost-eligible (boost_eligible defaults 1;
+ * markPostIneligible flips it to 0 for copyright/policy rejections). Used by the
+ * provision lane to decide which posts get an ad in every adset.
+ */
+export async function getEligibleReelPostIds(tenantId: string): Promise<string[]> {
+  const result = await db.execute({
+    sql: `SELECT id FROM ig_posts
+          WHERE tenant_id = ? AND media_type = 'VIDEO' AND COALESCE(boost_eligible, 1) = 1
+          ORDER BY timestamp DESC`,
+    args: [tenantId],
+  });
+  return result.rows.map((r) => String(r.id));
+}
+
 export async function isPostIneligible(postId: string): Promise<boolean> {
   const result = await db.execute({
     sql: `SELECT boost_eligible FROM ig_posts WHERE id = ? LIMIT 1`,

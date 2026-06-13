@@ -28,6 +28,8 @@ import { db } from "@/lib/db";
  * volume predictable per tick.
  */
 
+export const maxDuration = 120;
+
 const STALE_PAUSED_THRESHOLD_DAYS = 14;
 const TENANT_CONCURRENCY = 5;
 

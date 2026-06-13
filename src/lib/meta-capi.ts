@@ -3,6 +3,7 @@ import { createHash } from "crypto";
 export type CapiEvent =
   | "Lead"
   | "CompleteRegistration"
+  | "Schedule"
   | "InitiateCheckout"
   | "Purchase";
 

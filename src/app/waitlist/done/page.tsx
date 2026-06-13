@@ -14,6 +14,7 @@ function DoneInner() {
   const skipped = params.get("skipped") === "1";
   const upsell = params.get("upsell") === "1";
   const priority = params.get("priority") === "1";
+  const demo = params.get("demo") === "1";
   const pi = params.get("pi") ?? "";
   const cs = params.get("cs") ?? "";
   const sessionId = params.get("session_id") ?? "";
@@ -51,14 +52,18 @@ function DoneInner() {
 
   let title: string;
   let body: string;
-  if (skipped && priority) {
+  if (demo && !upsell && !sessionId) {
+    title = "Demo request received.";
+    body =
+      "Someone from our team will be in touch within the next few hours to sort a time. Keep an eye on your phone and inbox. You keep your spot on the waitlist as well, so if we miss each other first time we will try again.";
+  } else if (skipped && priority) {
     title = "You’re on the priority list.";
     body =
-      "Based on what you told us, we’ll prioritise you ahead of cold signups. Expect a call from one of us to set up a short personal demo.";
+      "Based on what you told us, we’ll prioritise you ahead of cold signups. You’ll hear from us before we open to the public.";
   } else if (skipped) {
     title = "You’re on the list.";
     body =
-      "We’ll be in touch from SuperPulse before we open to the public. If your business looks like a strong fit, expect a call from one of us to set up a short personal demo.";
+      "We’ll be in touch from SuperPulse before we open to the public.";
   } else if (upsell) {
     title = "Loom and audit booked.";
     body =
@@ -67,6 +72,9 @@ function DoneInner() {
     title = "Audit booked.";
     body =
       "Your audit PDF lands in your inbox inside 24 hours. We’ll also be in touch about your SuperPulse spot on the waitlist.";
+  }
+  if (demo && (upsell || sessionId)) {
+    body += " Your demo is still on. Someone from our team will be in touch within the next few hours.";
   }
 
   return (

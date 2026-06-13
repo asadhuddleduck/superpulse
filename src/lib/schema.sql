@@ -313,3 +313,69 @@ CREATE INDEX IF NOT EXISTS idx_reel_ads_adset ON reel_ads(location_adset_id, sta
 CREATE INDEX IF NOT EXISTS idx_location_adsets_campaign ON location_adsets(tenant_campaign_id);
 CREATE INDEX IF NOT EXISTS idx_ai_decisions_tenant_time ON ai_decisions(tenant_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_v8_intents_pending ON v8_intents(tenant_id, status, created_at);
+
+-- Waitlist email sequence (welcome + 10-week nurture). See src/lib/email/.
+CREATE TABLE IF NOT EXISTS email_sequence_state (
+  email TEXT PRIMARY KEY,
+  anchor_at TEXT NOT NULL,                 -- offsets count from here (join date / backfill date)
+  position INTEGER NOT NULL DEFAULT -1,    -- last step sent; -1 = none
+  status TEXT NOT NULL DEFAULT 'active',   -- active | completed | unsubscribed
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS email_sends (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  email TEXT NOT NULL,
+  step INTEGER NOT NULL,
+  variant TEXT,
+  resend_id TEXT,
+  status TEXT NOT NULL,                     -- sent | error
+  error TEXT,
+  sent_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_email_sends_email ON email_sends(email, step);
+
+CREATE TABLE IF NOT EXISTS email_unsubscribes (
+  email TEXT PRIMARY KEY,
+  reason TEXT,
+  unsubscribed_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- ===========================================================================
+-- v8 provisioning + budget intake (added 2026-06-02). All additive: every new
+-- column defaults NULL/pending for existing rows, so legacy + active tenants
+-- behave identically. runSchema() swallows "duplicate column"/"already exists".
+-- ===========================================================================
+
+-- Budget-intake axis. provisioning_status is SEPARATE from tenants.status
+-- (which is load-bearing for the live dashboard gate) — it is NULL for every
+-- existing tenant, so no existing tenant is ever redirected or re-provisioned.
+-- Values: NULL | pending_locations | pending_budget | provisioning | provisioned | provision_failed
+ALTER TABLE tenants ADD COLUMN provisioning_status TEXT;
+ALTER TABLE tenants ADD COLUMN monthly_ad_budget_pennies INTEGER;
+ALTER TABLE tenants ADD COLUMN budget_approved_at TEXT;
+CREATE INDEX IF NOT EXISTS idx_tenants_provisioning ON tenants(provisioning_status);
+
+-- Provisioning-progress markers on the v8 creation tables (observability + a
+-- cheap "what's still PAUSED" read). pending -> created -> active; reel_ads may
+-- also be in_review | rejected. NULL/pending for any pre-existing soak rows.
+ALTER TABLE location_adsets ADD COLUMN provision_state TEXT DEFAULT 'pending';
+ALTER TABLE reel_ads ADD COLUMN provision_state TEXT DEFAULT 'pending';
+
+-- Indexes for the provision-cron diff + the creation-lane intent drain at
+-- 62-adset scale (intent_type-scoped, distinct from idx_v8_intents_pending).
+CREATE INDEX IF NOT EXISTS idx_reel_ads_postid ON reel_ads(post_id);
+CREATE INDEX IF NOT EXISTS idx_v8_intents_type_pending ON v8_intents(tenant_id, intent_type, status);
+
+-- ===========================================================================
+-- Demo branch (added 2026-06-12). locations_count >= 3 at quiz time unlocks a
+-- 1 on 1 demo offer before the £27 audit offer. demo_qualified freezes the
+-- rule at submission time. demo_offer_choice: 'yes' | 'no' | NULL (never
+-- shown). demo_requested_at is set once, on the first yes, and gates the
+-- Slack alert so re-submits never double-fire. Written ONLY by /api/demo —
+-- the quiz upsert must never touch demo_offer_choice / demo_requested_at.
+-- ===========================================================================
+ALTER TABLE qualifier_responses ADD COLUMN demo_qualified INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE qualifier_responses ADD COLUMN demo_offer_choice TEXT;
+ALTER TABLE qualifier_responses ADD COLUMN demo_requested_at TEXT;

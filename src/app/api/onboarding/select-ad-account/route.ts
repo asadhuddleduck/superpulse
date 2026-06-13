@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getTenantCookie } from "@/lib/auth";
-import { getTenantById, upsertTenant } from "@/lib/queries/tenants";
+import { getTenantById, upsertTenant, setProvisioningStatus } from "@/lib/queries/tenants";
 import { fetchAdAccounts } from "@/lib/facebook";
 import { writeAuditEvent } from "@/lib/queries/audit-events";
 
@@ -53,6 +53,12 @@ async function selectAdAccount(adAccountId: string) {
     adAccountId,
     status: "active",
   });
+
+  // v8: kick off the budget-intake → provisioning flow. Flag-gated + non-legacy,
+  // so with V8_ENGINE_ENABLED off this is a no-op and the funnel is unchanged.
+  if (process.env.V8_ENGINE_ENABLED === "on" && !tenant.legacy) {
+    await setProvisioningStatus(tenantId, "pending_locations");
+  }
 
   await writeAuditEvent(
     tenantId,

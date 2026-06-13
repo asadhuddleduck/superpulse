@@ -1,14 +1,31 @@
 import { NextResponse } from "next/server";
-import { fetchAdInsights } from "@/lib/facebook";
+import { fetchAdInsights, verifyAd } from "@/lib/facebook";
 import { checkCronAuth } from "@/lib/cron-auth";
 import { getActiveTenants, type Tenant } from "@/lib/queries/tenants";
 import { getActiveCampaigns } from "@/lib/queries/campaigns";
 import { upsertPerformance } from "@/lib/queries/performance";
 import { logApiCall } from "@/lib/queries/api-calls";
 import { writeAuditEvent } from "@/lib/queries/audit-events";
-import { getActiveReelAdsForTenant } from "@/lib/queries/v8";
+import { getActiveReelAdsForTenant, getPausedReelAdsForTenant, recordReelAdRetirement } from "@/lib/queries/v8";
+import { markPostIneligible } from "@/lib/queries/posts";
 import { evaluateAd } from "@/lib/v8/stop-conditions";
 import { enqueueIntent } from "@/lib/v8/intents";
+
+export const maxDuration = 120;
+
+// Per monitor tick, cap how many PAUSED ads we poll for review status so a
+// large tenant doesn't blow the rate budget — the rest are polled next tick.
+const MAX_REVIEW_POLLS_PER_TICK = 20;
+
+// Map a Meta effective_status to a v8 review verdict. Ads are created PAUSED, so
+// an approved ad sits in a *_PAUSED state; disapproved ads surface explicitly;
+// pending ads are still in Meta's review queue.
+function reviewVerdict(effectiveStatus: string): "approved" | "disapproved" | "pending" {
+  const s = (effectiveStatus || "").toUpperCase();
+  if (s === "DISAPPROVED" || s === "WITH_ISSUES") return "disapproved";
+  if (s === "PENDING_REVIEW" || s === "IN_PROCESS" || s === "PENDING_BILLING_INFO") return "pending";
+  return "approved";
+}
 
 // v8 retune (2026-05-04): the v7 inline "spend > £2 + CTR < 0.5% → pause"
 // block is removed. Campaign-level performance writes are preserved (the
@@ -22,6 +39,8 @@ interface TenantMonitorResult {
   campaignsMonitored: number;
   reelAdsEvaluated: number;
   stopIntentsEnqueued: number;
+  activateIntentsEnqueued: number;
+  adsRetired: number;
   error?: string;
 }
 
@@ -41,6 +60,8 @@ async function processTenant(tenant: Tenant): Promise<TenantMonitorResult> {
     campaignsMonitored: 0,
     reelAdsEvaluated: 0,
     stopIntentsEnqueued: 0,
+    activateIntentsEnqueued: 0,
+    adsRetired: 0,
   };
 
   const token = tenant.metaAccessToken;
@@ -176,6 +197,52 @@ async function processTenant(tenant: Tenant): Promise<TenantMonitorResult> {
     }
   }
 
+  // ---------- Review poll → ACTIVATE_AD (v8, gated) ----------
+  // PAUSED reel ads created by the provision lane are reviewed by Meta even
+  // while paused. Poll their status: approved → enqueue ACTIVATE_AD (execute
+  // flips PAUSED→ACTIVE with the child→parent cascade); disapproved (copyright
+  // /policy) → retire + mark the post ineligible so all sibling adsets stop.
+  if (process.env.V8_ENGINE_ENABLED === "on") {
+    const paused = await getPausedReelAdsForTenant(tenant.id);
+    let polled = 0;
+    for (const reelAd of paused) {
+      if (polled >= MAX_REVIEW_POLLS_PER_TICK) break;
+      polled++;
+      const callStart = Date.now();
+      let verdict: "approved" | "disapproved" | "pending";
+      try {
+        const v = await verifyAd(reelAd.metaAdId, token);
+        await logApiCall({ tenantId: tenant.id, endpoint: `/${reelAd.metaAdId}`, method: "GET", statusCode: 200, durationMs: Date.now() - callStart });
+        verdict = reviewVerdict(v.effective_status);
+      } catch (err) {
+        await logApiCall({ tenantId: tenant.id, endpoint: `/${reelAd.metaAdId}`, method: "GET", statusCode: 500, durationMs: Date.now() - callStart, error: err instanceof Error ? err.message : String(err) });
+        continue;
+      }
+      if (verdict === "pending") continue;
+      if (verdict === "disapproved") {
+        await recordReelAdRetirement(reelAd.metaAdId, "review_disapproved");
+        await markPostIneligible(reelAd.postId, "review_disapproved");
+        result.adsRetired++;
+        await writeAuditEvent(tenant.id, "review_failed", `Ad ${reelAd.metaAdId} disapproved at review`, {
+          metaAdId: reelAd.metaAdId,
+          postId: reelAd.postId,
+        });
+        continue;
+      }
+      try {
+        await enqueueIntent({
+          tenantId: tenant.id,
+          aiDecisionId: null,
+          intentType: "ACTIVATE_AD",
+          payload: { metaAdId: reelAd.metaAdId, locationAdsetId: reelAd.locationAdsetId, reason: "review passed" },
+        });
+        result.activateIntentsEnqueued++;
+      } catch (err) {
+        console.error(`enqueue ACTIVATE_AD failed for ${reelAd.metaAdId}:`, err);
+      }
+    }
+  }
+
   return result;
 }
 
@@ -200,6 +267,8 @@ async function runMonitor() {
           campaignsMonitored: 0,
           reelAdsEvaluated: 0,
           stopIntentsEnqueued: 0,
+          activateIntentsEnqueued: 0,
+          adsRetired: 0,
           error: err instanceof Error ? err.message : String(err),
         };
       }
@@ -217,6 +286,8 @@ async function runMonitor() {
     campaignsMonitored: results.reduce((sum, r) => sum + r.campaignsMonitored, 0),
     reelAdsEvaluated: results.reduce((sum, r) => sum + r.reelAdsEvaluated, 0),
     stopIntentsEnqueued: results.reduce((sum, r) => sum + r.stopIntentsEnqueued, 0),
+    activateIntentsEnqueued: results.reduce((sum, r) => sum + r.activateIntentsEnqueued, 0),
+    adsRetired: results.reduce((sum, r) => sum + r.adsRetired, 0),
     results,
   };
 }

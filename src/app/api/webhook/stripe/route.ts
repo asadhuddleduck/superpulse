@@ -14,6 +14,7 @@ import { db } from "@/lib/db";
 import { fireCapi } from "@/lib/meta-capi";
 import { logServerError } from "@/lib/error-mapper";
 import { notifySlack } from "@/lib/slack";
+import { sendAuditConfirmation } from "@/lib/email/confirmation";
 
 function gbp(pennies: number | null | undefined): string {
   return `£${((pennies ?? 0) / 100).toFixed(2)}`;
@@ -249,7 +250,7 @@ async function handleAuditPayment(session: Stripe.Checkout.Session) {
   }
   const phoneForDb = phoneE164 ?? session.customer_details?.phone ?? null;
 
-  await db.execute({
+  const auditIns = await db.execute({
     sql: `INSERT INTO audit_purchases
             (stripe_session_id, stripe_payment_intent_id, stripe_customer_id,
              email, name, phone, instagram_handle, tier, amount_total, currency,
@@ -292,6 +293,11 @@ async function handleAuditPayment(session: Stripe.Checkout.Session) {
       (name ? `\n*Name:* ${name}` : "") +
       (ig ? `\n*Instagram:* @${ig}` : ""),
   );
+
+  // Branded SuperPulse confirmation — only on a genuinely new purchase row.
+  if (auditIns.rowsAffected > 0 && email) {
+    void sendAuditConfirmation(email, name.split(" ")[0] ?? "", product === "audit-97" ? "audit-97" : "audit-27");
+  }
 }
 
 async function handlePaymentIntentSucceeded(intent: Stripe.PaymentIntent) {
@@ -324,7 +330,7 @@ async function handlePaymentIntentSucceeded(intent: Stripe.PaymentIntent) {
     }
   }
 
-  await db.execute({
+  const piIns = await db.execute({
     sql: `INSERT INTO audit_purchases
             (stripe_session_id, stripe_payment_intent_id, stripe_customer_id,
              email, name, phone, instagram_handle, tier, amount_total, currency,
@@ -362,6 +368,10 @@ async function handlePaymentIntentSucceeded(intent: Stripe.PaymentIntent) {
       (name ? `\n*Name:* ${name}` : "") +
       (ig ? `\n*Instagram:* @${ig}` : ""),
   );
+
+  if (piIns.rowsAffected > 0 && email) {
+    void sendAuditConfirmation(email, name.split(" ")[0] ?? "", "audit-97");
+  }
 }
 
 async function handleChargeRefunded(charge: Stripe.Charge) {

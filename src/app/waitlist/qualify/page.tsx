@@ -76,7 +76,21 @@ export default function QualifyPage() {
   const [hydrated, setHydrated] = useState(false);
 
   useEffect(() => {
-    const found = readLead();
+    let found = readLead();
+    // Fallback for arrivals from an email CTA (no sessionStorage yet): seed the
+    // lead from ?email=&name=&ig= query params so the audit flow works.
+    if (!found) {
+      const sp = new URLSearchParams(window.location.search);
+      const qEmail = sp.get("email");
+      if (qEmail) {
+        found = { email: qEmail, firstName: sp.get("name") ?? "", ig: sp.get("ig") ?? "" };
+        try {
+          sessionStorage.setItem(LEAD_KEY, JSON.stringify(found));
+        } catch {
+          /* ignore */
+        }
+      }
+    }
     if (!found) {
       window.location.replace("/waitlist");
       return;
@@ -94,7 +108,7 @@ export default function QualifyPage() {
     });
   }
 
-  async function submit(choice: "yes" | "no") {
+  async function submit() {
     if (!lead) return;
     if (submittingRef.current) return;
     submittingRef.current = true;
@@ -113,7 +127,6 @@ export default function QualifyPage() {
           posts_actively: state.postsActively,
           has_business_manager: state.hasBusinessManager,
           has_run_ads: state.hasRunAds,
-          audit_offer_choice: choice,
           event_id: eventId,
         }),
       });
@@ -125,14 +138,11 @@ export default function QualifyPage() {
         return;
       }
       trackPixel("CompleteRegistration", { event_id: eventId });
-      if (choice === "yes") {
-        trackPixel("InitiateCheckout", { value: 27, currency: "GBP" });
-      }
       if (data.redirect) {
         window.location.href = data.redirect;
         return;
       }
-      window.location.href = "/waitlist/done";
+      window.location.href = "/waitlist/offer";
     } catch {
       setError("Network error. Try again.");
       submittingRef.current = false;
@@ -233,53 +243,20 @@ export default function QualifyPage() {
               </label>
             </div>
 
-            <div className="wl-offer">
-              <div className="wl-card-label">
-                <span className="wl-card-label-dot" />
-                Want to jump the queue? £27 audit · Inbox in 24h
-              </div>
-              <h2 className="wl-card-heading">Audit your Instagram while you wait</h2>
-              <p className="wl-card-sub">
-                One of the team sits down with your Instagram and writes you a
-                short, plain-English PDF: the 3 posts to put money behind first,
-                why locals near you will walk in for them, and a 30-day plan even
-                if you never use SuperPulse.
-              </p>
-              <ul className="wl-bullets">
-                <li>3 posts to boost first, and why</li>
-                <li>How your rhythm compares to fast-growing local businesses</li>
-                <li>5 caption + hook fixes for your next 5 posts</li>
-                <li>Money back if we miss the 24h window</li>
-              </ul>
+            {error && <p className="wl-error">{error}</p>}
 
-              {error && <p className="wl-error">{error}</p>}
+            <button
+              type="button"
+              onClick={() => submit()}
+              disabled={loading}
+              className="wl-btn"
+            >
+              {loading ? "One sec…" : "Submit my answers"}
+            </button>
 
-              <button
-                type="button"
-                onClick={() => submit("yes")}
-                disabled={loading}
-                className="wl-btn"
-              >
-                {loading ? "One sec…" : "Yes, send me the £27 audit"}
-              </button>
-
-              <p className="wl-fine">
-                Secure checkout through Stripe. You&rsquo;ll be on the waitlist
-                either way. Your card will only be charged again if you choose to
-                add the £97 Loom walkthrough on the next page.
-              </p>
-
-              <p className="wl-skip">
-                <button
-                  type="button"
-                  onClick={() => submit("no")}
-                  disabled={loading}
-                  className="wl-skip-link wl-skip-link-button"
-                >
-                  No thanks, just keep my spot on the waitlist
-                </button>
-              </p>
-            </div>
+            <p className="wl-fine">
+              Takes about 30 seconds. You&rsquo;re on the waitlist either way.
+            </p>
           </div>
         </section>
 

@@ -3,6 +3,7 @@
 export type PixelEvent =
   | "Lead"
   | "CompleteRegistration"
+  | "Schedule"
   | "InitiateCheckout"
   | "Purchase";
 
