@@ -53,9 +53,9 @@ function DoneInner() {
   let title: string;
   let body: string;
   if (demo && !upsell && !sessionId) {
-    title = "Demo request received.";
+    title = "You're booked in.";
     body =
-      "Someone from our team will be in touch within the next few hours to sort a time. Keep an eye on your phone and inbox. You keep your spot on the waitlist as well, so if we miss each other first time we will try again.";
+      "Your call is set. The calendar invite and a reminder are both in your inbox, so you're all set. If you need a different time, use the link in the invite to move it. See you then.";
   } else if (skipped && priority) {
     title = "You’re on the priority list.";
     body =
@@ -74,7 +74,7 @@ function DoneInner() {
       "Your audit PDF lands in your inbox inside 24 hours. We’ll also be in touch about your SuperPulse spot on the waitlist.";
   }
   if (demo && (upsell || sessionId)) {
-    body += " Your demo is still on. Someone from our team will be in touch within the next few hours.";
+    body += " Your call is still booked in. The calendar invite and a reminder are in your inbox.";
   }
 
   return (

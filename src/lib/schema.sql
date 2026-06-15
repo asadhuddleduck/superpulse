@@ -379,3 +379,30 @@ CREATE INDEX IF NOT EXISTS idx_v8_intents_type_pending ON v8_intents(tenant_id, 
 ALTER TABLE qualifier_responses ADD COLUMN demo_qualified INTEGER NOT NULL DEFAULT 0;
 ALTER TABLE qualifier_responses ADD COLUMN demo_offer_choice TEXT;
 ALTER TABLE qualifier_responses ADD COLUMN demo_requested_at TEXT;
+
+-- ===========================================================================
+-- Cal.com self-book (added 2026-06-15). Qualified owners self-book a call on
+-- /waitlist/demo via an inline Cal embed; the booking drops into the founder's
+-- connected calendar. The Cal webhook (/api/webhook/cal) is the source of
+-- truth: it sets demo_scheduled_at (ISO start time of the booked slot),
+-- cal_booking_uid (Cal's booking uid, also the Meta dedup key), and
+-- demo_booking_status ('booked' | 'rescheduled' | 'cancelled'). It also sets
+-- demo_offer_choice='yes' and demo_requested_at (if null) so the existing demo
+-- dashboards keep working. cal_webhook_events logs every delivery keyed on
+-- (uid, trigger) for exactly-once processing.
+-- ===========================================================================
+ALTER TABLE qualifier_responses ADD COLUMN demo_scheduled_at TEXT;
+ALTER TABLE qualifier_responses ADD COLUMN cal_booking_uid TEXT;
+ALTER TABLE qualifier_responses ADD COLUMN demo_booking_status TEXT;
+
+CREATE TABLE IF NOT EXISTS cal_webhook_events (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  cal_booking_uid TEXT NOT NULL,
+  trigger_event TEXT NOT NULL,
+  payload TEXT,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(cal_booking_uid, trigger_event)
+);
+
+CREATE INDEX IF NOT EXISTS idx_cal_webhook_uid ON cal_webhook_events(cal_booking_uid);
+CREATE INDEX IF NOT EXISTS idx_qualifier_scheduled ON qualifier_responses(demo_scheduled_at);

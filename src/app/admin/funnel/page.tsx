@@ -71,10 +71,10 @@ export default async function FunnelDashboard() {
         <Kpi label="Did the quiz" value={`${m.qualifyCompletions}`} sub={`${m.conv.waitlistToQualify}% of waitlist`} />
         <Kpi label="Qualified" value={`${m.qualified}`} sub={`${m.qualifiedRate}% of quiz`} />
         <Kpi
-          label="Demo branch (3+ loc)"
-          value={`${m.demoRequested}/${m.demoOffered}`}
-          sub={`requested/offered · ${m.demoOptInRate}% opt-in`}
-          accent={m.demoRequested ? GREEN : undefined}
+          label="Calls booked"
+          value={`${m.callsBooked}`}
+          sub={`${m.demoRequested} requested · ${m.demoOptInRate}% opt-in`}
+          accent={m.callsBooked ? GREEN : undefined}
         />
         <Kpi label="£27 audits" value={`${m.audit27}`} sub={`£${m.audit27Revenue.toFixed(0)} · ${m.conv.qualifyTo27}% of quiz`} accent={GREEN} />
         <Kpi label="£97 upsells" value={`${m.audit97}`} sub={`£${m.audit97Revenue.toFixed(0)} · ${m.attachRate}% attach`} accent={m.audit97 ? GREEN : undefined} />
@@ -85,7 +85,7 @@ export default async function FunnelDashboard() {
       {m.recentDemoRequests.length > 0 && (
         <section className="mb-10 rounded-xl border border-neutral-800 bg-neutral-900/40 p-5">
           <h2 className="mb-3 text-sm font-bold uppercase tracking-wider text-neutral-400">
-            Demo requests (call within a few hours)
+            Calls booked &amp; requests
           </h2>
           <div className="space-y-2 text-[13px]">
             {m.recentDemoRequests.map((d) => (
@@ -95,13 +95,51 @@ export default async function FunnelDashboard() {
                 <span className="text-neutral-500">
                   {d.businessType} · {d.locations} locations
                 </span>
-                <span className="text-neutral-600">{d.requestedAt.slice(0, 16).replace("T", " ")}</span>
+                {d.scheduledAt ? (
+                  <span
+                    style={{ color: d.bookingStatus === "cancelled" ? "#e0726e" : GREEN }}
+                  >
+                    {d.bookingStatus === "cancelled" ? "cancelled" : "booked"}{" "}
+                    {d.scheduledAt.slice(0, 16).replace("T", " ")}
+                  </span>
+                ) : (
+                  <span className="text-neutral-600">
+                    requested {d.requestedAt.slice(0, 16).replace("T", " ")}
+                  </span>
+                )}
               </div>
             ))}
           </div>
           <p className="mt-3 text-xs text-neutral-500">
-            Each of these was promised contact within a few hours of the timestamp. Slack alerts fire on the first
-            opt-in, but this list is the source of truth if a webhook drops.
+            Booked = a self-booked Cal.com slot (invite + reminder sent automatically). This list is the source of
+            truth if a Slack alert drops. Older rows may show as a request (pre-Cal flow).
+          </p>
+        </section>
+      )}
+
+      {/* Unworked qualified leads — the chase-and-close list */}
+      {m.unworkedQualified.length > 0 && (
+        <section className="mb-10 rounded-xl border border-neutral-800 bg-neutral-900/40 p-5">
+          <h2 className="mb-3 text-sm font-bold uppercase tracking-wider text-neutral-400">
+            Qualified leads to chase ({m.unworkedQualified.length})
+          </h2>
+          <div className="space-y-2 text-[13px]">
+            {m.unworkedQualified.map((d) => (
+              <div key={d.email} className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5">
+                <span className="font-semibold text-white">{d.name || d.email}</span>
+                <span className="text-neutral-400">{d.email}</span>
+                {d.phone && <span className="text-neutral-400">{d.phone}</span>}
+                {d.ig && <span style={{ color: GREEN }}>@{d.ig}</span>}
+                <span className="text-neutral-500">
+                  {d.businessType} · {d.locations} {d.locations === 1 ? "location" : "locations"}
+                </span>
+                <span className="text-neutral-600">{d.quizzedAt.slice(0, 16).replace("T", " ")}</span>
+              </div>
+            ))}
+          </div>
+          <p className="mt-3 text-xs text-neutral-500">
+            Qualified on the quiz, no call requested and no £27 review bought yet. These are the owners to reach out to
+            and close. A Slack alert fires the moment a fresh one qualifies.
           </p>
         </section>
       )}

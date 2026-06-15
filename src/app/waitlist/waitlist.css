@@ -709,6 +709,40 @@
   cursor: not-allowed;
 }
 
+/* Secondary CTA — the free-call offer that sits alongside the £27 review for
+   qualified leads. Outline style so the £27 gradient button stays primary.
+   Pairs with .wl-btn (layout) and overrides its fill. */
+.waitlist-root .wl-btn-secondary {
+  background: transparent;
+  color: var(--wl-viridian);
+  border: 1px solid rgba(30, 186, 143, 0.55);
+  box-shadow: none;
+}
+.waitlist-root .wl-btn-secondary:hover {
+  background: rgba(30, 186, 143, 0.08);
+  box-shadow: 0 6px 24px rgba(30, 186, 143, 0.18);
+}
+
+/* Cal.com inline embed on /waitlist/demo. Fixed-height frame with its own
+   internal scroll (the embed auto-fits within it). Slightly wider card so the
+   calendar isn't cramped. */
+.waitlist-root .wl-card-wide {
+  max-width: 560px;
+}
+.waitlist-root .wl-cal-embed {
+  width: 100%;
+  height: 620px;
+  margin: 4px 0 14px;
+  border-radius: 14px;
+  overflow: hidden;
+  background: #0b0b0f;
+}
+@media (max-width: 600px) {
+  .waitlist-root .wl-cal-embed {
+    height: 560px;
+  }
+}
+
 .wl-consent {
   position: fixed;
   bottom: 16px;

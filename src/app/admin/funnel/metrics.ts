@@ -31,12 +31,24 @@ export interface FunnelMetrics {
   demoOffered: number;
   demoRequested: number;
   demoOptInRate: number;
+  callsBooked: number;
   recentDemoRequests: {
     email: string;
     name: string;
     businessType: string;
     locations: number;
     requestedAt: string;
+    scheduledAt: string | null;
+    bookingStatus: string | null;
+  }[];
+  unworkedQualified: {
+    email: string;
+    name: string;
+    phone: string;
+    ig: string;
+    businessType: string;
+    locations: number;
+    quizzedAt: string;
   }[];
   audit27: number;
   audit27Revenue: number;
@@ -97,8 +109,9 @@ export async function getFunnelMetrics(): Promise<FunnelMetrics> {
   const qRow = await one(
     `SELECT COUNT(*) total, SUM(qualified) q,
        SUM(CASE WHEN audit_offer_choice='yes' THEN 1 ELSE 0 END) yes,
-       SUM(CASE WHEN COALESCE(demo_qualified,0)=1 OR demo_offer_choice IS NOT NULL THEN 1 ELSE 0 END) demo_offered,
-       SUM(CASE WHEN demo_requested_at IS NOT NULL THEN 1 ELSE 0 END) demo_requested
+       SUM(CASE WHEN qualified=1 OR demo_offer_choice IS NOT NULL THEN 1 ELSE 0 END) demo_offered,
+       SUM(CASE WHEN demo_requested_at IS NOT NULL THEN 1 ELSE 0 END) demo_requested,
+       SUM(CASE WHEN demo_scheduled_at IS NOT NULL AND COALESCE(demo_booking_status,'') != 'cancelled' THEN 1 ELSE 0 END) calls_booked
      FROM qualifier_responses`,
   );
   const qualifyCompletions = n(qRow.total);
@@ -106,6 +119,7 @@ export async function getFunnelMetrics(): Promise<FunnelMetrics> {
   const auditYes = n(qRow.yes);
   const demoOffered = n(qRow.demo_offered);
   const demoRequested = n(qRow.demo_requested);
+  const callsBooked = n(qRow.calls_booked);
 
   // The DB row is the source of truth on a time-boxed promise ("in touch
   // within a few hours") — a dropped Slack webhook must not become a ghosted
@@ -113,17 +127,47 @@ export async function getFunnelMetrics(): Promise<FunnelMetrics> {
   const recentDemoRequests = (
     await rows(
       `SELECT q.email, COALESCE(w.first_name,'') name, COALESCE(q.business_type,'') bt,
-         COALESCE(q.locations_count,0) loc, q.demo_requested_at ts
+         COALESCE(q.locations_count,0) loc, q.demo_requested_at ts,
+         q.demo_scheduled_at sched, q.demo_booking_status status
        FROM qualifier_responses q LEFT JOIN waitlist w ON w.email = q.email
-       WHERE q.demo_requested_at IS NOT NULL
-       ORDER BY q.demo_requested_at DESC LIMIT 10`,
+       WHERE q.demo_requested_at IS NOT NULL OR q.demo_scheduled_at IS NOT NULL
+       ORDER BY COALESCE(q.demo_scheduled_at, q.demo_requested_at) DESC LIMIT 10`,
     )
   ).map((r) => ({
     email: String(r.email),
     name: String(r.name),
     businessType: String(r.bt),
     locations: n(r.loc),
-    requestedAt: String(r.ts),
+    requestedAt: String(r.ts ?? ""),
+    scheduledAt: r.sched ? String(r.sched) : null,
+    bookingStatus: r.status ? String(r.status) : null,
+  }));
+
+  // Qualified leads the founder hasn't worked yet: cleared the quiz but have
+  // not asked for a call and have not bought the £27 review. This is the
+  // chase-and-close list.
+  const unworkedQualified = (
+    await rows(
+      `SELECT q.email, COALESCE(w.first_name,'') name, COALESCE(w.phone,'') phone,
+         COALESCE(w.instagram_handle,'') ig, COALESCE(q.business_type,'') bt,
+         COALESCE(q.locations_count,0) loc, q.updated_at ts
+       FROM qualifier_responses q LEFT JOIN waitlist w ON w.email = q.email
+       WHERE q.qualified = 1
+         AND q.demo_requested_at IS NULL
+         AND COALESCE(w.source,'') != 'healthcheck'
+         AND lower(q.email) NOT IN (
+           SELECT lower(email) FROM audit_purchases WHERE refunded=0 AND email<>''
+         )
+       ORDER BY q.updated_at DESC LIMIT 25`,
+    )
+  ).map((r) => ({
+    email: String(r.email),
+    name: String(r.name),
+    phone: String(r.phone),
+    ig: String(r.ig),
+    businessType: String(r.bt),
+    locations: n(r.loc),
+    quizzedAt: String(r.ts),
   }));
 
   const a27 = await one(
@@ -213,7 +257,9 @@ export async function getFunnelMetrics(): Promise<FunnelMetrics> {
     demoOffered,
     demoRequested,
     demoOptInRate: pct(demoRequested, demoOffered),
+    callsBooked,
     recentDemoRequests,
+    unworkedQualified,
     audit27,
     audit27Revenue: n(a27.g) / 100,
     audit97,

@@ -263,8 +263,9 @@ Ahmed-type: Local restaurant/takeaway owner, 2-5K followers, posts 3-4x/week, £
 - `src/app/dashboard/page.tsx` — Protected dashboard (shows user, Pages, linked IG accounts)
 - `src/app/privacy/page.tsx` — Privacy policy page (renders docs/PRIVACY-POLICY.md)
 - `src/app/waitlist/page.tsx` — Public lead-capture (name, email, phone, IG handle). Posts to `/api/waitlist`, redirects to `/waitlist/qualify`.
-- `src/app/waitlist/qualify/page.tsx` — Quiz only (business type, locations count, 4 ticks). Posts to `/api/qualify`, which branches: 3+ locations → `/waitlist/demo`, else `/waitlist/offer`.
-- `src/app/waitlist/demo/page.tsx` — Free 1-on-1 demo offer (3+ locations). Posts to `/api/demo`.
+- `src/app/waitlist/qualify/page.tsx` — Quiz only (business type, locations count, 4 ticks). Posts to `/api/qualify`, which branches: qualified → `/waitlist/demo` (book a call, the priority), else `/waitlist/offer` (£27 only).
+- `src/app/waitlist/demo/page.tsx` — Qualified leads self-book a call via an inline **Cal.com** embed (prefilled name+email). The Cal webhook (`/api/webhook/cal`) records the booking. "No thanks" still posts to `/api/demo`. (Was request-only "we'll call you" until 15 Jun 2026.)
+- `src/app/api/webhook/cal/route.ts` — Cal.com booking webhook (source of truth). Verifies `x-cal-signature-256` (HMAC-SHA256 raw body, `CAL_WEBHOOK_SECRET`), idempotent on `cal_booking_uid`, writes `demo_scheduled_at`/`cal_booking_uid`/`demo_booking_status`, fires Slack `📞 demo BOOKED` + CAPI Schedule (event_id = booking uid) + pre-call email. **Register at `https://www.superpulse.io/api/webhook/cal`** (www, not apex — same 307-redirect drop trap as Stripe).
 - `src/app/waitlist/offer/page.tsx` — £27 IG review offer (demo-upgrade or while-you-wait framing). Posts to `/api/audit-offer` (Stripe Checkout lives there).
 - `src/app/waitlist/upsell/page.tsx` — £97 Loom walkthrough upsell (post-£27 only, gated on `session_id` query param). Posts to `/api/upsell/charge-97`.
 - `src/app/waitlist/done/page.tsx` — Variant thank-you page (demo / skipped / priority / audit / loom+audit copy).
@@ -284,22 +285,22 @@ Ahmed-type: Local restaurant/takeaway owner, 2-5K followers, posts 3-4x/week, £
 
 The 13 Apr 2026 NEC waitlist (password-gated, name+email+phone only) was retired on 7 May 2026 and replaced with a public lead-capture + paid audit upsell funnel for cold Meta-ad traffic. Audience expanded from QSR/restaurants to **any local business that lives or dies on locals knowing they exist** (restaurants, takeaways, cafes, barbers, hairdressers, dentists, aesthetics clinics, gyms, opticians, etc).
 
-### URLs (demo branch added 12 Jun 2026)
+### URLs (Cal.com self-book added 15 Jun 2026)
 - `superpulse.io/waitlist` — public form (no password)
-- `superpulse.io/waitlist/qualify` — quiz ONLY (business type, # locations, 4 ticks). Branches on locations: 3+ → demo offer, 1-2 → £27 offer
-- `superpulse.io/waitlist/demo` — free 1-on-1 demo offer (3+ locations only, request-only, no calendar). Opt-in → Slack `📞 SuperPulse demo request` + CAPI Schedule
+- `superpulse.io/waitlist/qualify` — quiz ONLY (business type, # locations, 4 ticks). Branches on qualified flag: qualified → book a call, not qualified → £27 offer
+- `superpulse.io/waitlist/demo` — qualified leads self-book a call (inline Cal.com calendar, drops into the founder's calendar). Booking → Cal webhook → Slack `📞 SuperPulse demo BOOKED` + CAPI Schedule + pre-call email. "No thanks" keeps their spot. (Was request-only "we'll call you in a few hours" until 15 Jun 2026.)
 - `superpulse.io/waitlist/offer` — £27 IG review offer, two framings: `?demo=1` = "upgrade your demo", plain = "while you wait". Email CTAs deep-link here
 - `superpulse.io/waitlist/upsell` — £97 Loom walkthrough on top (post-£27, gated by `session_id` query param; `&demo=1` passes through)
 - `superpulse.io/waitlist/done` — variant thank-you copy (demo / skipped / priority / audit / loom+audit)
 
 ### Funnel flow
 1. Visitor lands on `/waitlist` → fills form (name, email, phone, IG handle) → row upserted into Turso `waitlist`. NO Slack alert (removed 12 Jun 2026 — Slack is demo requests + purchases only).
-2. Redirect to `/waitlist/qualify` → quiz → `/api/qualify` stores answers + `demo_qualified` (locations ≥ 3) and branches: 3+ → `/waitlist/demo`, else `/waitlist/offer`. Re-takes with a recorded demo choice skip the demo pitch. Quiz upsert NEVER touches `demo_offer_choice`/`demo_requested_at`/`audit_offer_choice`.
-3. `/waitlist/demo` → `/api/demo` re-checks `demo_qualified` from the DB. First opt-in sets `demo_requested_at` once + fires the Slack alert (never re-fires) + CAPI Schedule. Both choices land on `/waitlist/offer` (`?demo=1` if opted in).
+2. Redirect to `/waitlist/qualify` → quiz → `/api/qualify` stores answers and branches: **qualified → `/waitlist/demo`** (book a call, the priority), else `/waitlist/offer` (£27 only, never offered the call). Re-takes who already booked skip straight to `/waitlist/offer?demo=1`. Quiz upsert NEVER touches `demo_offer_choice`/`demo_requested_at`/`demo_scheduled_at`/`audit_offer_choice`.
+3. `/waitlist/demo` → inline Cal.com embed (prefilled name+email + hidden `sp_email`). Picking a slot drops the call into the founder's calendar; the `bookingSuccessfulV2` callback fires the browser Schedule pixel (event_id = booking uid) and redirects to `/waitlist/offer?demo=1`. The **Cal webhook** (`/api/webhook/cal`) is the source of truth: sets `demo_scheduled_at`/`cal_booking_uid`/`demo_booking_status='booked'` (+ `demo_requested_at` once), fires Slack `📞 demo BOOKED` + server CAPI Schedule (deduped on uid) + the pre-call resources email. "No thanks" posts `/api/demo` choice=no → `/waitlist/offer`. Env: `NEXT_PUBLIC_CAL_LINK`, `CAL_WEBHOOK_SECRET`.
 4. `/waitlist/offer` → `/api/audit-offer` records `audit_offer_choice` and creates the £27 Stripe Checkout (idempotency key includes the demo branch; cancel_url returns to the same offer variant). Success URL is `/waitlist/upsell?session_id=…[&demo=1]`.
 5. `/waitlist/upsell` → £97 button → Stripe Checkout → success URL is `/waitlist/done?session_id=…&upsell=1`. Skip link → `/waitlist/done?session_id=…[&demo=1]`.
 6. Webhook handler (`src/app/api/webhook/stripe/route.ts` → `handleAuditPayment`) inserts both purchases into `audit_purchases` (idempotent on `stripe_session_id`), fires Meta CAPI Purchase, and posts a Slack alert. **All money events Slack-alert** (audits, £300/mo subs, refunds, disputes, failed payments) via `notifySlack` (`SLACK_WEBHOOK_URL`).
-7. Demo follow-up list (source of truth if a Slack webhook drops): `/admin/funnel` "Demo requests" panel reads `demo_requested_at` from `qualifier_responses`.
+7. Demo follow-up list (source of truth if a Slack webhook drops): `/admin/funnel` "Calls booked & requests" panel reads `demo_scheduled_at` + `demo_requested_at` from `qualifier_responses`; "Calls booked" KPI counts non-cancelled bookings.
 
 > **Webhook MUST point at `https://www.superpulse.io/api/webhook/stripe`** — the apex `superpulse.io` 307-redirects and Stripe does not follow redirects on delivery, so apex = silently dropped payments. Incident 29 May 2026: 3 live £27 payments lost this way, backfilled via `scripts/backfill-audit-purchases.mjs`. See `docs/STRIPE-INTEGRATION.md`.
 

@@ -1,13 +1,17 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
+import Cal, { getCalApi } from "@calcom/embed-react";
 import WaitlistHeader from "@/components/waitlist/Header";
 import WaitlistFooter from "@/components/waitlist/Footer";
 import ConvergenceBackground from "@/components/waitlist/ConvergenceBackground";
 import SocialProof from "@/components/waitlist/SocialProof";
-import { trackPixel, getOrCreateEventId } from "@/lib/meta-pixel-client";
+import { trackPixel } from "@/lib/meta-pixel-client";
 
 const LEAD_KEY = "wl-lead";
+// Set in Vercel + .env.local, e.g. "asad/superpulse-demo". The embed is the
+// calendar; the Cal webhook (/api/webhook/cal) records the booking server-side.
+const CAL_LINK = process.env.NEXT_PUBLIC_CAL_LINK ?? "";
 
 type Lead = { email: string; firstName: string; ig: string };
 
@@ -57,36 +61,57 @@ export default function DemoPage() {
     setHydrated(true);
   }, []);
 
-  async function submit(choice: "yes" | "no") {
+  // Bind the booking-success callback. This is best-effort UX (instant redirect
+  // + pixel fire); the Cal webhook is the source of truth for the DB/Slack/CAPI.
+  // The booking uid is the shared Meta dedup key between this pixel Schedule and
+  // the server CAPI Schedule fired by the webhook.
+  useEffect(() => {
+    if (!hydrated) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const cal = await getCalApi();
+        if (cancelled) return;
+        cal("on", {
+          action: "bookingSuccessfulV2",
+          callback: (e: unknown) => {
+            const detail = (e as { detail?: { data?: { uid?: string } } }).detail;
+            const uid = detail?.data?.uid;
+            try {
+              trackPixel("Schedule", uid ? { event_id: uid } : {});
+            } catch {
+              /* ignore */
+            }
+            window.location.href = "/waitlist/offer?demo=1";
+          },
+        });
+      } catch {
+        /* embed not ready — webhook still records the booking */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [hydrated]);
+
+  async function keepSpot() {
     if (!lead) return;
     if (submittingRef.current) return;
     submittingRef.current = true;
     setLoading(true);
     setError(null);
     try {
-      const eventId = choice === "yes" ? getOrCreateEventId("schedule") : undefined;
       const res = await fetch("/api/demo", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          email: lead.email,
-          choice,
-          event_id: eventId,
-        }),
+        body: JSON.stringify({ email: lead.email, choice: "no" }),
       });
       const data = await res.json();
-      if (!res.ok) {
-        if (data.redirect) {
-          window.location.href = data.redirect;
-          return;
-        }
+      if (!res.ok && !data.redirect) {
         setError(data.error || "Something went wrong. Try again.");
         submittingRef.current = false;
         setLoading(false);
         return;
-      }
-      if (choice === "yes" && eventId && data.first) {
-        trackPixel("Schedule", { event_id: eventId });
       }
       window.location.href = data.redirect || "/waitlist/offer";
     } catch {
@@ -98,6 +123,10 @@ export default function DemoPage() {
 
   if (!hydrated || !lead) return null;
 
+  const calLink = CAL_LINK
+    ? `${CAL_LINK}?sp_email=${encodeURIComponent(lead.email)}`
+    : "";
+
   return (
     <>
       <WaitlistHeader />
@@ -107,63 +136,57 @@ export default function DemoPage() {
         <section className="wl-hero">
           <span className="wl-hero-eyebrow">
             <span className="wl-hero-eyebrow-dot" />
-            Multi-location businesses skip the queue
+            You qualified · A call with the team
           </span>
           <h1 className="wl-hero-headline">
-            You can skip the queue.{" "}
-            <span className="wl-hero-headline-accent">
-              We&rsquo;d like to show you SuperPulse one to one.
-            </span>
+            Good news.{" "}
+            <span className="wl-hero-headline-accent">Pick a time that suits you.</span>
           </h1>
           <p className="wl-hero-sub">
-            Most people on the waitlist hear from us when we open up. Businesses
-            with 3 or more locations are the ones we onboard first, so we do
-            this differently. One of the team will walk you through SuperPulse
-            on a short call, set up around your locations, and answer whatever
-            you want to ask.
+            Based on your answers, you&rsquo;re a good fit. Grab a slot below and
+            one of the team will hop on a short call, look at your Instagram with
+            you, and show you exactly how SuperPulse would run for your business.
+            About 15 to 20 minutes. Free, and your card is never asked for.
           </p>
 
-          <div className="wl-card">
+          <div className="wl-card wl-card-wide">
             <div className="wl-card-label">
               <span className="wl-card-label-dot" />
-              One to one demo · Free · No card needed
+              One to one call · Free · No card needed
             </div>
-            <h2 className="wl-card-heading">Want one of the team to show you round?</h2>
-            <p className="wl-card-sub">
-              Say yes and someone will be in touch within the next few hours.
-              The demo takes 15 to 20 minutes on a call. We look at your
-              Instagram together and show you exactly how SuperPulse would run
-              across your locations.
-            </p>
-
-            <ul className="wl-bullets">
-              <li>A real person from our team, on a call, looking at your account with you</li>
-              <li>How boosting works across every location you run</li>
-              <li>What it costs and what you get, all answered on the call</li>
-              <li>If it fits, we set you up ahead of the queue</li>
-            </ul>
 
             {error && <p className="wl-error">{error}</p>}
 
-            <button
-              type="button"
-              onClick={() => submit("yes")}
-              disabled={loading}
-              className="wl-btn"
-            >
-              {loading ? "One sec…" : "Yes, book my demo"}
-            </button>
+            {calLink ? (
+              <div className="wl-cal-embed">
+                <Cal
+                  calLink={calLink}
+                  style={{ width: "100%", height: "100%", overflow: "scroll" }}
+                  config={{
+                    name: lead.firstName,
+                    email: lead.email,
+                    theme: "dark",
+                    layout: "month_view",
+                    useSlotsViewOnSmallScreen: "true",
+                  }}
+                />
+              </div>
+            ) : (
+              <p className="wl-card-sub">
+                Booking is just being set up. Keep your spot below and we&rsquo;ll
+                be in touch to sort a time.
+              </p>
+            )}
 
             <p className="wl-fine">
-              Free, and your card is never asked for. Someone from our team will
-              be in touch within the next few hours, usually by phone or
-              WhatsApp.
+              You pick the time, it drops straight into our calendar, and you get
+              the invite and a reminder by email. Nothing to pay.
             </p>
 
             <p className="wl-skip">
               <button
                 type="button"
-                onClick={() => submit("no")}
+                onClick={keepSpot}
                 disabled={loading}
                 className="wl-skip-link wl-skip-link-button"
               >

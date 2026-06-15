@@ -58,7 +58,7 @@ export const FUNNEL: FunnelStep[] = [
     title: "Qualifier (quiz only)",
     route: "/waitlist/qualify",
     purpose:
-      "Asks the questions, then BRANCHES on locations count: 3+ locations get the one-to-one demo offer first, 1-2 locations go straight to the £27 offer. The tick answers still only set the 'qualified' priority flag for thank-you copy.",
+      "Asks the questions, then BRANCHES on whether the lead qualifies (IG business profile + at least 2 of: posts weekly / has Business Manager / has run ads). Qualified leads go straight to booking a call (the priority — get them on a call ASAP). Non-qualified leads get the £27 review on its own and are never offered the call. Locations no longer gate anything (changed 14 Jun 2026).",
     copy: [
       "Headline: Four quick questions. Helps us move you up the list.",
       "Fields: Business type · How many locations?",
@@ -67,41 +67,43 @@ export const FUNNEL: FunnelStep[] = [
     ],
     cta: "Submit my answers",
     next: [
-      { condition: "3+ locations (first time)", target: "→ Demo offer (/waitlist/demo)" },
-      { condition: "1-2 locations", target: "→ £27 offer (/waitlist/offer)" },
+      { condition: "Qualified (any locations)", target: "→ Book a call (/waitlist/demo)" },
+      { condition: "Not qualified", target: "→ £27 offer only (/waitlist/offer)" },
       {
-        condition: "Re-take with a recorded demo choice",
-        target: "→ £27 offer, demo framing preserved (no second demo pitch)",
+        condition: "Re-take after already booking a call",
+        target: "→ £27 offer, call-booked framing (?demo=1), no second pitch",
       },
     ],
     writes: [
-      "Turso: qualifier_responses (answers + qualified flag + demo_qualified). Never touches a recorded demo/audit choice.",
+      "Turso: qualifier_responses (answers + qualified flag + demo_qualified still stored). Never touches a recorded demo/audit choice.",
+      "Slack: '🎯 New qualified SuperPulse lead' the first time a lead crosses into qualified (never re-fires on re-takes)",
       "Meta Pixel + CAPI: CompleteRegistration",
     ],
   },
   {
     n: 3,
     id: "demo",
-    title: "Demo offer (3+ locations only)",
+    title: "Book a call (qualified leads)",
     route: "/waitlist/demo",
     purpose:
-      "The better-audience filter. Multi-location leads are offered a free one-to-one demo instead of being funnelled straight into the £27 PDF. Request-only for now (no calendar) — the team follows up within a few hours.",
+      "Where qualified leads land straight from the quiz (the call is the priority). Inline Cal.com calendar, prefilled with their name + email — they pick a slot and it drops into the founder's connected calendar. Cal sends the invite + reminders. The Cal webhook (/api/webhook/cal) records the booking server-side. After booking they go to the £27 + £97 ladder.",
     copy: [
-      "Eyebrow: Multi-location businesses skip the queue",
-      "Headline: You can skip the queue. We'd like to show you SuperPulse one to one.",
-      "Card: One to one demo · Free · No card needed",
-      "Sub: Say yes and someone will be in touch within the next few hours. 15 to 20 minutes on a call, looking at your Instagram together.",
-      "Fine print: Free, card never asked for. In touch within the next few hours, usually phone or WhatsApp.",
+      "Eyebrow: You qualified · A call with the team",
+      "Headline: Good news. Pick a time that suits you.",
+      "Card: One to one call · Free · No card needed",
+      "Sub: Grab a slot below, the team hops on a short call, looks at your Instagram with you, 15 to 20 minutes.",
+      "Fine print: You pick the time, it drops into our calendar, invite + reminder by email. Nothing to pay.",
     ],
-    cta: "Yes, book my demo  /  No thanks, keep my spot on the waitlist",
+    cta: "Pick a slot in the calendar  /  No thanks, keep my spot on the waitlist",
     next: [
-      { condition: "Yes", target: "→ £27 offer with 'upgrade your demo' framing (?demo=1)" },
-      { condition: "No", target: "→ £27 offer, standard framing" },
+      { condition: "Picks a slot (Cal bookingSuccessful)", target: "→ £27 offer, call-booked framing (?demo=1)" },
+      { condition: "No thanks", target: "→ £27 offer, standard framing" },
     ],
     writes: [
-      "Turso: demo_offer_choice + demo_requested_at (set once, first yes)",
-      "Slack: '📞 SuperPulse demo request' — FIRST opt-in only, never re-fires",
-      "Meta Pixel + CAPI: Schedule (opt-ins only)",
+      "Turso: demo_scheduled_at + cal_booking_uid + demo_booking_status='booked' (via Cal webhook); demo_requested_at set once",
+      "Slack: '📞 SuperPulse demo BOOKED' with the booked time, on the first delivery only (idempotent on uid)",
+      "Meta Pixel + CAPI: Schedule (browser + server, deduped on booking uid)",
+      "Email: branded pre-call resources email; Cal sends the calendar invite + reminders",
     ],
   },
   {
@@ -110,9 +112,9 @@ export const FUNNEL: FunnelStep[] = [
     title: "£27 review offer (two framings)",
     route: "/waitlist/offer",
     purpose:
-      "The £27 Instagram review (same product as the old inline audit offer). Demo requesters see it as a demo upgrade ('read it before we talk'); everyone else as something to do while they wait. Email CTAs deep-link here directly.",
+      "The £27 Instagram review (same product as the old inline audit offer). Leads who booked a call see it as a demo upgrade ('read it before we talk', ?demo=1); everyone else as something to do while they wait. This is the start of the post-booking £27 → £97 ladder. Email CTAs deep-link here directly.",
     copy: [
-      "Demo framing: One thing before your demo. Want your Instagram reviewed first? · Upgrade your demo · £27 · Inbox in 24h",
+      "Demo framing (?demo=1): One thing before your demo. Want your Instagram reviewed first? · Upgrade your demo · £27 · Inbox in 24h",
       "Waitlist framing: You're on the list. We'll let you know when we can take you on. · While you wait · £27 review · Inbox in 24h",
       "Bullets: 3 posts to put money behind first · posting vs fast-growing local businesses · 5 caption and hook fixes · money back if we miss 24h",
       "Fine print: Card only charged again if you add the £97 Loom next.",
@@ -120,8 +122,8 @@ export const FUNNEL: FunnelStep[] = [
     cta: "Yes, add/send the £27 review  /  No thanks",
     next: [
       { condition: "Yes → Stripe £27 checkout", target: "→ Stripe Checkout £27" },
-      { condition: "No (demo requested)", target: "→ Thank-you (demo variant)" },
-      { condition: "No (no demo)", target: "→ Thank-you (skipped / priority)" },
+      { condition: "No (call booked)", target: "→ Thank-you (booked variant)" },
+      { condition: "No (no call)", target: "→ Thank-you (skipped / priority)" },
     ],
     writes: [
       "Turso: audit_offer_choice on qualifier_responses",
