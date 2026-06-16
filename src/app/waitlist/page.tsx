@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import WaitlistHeader from "@/components/waitlist/Header";
 import WaitlistFooter from "@/components/waitlist/Footer";
 import ConvergenceBackground from "@/components/waitlist/ConvergenceBackground";
+import HowItWorks from "@/components/waitlist/HowItWorks";
 import SocialProof from "@/components/waitlist/SocialProof";
 import CaseStudies from "@/components/waitlist/CaseStudies";
 import WaitlistLogoStrip from "@/components/waitlist/LogoStrip";
@@ -34,6 +35,10 @@ function WaitlistInner() {
       if (v) next[key] = v;
     }
     setUtm(next);
+    // Prefill the IG handle when arriving from the gate's "join the waitlist"
+    // button (it deep-links ?ig=<username> after a non-allowlisted IG login).
+    const ig = searchParams.get("ig");
+    if (ig) setInstagram((cur) => cur || `@${ig.replace(/^@/, "")}`);
   }, [searchParams]);
 
   async function handleSubmit(e: FormEvent) {
@@ -200,6 +205,7 @@ function WaitlistInner() {
           </div>
         </section>
 
+        <HowItWorks />
         <WaitlistLogoStrip />
         <SocialProof />
         <CaseStudies />

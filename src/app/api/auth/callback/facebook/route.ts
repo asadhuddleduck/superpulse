@@ -10,6 +10,7 @@ import {
   getTenantByIgUserId,
   upsertTenant,
 } from "@/lib/queries/tenants";
+import { handleGateCallback } from "./gate";
 
 const COOKIE_TENANT = "tenant_id";
 const SIXTY_DAYS = 60 * 60 * 24 * 60;
@@ -18,6 +19,16 @@ export async function GET(request: NextRequest) {
   const { searchParams } = request.nextUrl;
   const code = searchParams.get("code");
   const error = searchParams.get("error");
+  const state = searchParams.get("state") ?? "";
+
+  // Private-beta gate login reuses this same OAuth callback (so we don't have to
+  // register a second redirect URI on the Meta app). The `gate:` state prefix —
+  // set by /api/auth/gate/start — routes it to the identity+allowlist branch,
+  // which never creates a tenant. Onboarding logins use a random hex state and
+  // fall through to the existing flow below.
+  if (state.startsWith("gate:")) {
+    return handleGateCallback(request, code, error, state);
+  }
 
   if (error || !code) {
     const errorDescription = searchParams.get("error_description") ?? "Login was cancelled.";

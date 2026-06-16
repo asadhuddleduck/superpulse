@@ -9,7 +9,7 @@ export const metadata = {
 export default function GatePage({
   searchParams,
 }: {
-  searchParams: Promise<{ next?: string; error?: string }>;
+  searchParams: Promise<{ next?: string; error?: string; denied?: string; u?: string; pw?: string }>;
 }) {
   return (
     <Suspense>
@@ -21,8 +21,16 @@ export default function GatePage({
 async function GateResolver({
   searchParams,
 }: {
-  searchParams: Promise<{ next?: string; error?: string }>;
+  searchParams: Promise<{ next?: string; error?: string; denied?: string; u?: string; pw?: string }>;
 }) {
-  const { next, error } = await searchParams;
-  return <GateForm next={next ?? "/"} error={error === "1"} />;
+  const { next, error, denied, u, pw } = await searchParams;
+  return (
+    <GateForm
+      next={next ?? "/"}
+      error={error === "1"}
+      denied={denied === "1"}
+      username={u ?? null}
+      showPassword={pw === "1"}
+    />
+  );
 }

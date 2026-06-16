@@ -84,8 +84,19 @@ export async function middleware(req: NextRequest) {
 
   const password = process.env.SUPERPULSE_GATE_PASSWORD;
   if (!password) {
-    // Fail open if env var unset — log so we notice in Vercel logs.
-    console.warn("[gate] SUPERPULSE_GATE_PASSWORD not set — gate disabled");
+    // In production, fail CLOSED: a missing gate secret must never silently
+    // open the private beta. SUPERPULSE_GATE_PASSWORD is the gate's signing
+    // secret (it backs the sp_gate cookie Instagram-login mints) — keep it set.
+    // In local dev the secret is normally absent, so fail OPEN there to keep
+    // the site walkable without a gate.
+    if (process.env.NODE_ENV === "production") {
+      console.error("[gate] SUPERPULSE_GATE_PASSWORD not set — refusing access (fail closed)");
+      const url = req.nextUrl.clone();
+      url.pathname = "/gate";
+      url.search = `?next=${encodeURIComponent(pathname + search)}`;
+      return NextResponse.redirect(url);
+    }
+    console.warn("[gate] SUPERPULSE_GATE_PASSWORD not set — gate open (dev only)");
     return NextResponse.next();
   }
 

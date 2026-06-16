@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { safeNext } from "@/lib/ig-gate";
 
 const COOKIE_NAME = "sp_gate";
 const COOKIE_MAX_AGE = 60 * 60 * 24 * 30; // 30 days
@@ -9,12 +10,6 @@ async function expectedToken(password: string): Promise<string> {
   return Array.from(new Uint8Array(digest))
     .map((b) => b.toString(16).padStart(2, "0"))
     .join("");
-}
-
-function safeNext(next: string | null): string {
-  if (!next || !next.startsWith("/") || next.startsWith("//")) return "/";
-  if (next.startsWith("/gate")) return "/";
-  return next;
 }
 
 export async function POST(req: NextRequest) {
