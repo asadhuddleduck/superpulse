@@ -26,14 +26,26 @@ export function toE164(raw: string): string {
   return s.length >= 10 ? s : "";
 }
 
-/** Friendly Europe/London date+time for body params, e.g. "Thursday 19 June, 2:30 pm". */
-export function formatWhenFriendly(iso: string): string {
-  if (!iso) return "the time you picked";
+/** Europe/London date for body params, e.g. "Thursday 19 June". */
+export function formatDate(iso: string): string {
+  if (!iso) return "the day you picked";
   try {
     return new Intl.DateTimeFormat("en-GB", {
       weekday: "long",
       day: "numeric",
       month: "long",
+      timeZone: "Europe/London",
+    }).format(new Date(iso));
+  } catch {
+    return "the day you picked";
+  }
+}
+
+/** Europe/London time for body params, e.g. "2:30 pm". */
+export function formatTime(iso: string): string {
+  if (!iso) return "the time you picked";
+  try {
+    return new Intl.DateTimeFormat("en-GB", {
       hour: "numeric",
       minute: "2-digit",
       hour12: true,
@@ -108,29 +120,36 @@ export async function sendWhatsAppTemplate(opts: {
   }
 }
 
-/** Immediate "you're booked in for <when>" confirmation. Fired from the Cal webhook. */
+/** Immediate booking confirmation. Fired from the Cal webhook (opted-in leads only).
+ *  Template `demo_booking_confirmation` body vars: {{1}} name, {{2}} date, {{3}} time,
+ *  {{4}} the number we'll call (their own). */
 export async function sendDemoBookingWhatsApp(phone: string, firstName: string, startIso: string): Promise<boolean> {
   return sendWhatsAppTemplate({
     to: phone,
     template: process.env.WHATSAPP_TEMPLATE_DEMO_CONFIRMATION?.trim() || "",
-    params: [firstName || "there", formatWhenFriendly(startIso)],
+    params: [firstName || "there", formatDate(startIso), formatTime(startIso), phone],
   });
 }
 
-/** Pre-call reminder (~24h or ~1h before). Fired from the demo-reminders cron. */
+/** Pre-call reminder (~24h or ~1h before). Fired from the demo-reminders cron (opted-in only).
+ *  24h body vars: {{1}} name, {{2}} date, {{3}} time, {{4}} number.
+ *  1h  body vars: {{1}} name, {{2}} time, {{3}} number. */
 export async function sendDemoReminderWhatsApp(
   phone: string,
   firstName: string,
   startIso: string,
   kind: "24h" | "1h",
 ): Promise<boolean> {
-  const template =
-    kind === "24h"
-      ? process.env.WHATSAPP_TEMPLATE_DEMO_REMINDER_24H?.trim()
-      : process.env.WHATSAPP_TEMPLATE_DEMO_REMINDER_1H?.trim();
+  if (kind === "24h") {
+    return sendWhatsAppTemplate({
+      to: phone,
+      template: process.env.WHATSAPP_TEMPLATE_DEMO_REMINDER_24H?.trim() || "",
+      params: [firstName || "there", formatDate(startIso), formatTime(startIso), phone],
+    });
+  }
   return sendWhatsAppTemplate({
     to: phone,
-    template: template || "",
-    params: [firstName || "there", formatWhenFriendly(startIso)],
+    template: process.env.WHATSAPP_TEMPLATE_DEMO_REMINDER_1H?.trim() || "",
+    params: [firstName || "there", formatTime(startIso), phone],
   });
 }

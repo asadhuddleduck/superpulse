@@ -422,3 +422,13 @@ ALTER TABLE qualifier_responses ADD COLUMN reminder_1h_sent_at TEXT;
 -- tags which one. See landing-factory src/lib/waitlist-link.ts.
 -- ===========================================================================
 ALTER TABLE qualifier_responses ADD COLUMN source TEXT;
+
+-- ===========================================================================
+-- WhatsApp opt-in (added 17 Jun 2026). WhatsApp policy REQUIRES explicit prior
+-- opt-in before any business-initiated template message — a phone number alone
+-- is NOT consent. Captured via an unchecked checkbox on the waitlist form; the
+-- Cal webhook + demo-reminders cron only send WhatsApp when this is 1. Email
+-- stays the unconditional channel. See docs/WHATSAPP-NOTIFICATIONS.md.
+-- ===========================================================================
+ALTER TABLE waitlist ADD COLUMN whatsapp_opt_in INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE waitlist ADD COLUMN whatsapp_opt_in_at TEXT;

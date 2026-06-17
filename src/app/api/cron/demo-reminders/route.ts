@@ -47,7 +47,8 @@ export async function GET(request: Request) {
             LEFT JOIN waitlist w ON w.email = q.email
             WHERE q.demo_booking_status IN ('booked', 'rescheduled')
               AND q.demo_scheduled_at IS NOT NULL
-              AND q.demo_scheduled_at > ?`,
+              AND q.demo_scheduled_at > ?
+              AND COALESCE(w.whatsapp_opt_in, 0) = 1`,
       args: [nowIso],
     })
   ).rows as unknown as Row[];

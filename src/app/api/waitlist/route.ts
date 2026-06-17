@@ -16,6 +16,7 @@ type Body = {
   phone?: string;
   instagram_handle?: string;
   source?: string;
+  whatsapp_opt_in?: boolean;
   event_id?: string;
   utm_source?: string;
   utm_medium?: string;
@@ -80,6 +81,10 @@ export async function POST(request: Request) {
   }
 
   const nowIso = new Date().toISOString();
+  // WhatsApp opt-in: only true when the lead explicitly ticked the box. Stamp the
+  // time of first consent (kept thereafter) as proof.
+  const whatsappOptIn = body.whatsapp_opt_in === true ? 1 : 0;
+  const optInAt = whatsappOptIn ? nowIso : null;
 
   const existing = await db.execute({
     sql: `SELECT email FROM waitlist WHERE email = ? LIMIT 1`,
@@ -89,15 +94,19 @@ export async function POST(request: Request) {
 
   await db.execute({
     sql: `INSERT INTO waitlist
-            (email, name, first_name, phone, source, instagram_handle,
+            (email, name, first_name, phone, source, instagram_handle, whatsapp_opt_in, whatsapp_opt_in_at,
              utm_source, utm_medium, utm_campaign, utm_content, utm_term, landed_at,
              last_utm_source, last_utm_medium, last_utm_campaign, last_utm_content, last_utm_term, last_landed_at)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
           ON CONFLICT(email) DO UPDATE SET
             name = excluded.name,
             first_name = excluded.first_name,
             phone = excluded.phone,
             instagram_handle = excluded.instagram_handle,
+            whatsapp_opt_in = MAX(waitlist.whatsapp_opt_in, excluded.whatsapp_opt_in),
+            whatsapp_opt_in_at = CASE
+              WHEN waitlist.whatsapp_opt_in = 0 AND excluded.whatsapp_opt_in = 1 THEN excluded.whatsapp_opt_in_at
+              ELSE waitlist.whatsapp_opt_in_at END,
             last_utm_source = excluded.last_utm_source,
             last_utm_medium = excluded.last_utm_medium,
             last_utm_campaign = excluded.last_utm_campaign,
@@ -111,6 +120,8 @@ export async function POST(request: Request) {
       phoneCheck.e164,
       source,
       igCheck.handle,
+      whatsappOptIn,
+      optInAt,
       clean(body.utm_source),
       clean(body.utm_medium),
       clean(body.utm_campaign),

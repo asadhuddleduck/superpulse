@@ -129,13 +129,14 @@ export async function POST(request: Request) {
     let businessType = "";
     let locations = 0;
     let source = "";
+    let optedIn = false;
     if (email) {
       const wl = (
         await db.execute({
-          sql: `SELECT first_name, phone, instagram_handle, source FROM waitlist WHERE email = ?`,
+          sql: `SELECT first_name, phone, instagram_handle, source, whatsapp_opt_in FROM waitlist WHERE email = ?`,
           args: [email],
         })
-      ).rows[0] as { first_name?: string; phone?: string; instagram_handle?: string; source?: string } | undefined;
+      ).rows[0] as { first_name?: string; phone?: string; instagram_handle?: string; source?: string; whatsapp_opt_in?: number } | undefined;
       const q = (
         await db.execute({
           sql: `SELECT business_type, locations_count FROM qualifier_responses WHERE email = ?`,
@@ -148,6 +149,7 @@ export async function POST(request: Request) {
       businessType = (q?.business_type ?? "").toString().trim();
       locations = Number(q?.locations_count ?? 0);
       source = (wl?.source ?? "").toString().trim();
+      optedIn = Number(wl?.whatsapp_opt_in ?? 0) === 1;
     }
 
     const unmatched = upd.rowsAffected === 0 ? "\n*Note:* no matching waitlist lead for this email" : "";
@@ -175,14 +177,15 @@ export async function POST(request: Request) {
       });
       await sendDemoBookingConfirmation(email, firstName, startIso);
     }
-    // WhatsApp confirmation to the phone we already hold (best-effort; email is the
-    // guaranteed channel). No-op unless WHATSAPP_NOTIFICATIONS_ENABLED is set.
-    if (phone) {
+    // WhatsApp confirmation — ONLY to leads who explicitly opted in (WhatsApp policy).
+    // Best-effort; email is the guaranteed channel. No-op unless WHATSAPP_NOTIFICATIONS_ENABLED.
+    if (phone && optedIn) {
       await sendDemoBookingWhatsApp(phone, firstName, startIso);
     }
   } else if (trigger === "BOOKING_RESCHEDULED") {
     let reschedFirst = attendeeName;
     let reschedPhone = "";
+    let reschedOptedIn = false;
     if (email) {
       // Reset the reminder flags so the NEW slot gets fresh 24h/1h reminders.
       await db.execute({
@@ -194,12 +197,13 @@ export async function POST(request: Request) {
       });
       const wl = (
         await db.execute({
-          sql: `SELECT first_name, phone FROM waitlist WHERE email = ?`,
+          sql: `SELECT first_name, phone, whatsapp_opt_in FROM waitlist WHERE email = ?`,
           args: [email],
         })
-      ).rows[0] as { first_name?: string; phone?: string } | undefined;
+      ).rows[0] as { first_name?: string; phone?: string; whatsapp_opt_in?: number } | undefined;
       reschedFirst = (wl?.first_name ?? "").toString().trim() || attendeeName;
       reschedPhone = (wl?.phone ?? "").toString().trim();
+      reschedOptedIn = Number(wl?.whatsapp_opt_in ?? 0) === 1;
     }
     await notifySlack(
       `🔁 SuperPulse demo rescheduled\n` +
@@ -207,8 +211,8 @@ export async function POST(request: Request) {
         `*Name:* ${escapeSlackText(reschedFirst) || "(unknown)"}\n` +
         `*Email:* ${escapeSlackText(email) || "(unknown)"}`,
     );
-    // Re-confirm the new time over WhatsApp (best-effort; no-op unless enabled).
-    if (reschedPhone) {
+    // Re-confirm the new time over WhatsApp — opted-in leads only (best-effort).
+    if (reschedPhone && reschedOptedIn) {
       await sendDemoBookingWhatsApp(reschedPhone, reschedFirst, startIso);
     }
   } else if (trigger === "BOOKING_CANCELLED") {

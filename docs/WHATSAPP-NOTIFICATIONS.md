@@ -1,61 +1,89 @@
 # WhatsApp demo-call notifications
 
-Sends a booking **confirmation** the moment a qualified owner self-books a demo, plus **pre-call reminders** ~24h and ~1h before, over WhatsApp. Email + Slack + the Cal.com calendar invite all still fire as before — WhatsApp is the extra phone channel because restaurant owners live on their phones, not email.
+Sends a booking **confirmation** the moment a qualified owner self-books a demo, plus **pre-call reminders** ~24h and ~1h before, over WhatsApp — **only to leads who explicitly opted in**. Email + Slack + the Cal.com calendar invite still fire as before; WhatsApp is the extra phone channel.
 
-## How it's wired (code is shipped, gated off)
+> Built on the verified findings of the WhatsApp-approval research (17 Jun 2026): Cloud API direct, no BSP, no App Review, no screencast — sending from our own business-verified WABA. The real gate is **opt-in**, not Meta approval.
 
-- **Sender:** `src/lib/whatsapp.ts` — WhatsApp Cloud API, raw fetch, best-effort (never throws into the caller). UK phone → E.164 via `toE164()`. No-op unless `WHATSAPP_NOTIFICATIONS_ENABLED=1`.
-- **Confirmation:** `src/app/api/webhook/cal/route.ts` `BOOKING_CREATED` sends the confirmation template to the phone we already hold (from the `waitlist` row), right after the existing email.
-- **Reminders:** `src/app/api/cron/demo-reminders/route.ts` (Vercel cron `*/15 * * * *`) scans booked future calls and sends the 24h / 1h reminder templates once each, tracked in `qualifier_responses.reminder_24h_sent_at` / `reminder_1h_sent_at`.
-- **Guaranteed channel stays email.** A WhatsApp failure (no WhatsApp on that number, undeliverable, not yet set up) is logged and ignored — the booking, email, Slack and CAPI are unaffected.
+## How it's wired (code shipped, gated off)
 
-**Business-initiated WhatsApp messages must use a Meta-approved template.** The copy below lives in Meta, not in our code — we only pass the template name + the two body variables `{{1}}` (first name) and `{{2}}` (date/time, e.g. "Thursday 19 June, 2:30 pm").
+- **Sender:** `src/lib/whatsapp.ts` — WhatsApp Cloud API, UK→E.164, best-effort, no-op unless `WHATSAPP_NOTIFICATIONS_ENABLED=1`.
+- **Opt-in:** captured by an unchecked checkbox on the shared `/waitlist` form → `waitlist.whatsapp_opt_in` (+ `whatsapp_opt_in_at`). **Every WhatsApp send is gated on this flag.** Email is unconditional.
+- **Confirmation:** `api/webhook/cal` `BOOKING_CREATED` (and re-confirm on `BOOKING_RESCHEDULED`) → sends only if `phone && opted-in`.
+- **Reminders:** `api/cron/demo-reminders` (`*/15`) — query filters `whatsapp_opt_in = 1`; sends ~24h + ~1h templates once each, tracked in `qualifier_responses.reminder_24h_sent_at` / `reminder_1h_sent_at`.
 
-## Templates to submit (Meta → WhatsApp Manager → Message templates)
+## No App Review / no screencast
 
-Category **Utility** (transactional), language **English (UK) / en_GB**. On submission, set the sample values so Meta can review: `{{1}}` = `Sara`, `{{2}}` = `Thursday 19 June, 2:30 pm`.
+Sending business-initiated WhatsApp templates from **our own** business-verified portfolio's WABA needs **no Meta App Review and no screencast**. App Review for `whatsapp_business_messaging` is only triggered when an app messages on behalf of *other* businesses (BSP / Embedded Signup) — out of scope here. (If we ever resell WhatsApp to clients, that's a different app and would need a screencast — self-producible later from Playwright screen-recording. Not now.)
+
+## Opt-in is mandatory (the real blocker)
+
+WhatsApp policy, verbatim: *"You may only contact people on WhatsApp if (a) they have given you their mobile phone number; and (b) you have received opt-in permission… confirming that they wish to receive subsequent messages."* A number on a form is **not** opt-in. Messaging non-opted-in numbers → blocks/reports → quality downgrade → number ban.
+
+- The `/waitlist` form now has an **unchecked** checkbox naming Huddle Duck/SuperPulse + WhatsApp + message types + STOP opt-out. Consent + timestamp stored on `waitlist`.
+- **Any number captured before this checkbox existed has no valid opt-in — do not message it.**
+- Honour STOP/opt-out by setting `whatsapp_opt_in = 0` for that email.
+- UK GDPR: transactional sends rest on contractual necessity / legitimate interest, but that does NOT replace Meta's opt-in (separately enforced). Privacy policy should name WhatsApp as a channel; the WABA needs a valid privacy-policy URL.
+
+## Templates to submit (WhatsApp Manager → Message templates)
+
+Category **Utility**, language **English (UK) / `en_GB`** (send that exact code or you hit error 132001). Positional `{{n}}` vars, each wrapped in static text. No promo wording (keeps it UTILITY). Provide the sample values on submission.
 
 **1. `demo_booking_confirmation`**
-> Hi {{1}}, you're booked in with SuperPulse for {{2}}. On the call we'll look at your Instagram together and show you exactly how we'd run it for your place. About 15 to 20 minutes, nothing to pay. The calendar invite is in your email if you ever need to move it.
+> Hi {{1}}, your SuperPulse demo call is booked for {{2}} at {{3}}. We'll call you on {{4}}. Reply RESCHEDULE if you need a different time.
+
+Footer (optional): `Huddle Duck (SuperPulse)` · Samples: {{1}}=`Sarah` {{2}}=`Thursday 19 June` {{3}}=`2:30 PM` {{4}}=`+44 7700 900123`
 
 **2. `demo_reminder_24h`**
-> Hi {{1}}, quick reminder: your SuperPulse call is {{2}}. Have your Instagram handy so we can look at it together. See you then.
+> Hi {{1}}, a reminder that your SuperPulse demo call is tomorrow, {{2}}, at {{3}}. We'll call you on {{4}}. Reply RESCHEDULE if the time no longer works.
+
+Samples: {{1}}=`Sarah` {{2}}=`Thursday 19 June` {{3}}=`2:30 PM` {{4}}=`+44 7700 900123`
 
 **3. `demo_reminder_1h`**
-> Hi {{1}}, your SuperPulse call is coming up at {{2}}. Have your Instagram open and we'll get straight to it. Talk soon.
+> Hi {{1}}, your SuperPulse call is in about an hour, at {{2}}. We'll call you on {{3}}. Reply RESCHEDULE if you need a different time.
 
-(Voice rules honoured: no "AI", no em/en-dashes, owner-to-owner. If you rename a template in Meta, just change the matching env var below.)
+Samples: {{1}}=`Sarah` {{2}}=`2:30 PM` {{3}}=`+44 7700 900123`
 
-## One-time Meta setup (your actions — I can't create accounts or approve templates)
+Subscribe to the `message_template_status_update` + `template_category_update` webhooks to catch approval and any silent re-categorisation. Approval is usually minutes, up to ~48h if a human reviews. Approval is likely, not guaranteed.
 
-1. **Add WhatsApp to a Meta app.** Recommend the existing **SuperPulse** app (ID `1962215474400192`) → Products → add **WhatsApp**. This creates a WhatsApp Business Account (WABA) and a free **test number** for dev.
-2. **Sender number.** Use the test number to trial it, or register a real business number (a number NOT already on a personal WhatsApp). Copy its **Phone number ID** (WhatsApp → API Setup).
-3. **Permanent token.** Business Settings → System users → add a system user → generate a token with `whatsapp_business_messaging` + `whatsapp_business_management`. (The temporary 24h token from API Setup is fine for a first test.)
-4. **Submit the 3 templates** above and wait for approval (minutes to ~1-2 days). With the test number you can message only pre-added recipient numbers until the number is live.
-5. **Set env vars** (Vercel + `.env.local`), then flip the flag.
-6. **Apply the schema columns** if not already: `reminder_24h_sent_at`, `reminder_1h_sent_at` on `qualifier_responses` (see `src/lib/schema.sql`).
+## Setup runbook — ToS → first live message
+
+**ASAD** = legal consent / credentials / a number / a decision. **CLAUDE** = automatable in the dev console or code.
+
+1. **[ASAD]** Accept the WhatsApp Business Platform ToS (App → WhatsApp → API Setup). *Hard gate — nothing sends until this is done. We paused here.*
+2. **[ASAD]** Decide the sender number — a **fresh dedicated number**, NOT 07832699033 and NOT any number live on consumer WhatsApp or the WhatsApp Business app (a number lives on one surface only).
+3. **[ASAD]** Provision the free **test number** (instant) so we can wire + test before the real number exists.
+4. **[ASAD]** Add **07832699033** as a test recipient (OTP-verified; read back the code). Test number caps at 5 recipients.
+5. **[CLAUDE]** Submit the 3 UTILITY templates **on the real number's WABA** (test-number templates don't port). Wire is already coded.
+6. **[CLAUDE]** Send all 3 to 07832699033 end-to-end to confirm rendering + webhook receipt.
+7. **[ASAD]** Register the real sender number (SMS/voice OTP → read back code → set 6-digit PIN).
+8. **[ASAD]** Confirm the **display name** (brand-aligned: "SuperPulse" / "Huddle Duck", not "Bookings"/"Sales").
+9. **[CLAUDE]** Generate a **System User permanent token** (`whatsapp_business_messaging` + `whatsapp_business_management`); store with `phone_number_id`. *Token is a credential — Asad pastes it; Claude never stores it.*
+10. **[ASAD]** Add a payment method to the WABA (per-message charges).
+11. **[DONE]** Opt-in checkbox is live on `/waitlist` + privacy-policy line (add the privacy line if missing).
+12. **[CLAUDE]** Flip `WHATSAPP_NOTIFICATIONS_ENABLED=1`; fire confirmation to the first real opted-in lead; watch quality rating.
 
 ## Env vars
 
 ```
 WHATSAPP_NOTIFICATIONS_ENABLED=1            # master switch; unset = total no-op
-WHATSAPP_PHONE_NUMBER_ID=...                # from WhatsApp API Setup
-WHATSAPP_TOKEN=...                          # permanent system-user token
-WHATSAPP_GRAPH_VERSION=v21.0                # optional, defaults to v21.0
-WHATSAPP_TEMPLATE_LANG=en_GB                # optional, defaults to en_GB
+WHATSAPP_PHONE_NUMBER_ID=...                # from WhatsApp API Setup (the REAL number)
+WHATSAPP_TOKEN=...                          # permanent system-user token (Asad pastes)
+WHATSAPP_GRAPH_VERSION=v21.0                # optional
+WHATSAPP_TEMPLATE_LANG=en_GB                # optional, defaults en_GB
 WHATSAPP_TEMPLATE_DEMO_CONFIRMATION=demo_booking_confirmation
 WHATSAPP_TEMPLATE_DEMO_REMINDER_24H=demo_reminder_24h
 WHATSAPP_TEMPLATE_DEMO_REMINDER_1H=demo_reminder_1h
 ```
 
-## Go-live + test
+## Cost (GBP, UK utility)
 
-1. Set the env vars and `WHATSAPP_NOTIFICATIONS_ENABLED=1` in Vercel, redeploy.
-2. With the test number, add your own mobile as an allowed recipient in WhatsApp API Setup.
-3. Book a test slot on `/waitlist/demo` (use a lead row whose `phone` is your mobile) → you should get the WhatsApp confirmation within seconds. Check the Vercel function logs for `[whatsapp]` if not.
-4. Reminders: the cron only fires inside the 24h/1h windows; to test fast, book a slot ~80 min out (gets the 1h reminder on the next 15-min tick) or temporarily insert a near-future `demo_scheduled_at`.
+Per-message model (since 1 Jul 2025), billed on delivery, no BSP markup via Cloud API direct. All 3 sends are business-initiated outside any service window → all 3 paid. Roughly **5–9p per lead** for the full set (UK utility ≈ £0.015–0.03/msg). **Exact UK utility rate unconfirmed** — Meta's pricing page is JS-gated; confirm in WhatsApp Manager before forecasting at volume. (UK marketing ≈ £0.04/msg, rising ~20% on 1 Jul 2026 — only relevant if a template is miscategorised as MARKETING.)
 
-## Notes
+## What does NOT work / top traps
 
-- Why not Cal.com's native SMS/WhatsApp Workflows: needs a paid Teams plan, runs on credits where UK messages cost Twilio + an 80% markup, and WhatsApp copy can't be customised. Firing from our own webhook is cheaper at UK rates, fully ours to word, and works on free Cal.com. (Verified against cal.com docs/pricing, 17 Jun 2026.)
-- The Cal webhook only fires at booking time, which is why reminders are a separate cron keyed off `demo_scheduled_at`.
+- Sending before ToS acceptance · using the test number in production (5-recipient cap, templates don't port) · a sender number still on consumer WhatsApp.
+- Messaging non-opted-in numbers (the top ban risk — now gated in code).
+- Marketing creep in a UTILITY template → auto-reclassified to MARKETING. Keep copy factual.
+- Variable at body start/end, adjacent variables, placeholder-only bodies, missing samples → rejection.
+- URL shorteners / wa.me links → phishing flag (use a full superpulse.io HTTPS link or a URL button).
+- Locale mismatch (`en` vs approved `en_GB`) → error 132001.
