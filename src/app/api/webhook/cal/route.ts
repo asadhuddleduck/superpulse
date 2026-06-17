@@ -18,6 +18,7 @@ import { db } from "@/lib/db";
 import { fireCapi } from "@/lib/meta-capi";
 import { notifySlack, escapeSlackText } from "@/lib/slack";
 import { sendDemoBookingConfirmation } from "@/lib/email/confirmation";
+import { sendDemoBookingWhatsApp } from "@/lib/whatsapp";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -127,13 +128,14 @@ export async function POST(request: Request) {
     let ig = "";
     let businessType = "";
     let locations = 0;
+    let source = "";
     if (email) {
       const wl = (
         await db.execute({
-          sql: `SELECT first_name, phone, instagram_handle FROM waitlist WHERE email = ?`,
+          sql: `SELECT first_name, phone, instagram_handle, source FROM waitlist WHERE email = ?`,
           args: [email],
         })
-      ).rows[0] as { first_name?: string; phone?: string; instagram_handle?: string } | undefined;
+      ).rows[0] as { first_name?: string; phone?: string; instagram_handle?: string; source?: string } | undefined;
       const q = (
         await db.execute({
           sql: `SELECT business_type, locations_count FROM qualifier_responses WHERE email = ?`,
@@ -145,6 +147,7 @@ export async function POST(request: Request) {
       ig = (wl?.instagram_handle ?? "").toString().trim();
       businessType = (q?.business_type ?? "").toString().trim();
       locations = Number(q?.locations_count ?? 0);
+      source = (wl?.source ?? "").toString().trim();
     }
 
     const unmatched = upd.rowsAffected === 0 ? "\n*Note:* no matching waitlist lead for this email" : "";
@@ -156,7 +159,8 @@ export async function POST(request: Request) {
         `*Phone:* ${escapeSlackText(phone) || "(none)"}\n` +
         `*Instagram:* @${escapeSlackText(ig) || "(none)"}\n` +
         `*Business type:* ${escapeSlackText(businessType) || "(unknown)"}\n` +
-        `*Locations:* ${locations}` +
+        `*Locations:* ${locations}\n` +
+        `*Niche:* ${escapeSlackText(source) || "(public)"}` +
         unmatched,
     );
 
@@ -171,21 +175,42 @@ export async function POST(request: Request) {
       });
       await sendDemoBookingConfirmation(email, firstName, startIso);
     }
+    // WhatsApp confirmation to the phone we already hold (best-effort; email is the
+    // guaranteed channel). No-op unless WHATSAPP_NOTIFICATIONS_ENABLED is set.
+    if (phone) {
+      await sendDemoBookingWhatsApp(phone, firstName, startIso);
+    }
   } else if (trigger === "BOOKING_RESCHEDULED") {
+    let reschedFirst = attendeeName;
+    let reschedPhone = "";
     if (email) {
+      // Reset the reminder flags so the NEW slot gets fresh 24h/1h reminders.
       await db.execute({
         sql: `UPDATE qualifier_responses
-              SET demo_scheduled_at = ?, cal_booking_uid = ?, demo_booking_status = 'rescheduled', updated_at = ?
+              SET demo_scheduled_at = ?, cal_booking_uid = ?, demo_booking_status = 'rescheduled',
+                  reminder_24h_sent_at = NULL, reminder_1h_sent_at = NULL, updated_at = ?
               WHERE email = ?`,
         args: [startIso, uid, nowIso, email],
       });
+      const wl = (
+        await db.execute({
+          sql: `SELECT first_name, phone FROM waitlist WHERE email = ?`,
+          args: [email],
+        })
+      ).rows[0] as { first_name?: string; phone?: string } | undefined;
+      reschedFirst = (wl?.first_name ?? "").toString().trim() || attendeeName;
+      reschedPhone = (wl?.phone ?? "").toString().trim();
     }
     await notifySlack(
       `🔁 SuperPulse demo rescheduled\n` +
         `*New time:* ${escapeSlackText(formatWhen(startIso))}\n` +
-        `*Name:* ${escapeSlackText(attendeeName) || "(unknown)"}\n` +
+        `*Name:* ${escapeSlackText(reschedFirst) || "(unknown)"}\n` +
         `*Email:* ${escapeSlackText(email) || "(unknown)"}`,
     );
+    // Re-confirm the new time over WhatsApp (best-effort; no-op unless enabled).
+    if (reschedPhone) {
+      await sendDemoBookingWhatsApp(reschedPhone, reschedFirst, startIso);
+    }
   } else if (trigger === "BOOKING_CANCELLED") {
     if (email) {
       await db.execute({

@@ -406,3 +406,19 @@ CREATE TABLE IF NOT EXISTS cal_webhook_events (
 
 CREATE INDEX IF NOT EXISTS idx_cal_webhook_uid ON cal_webhook_events(cal_booking_uid);
 CREATE INDEX IF NOT EXISTS idx_qualifier_scheduled ON qualifier_responses(demo_scheduled_at);
+
+-- ===========================================================================
+-- WhatsApp pre-call reminders (added 17 Jun 2026). The demo-reminders cron sends
+-- a ~24h and ~1h WhatsApp reminder before a booked call; these mark each as sent
+-- so it fires exactly once per booking. See docs/WHATSAPP-NOTIFICATIONS.md.
+-- ===========================================================================
+ALTER TABLE qualifier_responses ADD COLUMN reminder_24h_sent_at TEXT;
+ALTER TABLE qualifier_responses ADD COLUMN reminder_1h_sent_at TEXT;
+
+-- ===========================================================================
+-- Niche source (added 17 Jun 2026). Carried from waitlist.source so per-niche
+-- conversion (qualified / demo / purchase) is trackable, not just signups.
+-- Many niche "head" landing pages feed the ONE shared waitlist; ?source=<niche>
+-- tags which one. See landing-factory src/lib/waitlist-link.ts.
+-- ===========================================================================
+ALTER TABLE qualifier_responses ADD COLUMN source TEXT;

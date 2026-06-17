@@ -6,6 +6,7 @@
     { "path": "/api/cron/v8/provision", "schedule": "*/5 * * * *" },
     { "path": "/api/cron/v8/decide", "schedule": "0 */6 * * *" },
     { "path": "/api/cron/v8/execute", "schedule": "*/30 * * * *" },
-    { "path": "/api/cron/email-sequence", "schedule": "0 9 * * *" }
+    { "path": "/api/cron/email-sequence", "schedule": "0 9 * * *" },
+    { "path": "/api/cron/demo-reminders", "schedule": "*/15 * * * *" }
   ]
 }

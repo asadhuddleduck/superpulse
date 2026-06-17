@@ -23,6 +23,9 @@ function WaitlistInner() {
   const [phone, setPhone] = useState("");
   const [instagram, setInstagram] = useState("");
   const [utm, setUtm] = useState<Partial<Record<UtmKey, string>>>({});
+  // Which niche head sent them (?source=foodowner / ?niche=accountants). The waitlist
+  // + flow + DB are identical for every niche; this is the only per-niche signal.
+  const [source, setSource] = useState("public");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const submittingRef = useRef(false);
@@ -34,6 +37,12 @@ function WaitlistInner() {
       if (v) next[key] = v;
     }
     setUtm(next);
+    // Niche tag from the head page (?source= or ?niche=), slug-sanitised.
+    const src = searchParams.get("source") || searchParams.get("niche");
+    if (src) {
+      const clean = src.toLowerCase().replace(/[^a-z0-9-]/g, "").slice(0, 40);
+      if (clean) setSource(clean);
+    }
     // Prefill the IG handle when arriving from the gate's "join the waitlist"
     // button (it deep-links ?ig=<username> after a non-allowlisted IG login).
     const ig = searchParams.get("ig");
@@ -56,7 +65,7 @@ function WaitlistInner() {
           email,
           phone,
           instagram_handle: instagram,
-          source: "public",
+          source,
           event_id: eventId,
           ...utm,
         }),

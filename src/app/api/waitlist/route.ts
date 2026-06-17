@@ -55,7 +55,8 @@ export async function POST(request: Request) {
   const email = body.email?.trim().toLowerCase() ?? "";
   const phoneRaw = body.phone?.trim() ?? "";
   const handleRaw = body.instagram_handle?.trim() ?? "";
-  const source = body.source?.trim() || "public";
+  // Niche tag (which head sent them). Slug-safe; defaults to 'public'.
+  const source = body.source?.trim().toLowerCase().replace(/[^a-z0-9-]/g, "").slice(0, 40) || "public";
 
   if (!firstName || firstName.length > 100) {
     return NextResponse.json({ ok: false, error: "First name required" }, { status: 400 });
