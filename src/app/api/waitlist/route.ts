@@ -6,6 +6,7 @@ import { getClientIp, getCookieValue, getUserAgent } from "@/lib/cf-ip";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { isAllowedOrigin } from "@/lib/origin-check";
 import { normaliseIgHandle, normalisePhoneUk } from "@/lib/business-types";
+import { notifyWaitlistJoinDm } from "@/lib/quack-chat";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -150,6 +151,11 @@ export async function POST(request: Request) {
         console.error("[waitlist] welcome email failed:", err instanceof Error ? err.message : String(err));
       }
     });
+
+    // If they DM'd us on Instagram and just joined here, Quack Chat sends a one-off welcome DM
+    // matched on their handle. No-op unless QUACK_CHAT_* env is set; Quack Chat enforces its own
+    // 24h-window / opt-out / send-once gates, so a stale or unmatched handle is harmless.
+    after(() => notifyWaitlistJoinDm(igCheck.handle));
   }
 
   const eventId = body.event_id?.trim();
