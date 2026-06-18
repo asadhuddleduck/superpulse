@@ -98,15 +98,15 @@ export async function POST(request: Request) {
   // choice — never re-pitch the demo interstitial to someone who already
   // answered it.
   const prior = await db.execute({
-    sql: `SELECT demo_offer_choice, qualified FROM qualifier_responses WHERE email = ?`,
+    sql: `SELECT demo_offer_choice, demo_qualified FROM qualifier_responses WHERE email = ?`,
     args: [email],
   });
   const priorDemoChoice = (prior.rows[0]?.demo_offer_choice ?? null) as string | null;
-  // Only alert on the transition into qualified. The upsert below is ON
-  // CONFLICT(email), so email CTAs that link back to the quiz would otherwise
-  // re-page the team every time an already-qualified lead re-takes it.
-  const wasQualified = prior.rows[0] ? Number(prior.rows[0].qualified) === 1 : false;
-  const newlyQualified = qualified === 1 && !wasQualified;
+  // Only alert on the transition into call-eligible (3+ locations). The upsert below is
+  // ON CONFLICT(email), so email CTAs that link back to the quiz would otherwise re-page
+  // the team every time an already-eligible lead re-takes it.
+  const wasDemoQualified = prior.rows[0] ? Number(prior.rows[0].demo_qualified) === 1 : false;
+  const newlyCallable = demoQualified === 1 && !wasDemoQualified;
 
   const nowIso = new Date().toISOString();
   await db.execute({
@@ -146,11 +146,11 @@ export async function POST(request: Request) {
     args: [businessType, locations, email],
   });
 
-  // Page the team the moment a fresh lead clears the bar — every qualified
-  // local-business owner is someone the founder wants to chat to and close.
-  if (newlyQualified) {
+  // Page the team the moment a fresh lead becomes call-eligible (3+ locations) —
+  // these are the multi-site owners the founder wants on a call to close.
+  if (newlyCallable) {
     await notifySlack(
-      `🎯 New qualified SuperPulse lead\n` +
+      `🎯 New call-eligible SuperPulse lead (3+ locations)\n` +
         `*Name:* ${escapeSlackText(trustedName) || "(unknown)"}\n` +
         `*Email:* ${escapeSlackText(email)}\n` +
         `*Phone:* ${escapeSlackText(trustedPhone) || "(none)"}\n` +
@@ -175,15 +175,14 @@ export async function POST(request: Request) {
     });
   }
 
-  // Qualified local-business owners go straight to booking a call — the call is
-  // the priority for a qualified lead (founder decision 2026-06-15: get them on
-  // a call ASAP via the Cal self-book; the £27 + £97 ladder comes AFTER booking,
-  // on /waitlist/offer?demo=1). Leads who already booked/answered the call keep
-  // the call-received framing; non-qualified leads only ever see the £27 offer.
+  // Call gate is LOCATIONS (3+), not engagement (founder decision 2026-06-18): only
+  // multi-site businesses (3+ locations) get to book a call; 1-2 location leads get the
+  // £27 IG-review + £97 upsell ladder instead. Leads who already booked/answered the
+  // call keep the call-received framing (offer?demo=1).
   let redirect: string;
   if (priorDemoChoice === "yes") {
     redirect = "/waitlist/offer?demo=1";
-  } else if (qualified === 1) {
+  } else if (demoQualified === 1) {
     redirect = "/waitlist/demo";
   } else {
     redirect = "/waitlist/offer";
