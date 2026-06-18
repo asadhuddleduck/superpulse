@@ -22,7 +22,13 @@ function WaitlistInner() {
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [instagram, setInstagram] = useState("");
+  // Explicit WhatsApp opt-in (unchecked by default). WhatsApp policy requires prior
+  // consent before any business-initiated message; we only WhatsApp leads who tick this.
+  const [whatsappOptIn, setWhatsappOptIn] = useState(false);
   const [utm, setUtm] = useState<Partial<Record<UtmKey, string>>>({});
+  // Which niche head sent them (?source=foodowner / ?niche=accountants). The waitlist
+  // + flow + DB are identical for every niche; this is the only per-niche signal.
+  const [source, setSource] = useState("public");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const submittingRef = useRef(false);
@@ -34,6 +40,12 @@ function WaitlistInner() {
       if (v) next[key] = v;
     }
     setUtm(next);
+    // Niche tag from the head page (?source= or ?niche=), slug-sanitised.
+    const src = searchParams.get("source") || searchParams.get("niche");
+    if (src) {
+      const clean = src.toLowerCase().replace(/[^a-z0-9-]/g, "").slice(0, 40);
+      if (clean) setSource(clean);
+    }
     // Prefill the IG handle when arriving from the gate's "join the waitlist"
     // button (it deep-links ?ig=<username> after a non-allowlisted IG login).
     const ig = searchParams.get("ig");
@@ -56,7 +68,8 @@ function WaitlistInner() {
           email,
           phone,
           instagram_handle: instagram,
-          source: "public",
+          source,
+          whatsapp_opt_in: whatsappOptIn,
           event_id: eventId,
           ...utm,
         }),
@@ -189,6 +202,31 @@ function WaitlistInner() {
                   className="wl-input"
                 />
               </div>
+
+              <label
+                style={{
+                  display: "flex",
+                  gap: 9,
+                  alignItems: "flex-start",
+                  margin: "4px 0 2px",
+                  fontSize: 12.5,
+                  lineHeight: 1.45,
+                  opacity: 0.8,
+                  cursor: "pointer",
+                }}
+              >
+                <input
+                  type="checkbox"
+                  checked={whatsappOptIn}
+                  onChange={(e) => setWhatsappOptIn(e.target.checked)}
+                  style={{ marginTop: 2, flexShrink: 0 }}
+                />
+                <span>
+                  I&rsquo;m happy for Huddle Duck (SuperPulse) to message me on WhatsApp about
+                  my waitlist and any call I book. Just confirmations and reminders. Reply STOP
+                  to opt out anytime.
+                </span>
+              </label>
 
               {error && <p className="wl-error">{error}</p>}
 

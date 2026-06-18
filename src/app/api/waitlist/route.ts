@@ -6,6 +6,7 @@ import { getClientIp, getCookieValue, getUserAgent } from "@/lib/cf-ip";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { isAllowedOrigin } from "@/lib/origin-check";
 import { normaliseIgHandle, normalisePhoneUk } from "@/lib/business-types";
+import { notifyWaitlistJoinDm } from "@/lib/quack-chat";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -16,6 +17,7 @@ type Body = {
   phone?: string;
   instagram_handle?: string;
   source?: string;
+  whatsapp_opt_in?: boolean;
   event_id?: string;
   utm_source?: string;
   utm_medium?: string;
@@ -55,7 +57,8 @@ export async function POST(request: Request) {
   const email = body.email?.trim().toLowerCase() ?? "";
   const phoneRaw = body.phone?.trim() ?? "";
   const handleRaw = body.instagram_handle?.trim() ?? "";
-  const source = body.source?.trim() || "public";
+  // Niche tag (which head sent them). Slug-safe; defaults to 'public'.
+  const source = body.source?.trim().toLowerCase().replace(/[^a-z0-9-]/g, "").slice(0, 40) || "public";
 
   if (!firstName || firstName.length > 100) {
     return NextResponse.json({ ok: false, error: "First name required" }, { status: 400 });
@@ -79,6 +82,10 @@ export async function POST(request: Request) {
   }
 
   const nowIso = new Date().toISOString();
+  // WhatsApp opt-in: only true when the lead explicitly ticked the box. Stamp the
+  // time of first consent (kept thereafter) as proof.
+  const whatsappOptIn = body.whatsapp_opt_in === true ? 1 : 0;
+  const optInAt = whatsappOptIn ? nowIso : null;
 
   const existing = await db.execute({
     sql: `SELECT email FROM waitlist WHERE email = ? LIMIT 1`,
@@ -88,15 +95,19 @@ export async function POST(request: Request) {
 
   await db.execute({
     sql: `INSERT INTO waitlist
-            (email, name, first_name, phone, source, instagram_handle,
+            (email, name, first_name, phone, source, instagram_handle, whatsapp_opt_in, whatsapp_opt_in_at,
              utm_source, utm_medium, utm_campaign, utm_content, utm_term, landed_at,
              last_utm_source, last_utm_medium, last_utm_campaign, last_utm_content, last_utm_term, last_landed_at)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
           ON CONFLICT(email) DO UPDATE SET
             name = excluded.name,
             first_name = excluded.first_name,
             phone = excluded.phone,
             instagram_handle = excluded.instagram_handle,
+            whatsapp_opt_in = MAX(waitlist.whatsapp_opt_in, excluded.whatsapp_opt_in),
+            whatsapp_opt_in_at = CASE
+              WHEN waitlist.whatsapp_opt_in = 0 AND excluded.whatsapp_opt_in = 1 THEN excluded.whatsapp_opt_in_at
+              ELSE waitlist.whatsapp_opt_in_at END,
             last_utm_source = excluded.last_utm_source,
             last_utm_medium = excluded.last_utm_medium,
             last_utm_campaign = excluded.last_utm_campaign,
@@ -110,6 +121,8 @@ export async function POST(request: Request) {
       phoneCheck.e164,
       source,
       igCheck.handle,
+      whatsappOptIn,
+      optInAt,
       clean(body.utm_source),
       clean(body.utm_medium),
       clean(body.utm_campaign),
@@ -138,6 +151,11 @@ export async function POST(request: Request) {
         console.error("[waitlist] welcome email failed:", err instanceof Error ? err.message : String(err));
       }
     });
+
+    // If they DM'd us on Instagram and just joined here, Quack Chat sends a one-off welcome DM
+    // matched on their handle. No-op unless QUACK_CHAT_* env is set; Quack Chat enforces its own
+    // 24h-window / opt-out / send-once gates, so a stale or unmatched handle is harmless.
+    after(() => notifyWaitlistJoinDm(igCheck.handle));
   }
 
   const eventId = body.event_id?.trim();

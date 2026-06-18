@@ -76,11 +76,11 @@ export async function POST(request: Request) {
   const demoQualified = locations >= DEMO_MIN_LOCATIONS ? 1 : 0;
 
   const waitlistRow = await db.execute({
-    sql: `SELECT email, first_name, phone, instagram_handle FROM waitlist WHERE email = ?`,
+    sql: `SELECT email, first_name, phone, instagram_handle, source FROM waitlist WHERE email = ?`,
     args: [email],
   });
   const wl = waitlistRow.rows[0] as
-    | { email?: string; first_name?: string; phone?: string; instagram_handle?: string }
+    | { email?: string; first_name?: string; phone?: string; instagram_handle?: string; source?: string }
     | undefined;
 
   if (!wl) {
@@ -92,6 +92,7 @@ export async function POST(request: Request) {
 
   const trustedName = (wl.first_name ?? "").toString().trim();
   const trustedPhone = (wl.phone ?? "").toString().trim();
+  const source = (wl.source ?? "").toString().trim() || "public";
 
   // Re-takers (email CTAs link back to the quiz) keep their recorded demo
   // choice — never re-pitch the demo interstitial to someone who already
@@ -112,8 +113,8 @@ export async function POST(request: Request) {
     sql: `INSERT INTO qualifier_responses
             (email, business_type, locations_count,
              has_instagram, posts_actively, has_business_manager, has_run_ads,
-             qualified, demo_qualified, updated_at)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+             qualified, demo_qualified, source, updated_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
           ON CONFLICT(email) DO UPDATE SET
             business_type = excluded.business_type,
             locations_count = excluded.locations_count,
@@ -123,6 +124,7 @@ export async function POST(request: Request) {
             has_run_ads = excluded.has_run_ads,
             qualified = excluded.qualified,
             demo_qualified = excluded.demo_qualified,
+            source = COALESCE(qualifier_responses.source, excluded.source),
             updated_at = excluded.updated_at`,
     args: [
       email,
@@ -134,6 +136,7 @@ export async function POST(request: Request) {
       hasRunAds,
       qualified,
       demoQualified,
+      source,
       nowIso,
     ],
   });
