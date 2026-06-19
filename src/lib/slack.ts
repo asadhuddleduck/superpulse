@@ -7,8 +7,11 @@ export function escapeSlackText(value: string): string {
   return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
-export async function notifySlack(text: string): Promise<void> {
-  const webhookUrl = process.env.SLACK_WEBHOOK_URL?.trim();
+// Pass `webhookUrlOverride` to route a message to a specific channel (e.g. the
+// founder's demo-booking channel via SLACK_DEMO_WEBHOOK_URL); falls back to the
+// default SLACK_WEBHOOK_URL when the override is empty/unset.
+export async function notifySlack(text: string, webhookUrlOverride?: string): Promise<void> {
+  const webhookUrl = webhookUrlOverride?.trim() || process.env.SLACK_WEBHOOK_URL?.trim();
   if (!webhookUrl) {
     if (!warnedMissingEnv) {
       warnedMissingEnv = true;

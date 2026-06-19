@@ -34,6 +34,7 @@ function readLead(): Lead | null {
 
 export default function DemoPage() {
   const [lead, setLead] = useState<Lead | null>(null);
+  const [phone, setPhone] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const submittingRef = useRef(false);
@@ -57,8 +58,27 @@ export default function DemoPage() {
       window.location.replace("/waitlist");
       return;
     }
-    setLead(found);
-    setHydrated(true);
+    const resolved = found;
+    // Server gate: only call-eligible (3+ locations) leads may reach the Cal embed.
+    // A 1-2 location lead arriving via a stale/direct link is bounced to the offer
+    // BEFORE the calendar renders (the qualify redirect already routes them there;
+    // this closes the structural hole). Also pulls the phone to prefill the booking.
+    (async () => {
+      try {
+        const res = await fetch(`/api/demo?email=${encodeURIComponent(resolved.email)}`);
+        const data = (await res.json()) as { eligible?: boolean; phone?: string };
+        if (!data.eligible) {
+          window.location.replace("/waitlist/offer");
+          return;
+        }
+        setPhone((data.phone ?? "").toString().trim());
+      } catch {
+        // Probe failed (rare network blip). Fail OPEN so a genuine 3+ lead is never
+        // stranded; the qualify redirect already keeps 1-2 location leads off this page.
+      }
+      setLead(resolved);
+      setHydrated(true);
+    })();
   }, []);
 
   // Bind the booking-success callback. This is best-effort UX (instant redirect
@@ -165,6 +185,9 @@ export default function DemoPage() {
                   config={{
                     name: lead.firstName,
                     email: lead.email,
+                    // Prefill the lead's phone so it lands on the calendar event the
+                    // team opens (the booked-demo Slack alert also carries it).
+                    ...(phone ? { notes: `Phone: ${phone}` } : {}),
                     theme: "dark",
                     layout: "month_view",
                     useSlotsViewOnSmallScreen: "true",

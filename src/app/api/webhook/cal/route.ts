@@ -164,6 +164,7 @@ export async function POST(request: Request) {
         `*Locations:* ${locations}\n` +
         `*Niche:* ${escapeSlackText(source) || "(public)"}` +
         unmatched,
+      process.env.SLACK_DEMO_WEBHOOK_URL,
     );
 
     if (email) {
@@ -210,6 +211,7 @@ export async function POST(request: Request) {
         `*New time:* ${escapeSlackText(formatWhen(startIso))}\n` +
         `*Name:* ${escapeSlackText(reschedFirst) || "(unknown)"}\n` +
         `*Email:* ${escapeSlackText(email) || "(unknown)"}`,
+      process.env.SLACK_DEMO_WEBHOOK_URL,
     );
     // Re-confirm the new time over WhatsApp — opted-in leads only (best-effort).
     if (reschedPhone && reschedOptedIn) {
@@ -227,6 +229,7 @@ export async function POST(request: Request) {
         `*Name:* ${escapeSlackText(attendeeName) || "(unknown)"}\n` +
         `*Email:* ${escapeSlackText(email) || "(unknown)"}` +
         (payload.cancellationReason ? `\n*Reason:* ${escapeSlackText(payload.cancellationReason)}` : ""),
+      process.env.SLACK_DEMO_WEBHOOK_URL,
     );
   }
 

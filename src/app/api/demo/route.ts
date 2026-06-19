@@ -133,3 +133,30 @@ export async function POST(request: Request) {
     redirect: choice === "yes" ? "/waitlist/offer?demo=1" : "/waitlist/offer",
   });
 }
+
+// Eligibility probe for the demo page's client-side gate. Returns whether this
+// email is call-eligible (3+ locations) so the page can bounce 1-2 location
+// leads to /waitlist/offer BEFORE the Cal embed renders — closing the structural
+// leak where a stale/direct /waitlist/demo link let a non-3+ lead book a call.
+// Also returns the lead's phone so the page can prefill it onto the Cal booking.
+export async function GET(request: Request) {
+  const url = new URL(request.url);
+  const email = (url.searchParams.get("email") ?? "").trim().toLowerCase();
+  if (!EMAIL_RE.test(email)) {
+    return NextResponse.json({ eligible: false, phone: "" });
+  }
+  const qRow = await db.execute({
+    sql: `SELECT demo_qualified FROM qualifier_responses WHERE email = ?`,
+    args: [email],
+  });
+  const eligible = Number(qRow.rows[0]?.demo_qualified ?? 0) === 1;
+  let phone = "";
+  if (eligible) {
+    const wRow = await db.execute({
+      sql: `SELECT phone FROM waitlist WHERE email = ?`,
+      args: [email],
+    });
+    phone = (wRow.rows[0]?.phone ?? "").toString().trim();
+  }
+  return NextResponse.json({ eligible, phone });
+}
