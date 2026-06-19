@@ -13,7 +13,7 @@ const LEAD_KEY = "wl-lead";
 // calendar; the Cal webhook (/api/webhook/cal) records the booking server-side.
 const CAL_LINK = process.env.NEXT_PUBLIC_CAL_LINK ?? "";
 
-type Lead = { email: string; firstName: string; ig: string };
+type Lead = { email: string; firstName: string; ig: string; phone: string };
 
 function readLead(): Lead | null {
   if (typeof sessionStorage === "undefined") return null;
@@ -26,6 +26,10 @@ function readLead(): Lead | null {
       email: String(parsed.email),
       firstName: String(parsed.firstName ?? ""),
       ig: String(parsed.ig ?? ""),
+      // The lead's own phone (they typed it on the waitlist form). Used to prefill
+      // the Cal booking so it lands on the calendar event — never fetched from a
+      // server probe (that would be a PII/IDOR leak).
+      phone: String(parsed.phone ?? ""),
     };
   } catch {
     return null;
@@ -34,7 +38,6 @@ function readLead(): Lead | null {
 
 export default function DemoPage() {
   const [lead, setLead] = useState<Lead | null>(null);
-  const [phone, setPhone] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const submittingRef = useRef(false);
@@ -46,7 +49,7 @@ export default function DemoPage() {
       const sp = new URLSearchParams(window.location.search);
       const qEmail = sp.get("email");
       if (qEmail) {
-        found = { email: qEmail, firstName: sp.get("name") ?? "", ig: sp.get("ig") ?? "" };
+        found = { email: qEmail, firstName: sp.get("name") ?? "", ig: sp.get("ig") ?? "", phone: "" };
         try {
           sessionStorage.setItem(LEAD_KEY, JSON.stringify(found));
         } catch {
@@ -62,16 +65,15 @@ export default function DemoPage() {
     // Server gate: only call-eligible (3+ locations) leads may reach the Cal embed.
     // A 1-2 location lead arriving via a stale/direct link is bounced to the offer
     // BEFORE the calendar renders (the qualify redirect already routes them there;
-    // this closes the structural hole). Also pulls the phone to prefill the booking.
+    // this closes the structural hole). The probe returns a boolean only — no PII.
     (async () => {
       try {
         const res = await fetch(`/api/demo?email=${encodeURIComponent(resolved.email)}`);
-        const data = (await res.json()) as { eligible?: boolean; phone?: string };
+        const data = (await res.json()) as { eligible?: boolean };
         if (!data.eligible) {
           window.location.replace("/waitlist/offer");
           return;
         }
-        setPhone((data.phone ?? "").toString().trim());
       } catch {
         // Probe failed (rare network blip). Fail OPEN so a genuine 3+ lead is never
         // stranded; the qualify redirect already keeps 1-2 location leads off this page.
@@ -185,9 +187,10 @@ export default function DemoPage() {
                   config={{
                     name: lead.firstName,
                     email: lead.email,
-                    // Prefill the lead's phone so it lands on the calendar event the
-                    // team opens (the booked-demo Slack alert also carries it).
-                    ...(phone ? { notes: `Phone: ${phone}` } : {}),
+                    // Prefill the lead's OWN phone (from their sessionStorage) so it
+                    // lands on the calendar event (the booked-demo Slack alert also
+                    // carries it). No PII is fetched from any server probe.
+                    ...(lead.phone ? { notes: `Phone: ${lead.phone}` } : {}),
                     theme: "dark",
                     layout: "month_view",
                     useSlotsViewOnSmallScreen: "true",

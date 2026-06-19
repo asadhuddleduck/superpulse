@@ -86,6 +86,7 @@ function WaitlistInner() {
         email,
         firstName,
         ig: instagram.trim().replace(/^@/, "").toLowerCase(),
+        phone: phone.trim(),
       };
       try {
         sessionStorage.setItem(LEAD_KEY, JSON.stringify(lead));

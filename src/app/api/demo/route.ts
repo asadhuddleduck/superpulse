@@ -134,29 +134,26 @@ export async function POST(request: Request) {
   });
 }
 
-// Eligibility probe for the demo page's client-side gate. Returns whether this
-// email is call-eligible (3+ locations) so the page can bounce 1-2 location
-// leads to /waitlist/offer BEFORE the Cal embed renders — closing the structural
-// leak where a stale/direct /waitlist/demo link let a non-3+ lead book a call.
-// Also returns the lead's phone so the page can prefill it onto the Cal booking.
+// Eligibility-ONLY probe for the demo page's structural gate: returns whether
+// this email is call-eligible (3+ locations) so the page can bounce 1-2 location
+// leads to /waitlist/offer BEFORE the Cal embed renders. Returns NO PII — never a
+// phone (the Cal-prefill phone comes from the lead's OWN sessionStorage; the
+// booked-demo Slack alert pulls the phone server-side from the DB). Rate-limited
+// to blunt email enumeration; the boolean is no more than the POST already reveals.
 export async function GET(request: Request) {
+  const rl = await checkRateLimit("demo", request.headers);
+  if (!rl.ok) {
+    return NextResponse.json({ eligible: false }, { status: 429 });
+  }
   const url = new URL(request.url);
   const email = (url.searchParams.get("email") ?? "").trim().toLowerCase();
   if (!EMAIL_RE.test(email)) {
-    return NextResponse.json({ eligible: false, phone: "" });
+    return NextResponse.json({ eligible: false });
   }
   const qRow = await db.execute({
     sql: `SELECT demo_qualified FROM qualifier_responses WHERE email = ?`,
     args: [email],
   });
   const eligible = Number(qRow.rows[0]?.demo_qualified ?? 0) === 1;
-  let phone = "";
-  if (eligible) {
-    const wRow = await db.execute({
-      sql: `SELECT phone FROM waitlist WHERE email = ?`,
-      args: [email],
-    });
-    phone = (wRow.rows[0]?.phone ?? "").toString().trim();
-  }
-  return NextResponse.json({ eligible, phone });
+  return NextResponse.json({ eligible });
 }
