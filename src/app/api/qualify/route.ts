@@ -71,9 +71,11 @@ export async function POST(request: Request) {
   const hasBusinessManager = body.has_business_manager ? 1 : 0;
   const hasRunAds = body.has_run_ads ? 1 : 0;
 
-  const otherTicks = postsActively + hasBusinessManager + hasRunAds;
-  const qualified = hasInstagram === 1 && otherTicks >= 2 ? 1 : 0;
+  // "Qualified" means call-eligible: 3+ locations (founder decision 2026-06-20 — 1-2 location
+  // businesses are NOT classed as qualified). The four engagement ticks are still recorded for
+  // context (INSERT below) but no longer make a 1-2 location lead "qualified".
   const demoQualified = locations >= DEMO_MIN_LOCATIONS ? 1 : 0;
+  const qualified = demoQualified;
 
   const waitlistRow = await db.execute({
     sql: `SELECT email, first_name, phone, instagram_handle, source FROM waitlist WHERE email = ?`,

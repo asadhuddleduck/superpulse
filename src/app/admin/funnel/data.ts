@@ -58,7 +58,7 @@ export const FUNNEL: FunnelStep[] = [
     title: "Qualifier (quiz only)",
     route: "/waitlist/qualify",
     purpose:
-      "Asks the questions, then BRANCHES on whether the lead qualifies (IG business profile + at least 2 of: posts weekly / has Business Manager / has run ads). Qualified leads go straight to booking a call (the priority — get them on a call ASAP). Non-qualified leads get the £27 review on its own and are never offered the call. Locations no longer gate anything (changed 14 Jun 2026).",
+      "Asks the questions, then BRANCHES on LOCATIONS: only 3+ location businesses are qualified and go straight to booking a call (the priority — get them on a call ASAP). 1-2 location leads are NOT qualified — they get the £27 review on its own and are never offered the call. The four engagement ticks are recorded for context but no longer gate anything (founder decision 2026-06-20, reverting the 14 Jun engagement-gate experiment).",
     copy: [
       "Headline: Four quick questions. Helps us move you up the list.",
       "Fields: Business type · How many locations?",
@@ -67,8 +67,8 @@ export const FUNNEL: FunnelStep[] = [
     ],
     cta: "Submit my answers",
     next: [
-      { condition: "Qualified (any locations)", target: "→ Book a call (/waitlist/demo)" },
-      { condition: "Not qualified", target: "→ £27 offer only (/waitlist/offer)" },
+      { condition: "Qualified (3+ locations)", target: "→ Book a call (/waitlist/demo)" },
+      { condition: "Not qualified (1-2 locations)", target: "→ £27 offer only (/waitlist/offer)" },
       {
         condition: "Re-take after already booking a call",
         target: "→ £27 offer, call-booked framing (?demo=1), no second pitch",
@@ -76,7 +76,7 @@ export const FUNNEL: FunnelStep[] = [
     ],
     writes: [
       "Turso: qualifier_responses (answers + qualified flag + demo_qualified still stored). Never touches a recorded demo/audit choice.",
-      "Slack: '🎯 New qualified SuperPulse lead' the first time a lead crosses into qualified (never re-fires on re-takes)",
+      "Slack: '🎯 New call-eligible SuperPulse lead (3+ locations)' the first time a lead crosses into 3+ locations (never re-fires on re-takes). An off-policy booking by a 1-2 location lead fires '⚠️ Off-policy demo booking' from the Cal webhook instead.",
       "Meta Pixel + CAPI: CompleteRegistration",
     ],
   },
