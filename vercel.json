@@ -8,5 +8,9 @@
     { "path": "/api/cron/v8/execute", "schedule": "*/30 * * * *" },
     { "path": "/api/cron/email-sequence", "schedule": "0 9 * * *" },
     { "path": "/api/cron/demo-reminders", "schedule": "*/15 * * * *" }
+  ],
+  "redirects": [
+    { "source": "/waitlist", "destination": "https://pages.huddleduck.co.uk/waitlist", "permanent": false },
+    { "source": "/waitlist/:path*", "destination": "https://pages.huddleduck.co.uk/waitlist/:path*", "permanent": false }
   ]
 }
