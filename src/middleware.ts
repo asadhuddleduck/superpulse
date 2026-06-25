@@ -19,6 +19,10 @@ const PUBLIC_PATH_PREFIXES = [
   // HQ join links (25 Jun 2026): a client redeems superpulse.io/join/<token>
   // without the beta gate. The route validates the token itself.
   "/join",
+  // Public help/tutorial site (client + internal-team tracks). Sendable without
+  // a login; noindex via metadata. On the admin subdomain this path is bounced
+  // to the console (admin host is console-only), so guides live on www/apex.
+  "/guide",
 ];
 
 // HQ console surfaces reachable WITHOUT an operator session (login + recovery).
