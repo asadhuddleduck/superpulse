@@ -104,8 +104,32 @@ function isPublicPath(pathname: string): boolean {
   return PUBLIC_PATH_PREFIXES.some((p) => pathname === p || pathname.startsWith(p));
 }
 
+// The internal team console got its own subdomain (25 Jun 2026). admin.superpulse.io
+// is console-only: the bare root serves the /admin tree (rewritten so the URL stays
+// clean), /admin/* passes through the normal operator gate, and any other path is
+// bounced to the console root so the marketing site + client app never surface here.
+// The /admin routes also stay reachable on the apex/www host (nothing removed) so
+// already-sent invite/accept links keep working.
+function isAdminHost(req: NextRequest): boolean {
+  const host = (req.headers.get("host") || "").toLowerCase().split(":")[0];
+  return host === "admin.superpulse.io" || host === "admin.localhost";
+}
+
 export async function middleware(req: NextRequest) {
   const { pathname, search } = req.nextUrl;
+
+  if (isAdminHost(req)) {
+    if (pathname === "/") {
+      const url = req.nextUrl.clone();
+      url.pathname = "/admin";
+      return NextResponse.rewrite(url);
+    }
+    if (pathname === "/admin" || pathname.startsWith("/admin/")) return adminGate(req);
+    const url = req.nextUrl.clone();
+    url.pathname = "/admin";
+    url.search = "";
+    return NextResponse.redirect(url);
+  }
 
   if (pathname === "/admin" || pathname.startsWith("/admin/")) return adminGate(req);
 

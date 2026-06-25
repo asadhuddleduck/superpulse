@@ -29,6 +29,7 @@ export interface CookieDescriptor {
   sameSite: "lax" | "strict" | "none";
   path: string;
   maxAge: number;
+  domain?: string;
 }
 
 // Security core for the Agency HQ console. Runs in Node route handlers + server
@@ -101,6 +102,14 @@ function secure(): boolean {
   return process.env.NODE_ENV === "production";
 }
 
+// Scope HQ cookies to `.superpulse.io` in prod so the operator session +
+// impersonation ride across the console (admin.superpulse.io) and the client
+// app (www.superpulse.io) — "view as client" sends the operator onto the real
+// www /dashboard. Unset in dev (localhost) so cookies stay host-scoped.
+function cookieDomain(): string | undefined {
+  return process.env.NODE_ENV === "production" ? ".superpulse.io" : undefined;
+}
+
 /** Build the session cookie descriptor (path '/' so it rides on /dashboard too). */
 export function hqSessionCookie(token: string, maxAge = SESSION_TTL_SECONDS): CookieDescriptor {
   return {
@@ -111,6 +120,7 @@ export function hqSessionCookie(token: string, maxAge = SESSION_TTL_SECONDS): Co
     sameSite: "lax",
     path: "/",
     maxAge,
+    domain: cookieDomain(),
   };
 }
 
@@ -278,6 +288,7 @@ export function impersonationCookie(token: string): CookieDescriptor {
     sameSite: "lax",
     path: "/",
     maxAge: IMPERSONATE_TTL_SECONDS,
+    domain: cookieDomain(),
   };
 }
 
@@ -290,6 +301,7 @@ export function clearImpersonationCookie(): CookieDescriptor {
     sameSite: "lax",
     path: "/",
     maxAge: 0,
+    domain: cookieDomain(),
   };
 }
 

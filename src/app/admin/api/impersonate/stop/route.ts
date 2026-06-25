@@ -11,7 +11,12 @@ async function handle(req: NextRequest) {
   const dest = imp ? `/admin/clients/${encodeURIComponent(imp.tenantId)}` : "/admin";
   if (imp) await logHqAction(imp.hqUser.id, "impersonate_stop", { targetTenantId: imp.tenantId });
 
-  const res = NextResponse.redirect(new URL(dest, req.url), 303);
+  // The "Exit" banner lives on the client app (www.superpulse.io/dashboard);
+  // send the operator back to the console on admin.superpulse.io. The cleared
+  // cookie is .superpulse.io-scoped so it drops across both subdomains.
+  const adminOrigin =
+    process.env.NODE_ENV === "production" ? "https://admin.superpulse.io" : new URL(req.url).origin;
+  const res = NextResponse.redirect(new URL(dest, adminOrigin), 303);
   res.cookies.set(clearImpersonationCookie());
   return res;
 }

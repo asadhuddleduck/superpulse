@@ -20,7 +20,13 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ tenantId: 
   const token = mintImpersonationToken(tenant.id, user.id);
   await logHqAction(user.id, "impersonate_start", { targetTenantId: tenant.id });
 
-  const res = NextResponse.redirect(new URL("/dashboard", req.url), 303);
+  // The console now lives on admin.superpulse.io but the client app (the real
+  // /dashboard we're viewing as) is on www.superpulse.io. Send the operator
+  // onto the client host explicitly; the signed cookie is scoped to
+  // .superpulse.io (hq-auth.cookieDomain) so it rides across the subdomains.
+  const clientOrigin =
+    process.env.NODE_ENV === "production" ? "https://www.superpulse.io" : new URL(req.url).origin;
+  const res = NextResponse.redirect(new URL("/dashboard", clientOrigin), 303);
   res.cookies.set(impersonationCookie(token));
   return res;
 }
