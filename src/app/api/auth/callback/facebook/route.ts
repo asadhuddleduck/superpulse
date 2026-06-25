@@ -11,6 +11,7 @@ import {
   upsertTenant,
   setTenantCompFromJoin,
 } from "@/lib/queries/tenants";
+import { getSignupLinkByToken, isLinkRedeemable, recordLinkUse } from "@/lib/queries/signup-links";
 import { handleGateCallback } from "./gate";
 
 const COOKIE_TENANT = "tenant_id";
@@ -70,18 +71,14 @@ export async function GET(request: NextRequest) {
       });
     };
 
-    // HQ prepaid join: /join/<token> set sp_join_comp before OAuth. Flag the
-    // tenant we land on as comped (bypasses the Stripe billing gate) and clear
-    // the marker. Keyed here because tenant IDs are derived from ig_user_id.
-    const joinCompRaw = request.cookies.get(JOIN_COMP_COOKIE)?.value;
-    const joinCompId = joinCompRaw ? Number(joinCompRaw) : null;
-    const applyJoinComp = async (response: NextResponse, tenantId: string) => {
-      if (joinCompId == null || Number.isNaN(joinCompId)) return;
-      try {
-        await setTenantCompFromJoin(tenantId, joinCompId);
-      } catch {
-        /* non-fatal — they can still be comped manually in HQ */
-      }
+    // HQ prepaid join: /join/<token> set sp_join_comp (the link's opaque
+    // 32-byte token) before OAuth. Flag the tenant we land on as comped — but
+    // ONLY after re-resolving the link server-side and re-verifying it's a
+    // still-redeemable prepaid link. The token is unguessable, so the cookie
+    // can't be forged to mint free access (unlike a bare numeric id). Consume
+    // the link here, at the moment comp is actually granted.
+    const joinCompToken = request.cookies.get(JOIN_COMP_COOKIE)?.value ?? null;
+    const clearJoinCompCookie = (response: NextResponse) => {
       response.cookies.set({
         name: JOIN_COMP_COOKIE,
         value: "",
@@ -91,6 +88,18 @@ export async function GET(request: NextRequest) {
         path: "/",
         maxAge: 0,
       });
+    };
+    const applyJoinComp = async (response: NextResponse, tenantId: string) => {
+      if (!joinCompToken) return;
+      clearJoinCompCookie(response);
+      try {
+        const link = await getSignupLinkByToken(joinCompToken);
+        if (!link || link.type !== "prepaid" || !isLinkRedeemable(link)) return;
+        await setTenantCompFromJoin(tenantId, link.id);
+        await recordLinkUse(link.id);
+      } catch {
+        /* non-fatal — they can still be comped manually in HQ */
+      }
     };
 
     // Multi-Page accounts route through the picker so the user chooses which

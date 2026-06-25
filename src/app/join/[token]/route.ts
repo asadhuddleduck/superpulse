@@ -33,10 +33,11 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ token: stri
 
   if (link.type === "prepaid") {
     const res = NextResponse.redirect(new URL("/onboarding/connect?join=prepaid", req.url));
-    // The FB OAuth callback reads this and sets comp=1 + signup_link_id on the
-    // tenant it creates/updates, so comped access survives ig-keyed tenant IDs.
-    res.cookies.set("sp_join_comp", String(link.id), { httpOnly: true, secure: prod(), sameSite: "lax", path: "/", maxAge: 3600 });
-    await recordLinkUse(link.id);
+    // Carry the link's OPAQUE token (not its guessable id). The FB OAuth
+    // callback re-resolves + re-validates this link and only then sets comp=1.
+    // The link is consumed there (at grant time), not here, so a click that
+    // never completes OAuth doesn't burn it.
+    res.cookies.set("sp_join_comp", link.token, { httpOnly: true, secure: prod(), sameSite: "lax", path: "/", maxAge: 3600 });
     return res;
   }
 
