@@ -432,3 +432,110 @@ ALTER TABLE qualifier_responses ADD COLUMN source TEXT;
 -- ===========================================================================
 ALTER TABLE waitlist ADD COLUMN whatsapp_opt_in INTEGER NOT NULL DEFAULT 0;
 ALTER TABLE waitlist ADD COLUMN whatsapp_opt_in_at TEXT;
+
+-- ===========================================================================
+-- Agency HQ (added 25 Jun 2026). The operator console at /admin: real team
+-- logins, a client roster over the existing tenants table, view-as-client
+-- impersonation, join links, and lifecycle controls. HQ users are STAFF over
+-- all tenants — entirely separate from `tenants` (which are customers). See
+-- src/lib/hq-auth.ts. All additive; legacy + active tenants behave identically.
+-- ===========================================================================
+
+-- Operator/team accounts for the HQ console. Email + scrypt password hash.
+-- role: owner (full control incl. team) | admin (clients + team) | member
+--       (clients only). status: active | invited (set-password pending) |
+--       disabled (revoked, cannot log in).
+CREATE TABLE IF NOT EXISTS hq_users (
+  id TEXT PRIMARY KEY,
+  email TEXT NOT NULL UNIQUE,
+  password_hash TEXT,
+  name TEXT,
+  role TEXT NOT NULL DEFAULT 'member',
+  status TEXT NOT NULL DEFAULT 'invited',
+  invited_by TEXT,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  last_login_at TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_hq_users_email ON hq_users(email);
+
+-- Server-side sessions so logins are revocable (disable a teammate -> their
+-- session dies). The cookie holds an opaque random token; we store only its
+-- SHA-256 hash. Path '/' so the cookie is also present on /dashboard for the
+-- impersonation live-session check.
+CREATE TABLE IF NOT EXISTS hq_sessions (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  token_hash TEXT NOT NULL UNIQUE,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  expires_at TEXT NOT NULL,
+  revoked_at TEXT,
+  user_agent TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_hq_sessions_token ON hq_sessions(token_hash);
+CREATE INDEX IF NOT EXISTS idx_hq_sessions_user ON hq_sessions(user_id);
+
+-- One-time tokens for password reset AND invite "set your password". We store
+-- only the SHA-256 hash of the token; the raw token rides in the emailed link.
+CREATE TABLE IF NOT EXISTS hq_password_resets (
+  token_hash TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  purpose TEXT NOT NULL DEFAULT 'reset',
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  expires_at TEXT NOT NULL,
+  used_at TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_hq_resets_user ON hq_password_resets(user_id);
+
+-- Join links a teammate hands a prospective/known client. type:
+--   paid    -> client must check out (£300/mo, optional coupon) before access
+--   prepaid -> comped: granted access with NO Stripe charge, straight to OAuth
+--   magic   -> resume/re-invite bound to an existing tenant (target_tenant_id)
+CREATE TABLE IF NOT EXISTS signup_links (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  token TEXT NOT NULL UNIQUE,
+  type TEXT NOT NULL DEFAULT 'paid',
+  label TEXT,
+  email TEXT,
+  stripe_coupon TEXT,
+  target_tenant_id TEXT,
+  max_uses INTEGER NOT NULL DEFAULT 1,
+  used_count INTEGER NOT NULL DEFAULT 0,
+  status TEXT NOT NULL DEFAULT 'active',
+  expires_at TEXT,
+  created_by TEXT,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  last_used_at TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_signup_links_token ON signup_links(token);
+CREATE INDEX IF NOT EXISTS idx_signup_links_status ON signup_links(status, created_at DESC);
+
+-- Accountability: every operator action (impersonate / invite / kick / pause /
+-- link-create) writes a row here. metadata is freeform JSON.
+CREATE TABLE IF NOT EXISTS hq_audit_log (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  hq_user_id TEXT,
+  action TEXT NOT NULL,
+  target_tenant_id TEXT,
+  metadata TEXT,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_hq_audit_created ON hq_audit_log(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_hq_audit_tenant ON hq_audit_log(target_tenant_id, created_at DESC);
+
+-- Additive tenant columns the HQ drives.
+--  comp           -> prepaid/comped client: bypass the Stripe billing gate like
+--                    `legacy` does, but flagged distinctly (not a grandfathered
+--                    legacy partner). 1 = access without a paid subscription.
+--  hq_paused      -> operator pressed Pause: crons skip them, ads stay paused,
+--                    subscription untouched. Reactivate clears it.
+--  signup_link_id -> which join link this tenant came through (attribution).
+--  offboarded_at  -> set when kicked. status also moves to 'offboarded'.
+ALTER TABLE tenants ADD COLUMN comp INTEGER DEFAULT 0;
+ALTER TABLE tenants ADD COLUMN hq_paused INTEGER DEFAULT 0;
+ALTER TABLE tenants ADD COLUMN signup_link_id INTEGER;
+ALTER TABLE tenants ADD COLUMN offboarded_at TEXT;

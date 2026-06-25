@@ -1,11 +1,14 @@
 import { NextResponse } from "next/server";
 import { getTenantCookie } from "@/lib/auth";
+import { impersonationGuard } from "@/lib/hq-auth";
 import { getTenantById, setProvisioningStatus } from "@/lib/queries/tenants";
 import { getLocationsForTenant } from "@/lib/queries/locations";
 
 // Advances the v8 onboarding from the locations step to the budget step, once
 // at least one location exists.
 export async function POST() {
+  const ro = await impersonationGuard();
+  if (ro) return ro;
   const tenantId = await getTenantCookie();
   if (!tenantId) return NextResponse.json({ error: "Not signed in" }, { status: 401 });
 

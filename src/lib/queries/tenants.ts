@@ -23,6 +23,11 @@ export interface Tenant {
   provisioningStatus: string | null;
   monthlyAdBudgetPennies: number | null;
   budgetApprovedAt: string | null;
+  // Agency HQ (added 25 Jun 2026)
+  comp: boolean;
+  hqPaused: boolean;
+  signupLinkId: number | null;
+  offboardedAt: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -47,6 +52,10 @@ function rowToTenant(row: Record<string, unknown>): Tenant {
     provisioningStatus: (row.provisioning_status as string | null) ?? null,
     monthlyAdBudgetPennies: row.monthly_ad_budget_pennies == null ? null : Number(row.monthly_ad_budget_pennies),
     budgetApprovedAt: (row.budget_approved_at as string | null) ?? null,
+    comp: Number(row.comp ?? 0) === 1,
+    hqPaused: Number(row.hq_paused ?? 0) === 1,
+    signupLinkId: row.signup_link_id == null ? null : Number(row.signup_link_id),
+    offboardedAt: (row.offboarded_at as string | null) ?? null,
     createdAt: row.created_at as string,
     updatedAt: (row.updated_at as string) ?? (row.created_at as string),
   };
@@ -108,8 +117,9 @@ export async function upsertTenant(t: TenantUpsert): Promise<void> {
 }
 
 /**
- * Tenants ready for cron processing: status === 'active', token present, and
- * either subscription active/trialing OR flagged legacy (grandfathered).
+ * Tenants ready for cron processing: status === 'active', token present, NOT
+ * operator-paused, and either subscription active/trialing OR flagged legacy
+ * (grandfathered) OR flagged comp (prepaid/comped via an HQ join link).
  */
 export async function getActiveTenants(): Promise<Tenant[]> {
   const result = await db.execute({
@@ -117,8 +127,10 @@ export async function getActiveTenants(): Promise<Tenant[]> {
       SELECT * FROM tenants
       WHERE status = 'active'
         AND meta_access_token IS NOT NULL
+        AND COALESCE(hq_paused, 0) = 0
         AND (
           legacy = 1
+          OR comp = 1
           OR subscription_status IN ('active', 'trialing')
         )
     `,
@@ -277,6 +289,85 @@ export async function setTenantStripeFields(
       now,
       id,
     ],
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Agency HQ lifecycle mutators (added 25 Jun 2026)
+// ---------------------------------------------------------------------------
+
+/** Operator Pause / Reactivate — stops cron processing; subscription untouched. */
+export async function setTenantPaused(id: string, paused: boolean): Promise<void> {
+  await db.execute({
+    sql: `UPDATE tenants SET hq_paused = ?, updated_at = ? WHERE id = ?`,
+    args: [paused ? 1 : 0, new Date().toISOString(), id],
+  });
+}
+
+/** Flip the comp (prepaid) flag — comped clients bypass the Stripe billing gate. */
+export async function setTenantComp(id: string, comp: boolean): Promise<void> {
+  await db.execute({
+    sql: `UPDATE tenants SET comp = ?, updated_at = ? WHERE id = ?`,
+    args: [comp ? 1 : 0, new Date().toISOString(), id],
+  });
+}
+
+/**
+ * Kick / offboard: revoke access. Sets status='offboarded' + subscription
+ * 'canceled' + clears comp + records offboarded_at. Campaign pausing and Stripe
+ * cancellation are orchestrated by the caller (HQ lifecycle route) — this only
+ * flips the DB state that gates the dashboard + crons. Never deletes anything.
+ */
+export async function offboardTenant(id: string): Promise<void> {
+  const now = new Date().toISOString();
+  await db.execute({
+    sql: `UPDATE tenants
+            SET status = 'offboarded',
+                subscription_status = 'canceled',
+                comp = 0,
+                hq_paused = 1,
+                offboarded_at = ?,
+                updated_at = ?
+          WHERE id = ?`,
+    args: [now, now, id],
+  });
+}
+
+/** Reverse an offboard: restore to active + clear paused/offboarded markers. */
+export async function reinstateTenant(id: string): Promise<void> {
+  const now = new Date().toISOString();
+  await db.execute({
+    sql: `UPDATE tenants
+            SET status = 'active',
+                hq_paused = 0,
+                offboarded_at = NULL,
+                updated_at = ?
+          WHERE id = ?`,
+    args: [now, id],
+  });
+}
+
+/**
+ * Mark a tenant comped (prepaid HQ join). Bypasses the Stripe billing gate like
+ * `legacy` but is flagged distinctly. Idempotent; attaches the join link too.
+ */
+export async function setTenantCompFromJoin(id: string, signupLinkId: number | null): Promise<void> {
+  const now = new Date().toISOString();
+  await db.execute({
+    sql: `UPDATE tenants
+            SET comp = 1,
+                signup_link_id = COALESCE(?, signup_link_id),
+                updated_at = ?
+          WHERE id = ?`,
+    args: [signupLinkId, now, id],
+  });
+}
+
+/** Tag a tenant with the join link it came through (attribution). */
+export async function attachSignupLink(id: string, signupLinkId: number): Promise<void> {
+  await db.execute({
+    sql: `UPDATE tenants SET signup_link_id = ?, updated_at = ? WHERE id = ?`,
+    args: [signupLinkId, new Date().toISOString(), id],
   });
 }
 

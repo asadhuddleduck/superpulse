@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getCurrentTenant } from "@/lib/auth";
+import { impersonationGuard } from "@/lib/hq-auth";
 import {
   fetchIGUsername,
   createCampaign,
@@ -28,6 +29,8 @@ interface CreatedCampaign {
 }
 
 export async function POST(request: NextRequest) {
+  const ro = await impersonationGuard();
+  if (ro) return ro;
   const tenant = await getCurrentTenant();
   if (!tenant || !tenant.metaAccessToken) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

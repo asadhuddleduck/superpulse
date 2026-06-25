@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getCurrentTenant } from "@/lib/auth";
 import { fetchMe } from "@/lib/facebook";
+import ImpersonationBanner from "@/components/ImpersonationBanner";
 
 export default async function DashboardLayout({
   children,
@@ -13,9 +14,14 @@ export default async function DashboardLayout({
     redirect("/login");
   }
 
+  // Offboarded clients (kicked via HQ) lose access entirely.
+  if (tenant.status === "offboarded") {
+    redirect("/login?reason=ended");
+  }
+
   // Pre-OAuth flow gate — paid customers come through Stripe before connecting.
-  // Legacy tenants (legacy=1) bypass billing entirely and render dashboard.
-  if (!tenant.legacy) {
+  // Legacy (grandfathered) and comp (prepaid via an HQ join link) bypass billing.
+  if (!tenant.legacy && !tenant.comp) {
     if (
       !tenant.subscriptionStatus ||
       tenant.subscriptionStatus === "pending" ||
@@ -59,6 +65,7 @@ export default async function DashboardLayout({
 
   return (
     <div className="min-h-screen bg-black">
+      <ImpersonationBanner />
       {/* Header */}
       <header className="border-b border-zinc-800">
         <div className="max-w-5xl mx-auto px-6 py-4 flex items-center justify-between">

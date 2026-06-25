@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getTenantCookie } from "@/lib/auth";
+import { impersonationGuard } from "@/lib/hq-auth";
 import { getSettings, upsertSettings } from "@/lib/queries/settings";
 
 export async function GET() {
@@ -21,6 +22,8 @@ export async function GET() {
 }
 
 export async function POST(request: NextRequest) {
+  const ro = await impersonationGuard();
+  if (ro) return ro;
   const tenantId = await getTenantCookie();
   if (!tenantId) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

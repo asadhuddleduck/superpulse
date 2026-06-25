@@ -1,5 +1,6 @@
 import { cookies } from "next/headers";
 import { getTenantById, type Tenant } from "@/lib/queries/tenants";
+import { getImpersonatedTenantId } from "@/lib/hq-auth";
 
 const TENANT_COOKIE_NAME = "tenant_id";
 // Legacy cookie kept here only so logout can scrub any stale value left over
@@ -40,8 +41,18 @@ export async function clearTokenCookie() {
 /**
  * Return the currently signed-in tenant, or null if no valid tenant cookie.
  * The returned `metaAccessToken` is decrypted by the query layer.
+ *
+ * Agency HQ: if a valid "view as client" impersonation is active (signed cookie
+ * + live HQ session), this resolves to the impersonated tenant instead — so the
+ * real /dashboard + /onboarding screens render exactly as that client sees them.
+ * Writes are blocked separately via assertNotImpersonating() in mutating routes.
  */
 export async function getCurrentTenant(): Promise<Tenant | null> {
+  const impersonatedId = await getImpersonatedTenantId();
+  if (impersonatedId) {
+    const impersonated = await getTenantById(impersonatedId);
+    if (impersonated) return impersonated;
+  }
   const tenantId = await getTenantCookie();
   if (!tenantId) return null;
   return getTenantById(tenantId);

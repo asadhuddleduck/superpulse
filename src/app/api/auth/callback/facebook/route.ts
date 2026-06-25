@@ -9,10 +9,12 @@ import {
 import {
   getTenantByIgUserId,
   upsertTenant,
+  setTenantCompFromJoin,
 } from "@/lib/queries/tenants";
 import { handleGateCallback } from "./gate";
 
 const COOKIE_TENANT = "tenant_id";
+const JOIN_COMP_COOKIE = "sp_join_comp";
 const SIXTY_DAYS = 60 * 60 * 24 * 60;
 
 export async function GET(request: NextRequest) {
@@ -68,6 +70,29 @@ export async function GET(request: NextRequest) {
       });
     };
 
+    // HQ prepaid join: /join/<token> set sp_join_comp before OAuth. Flag the
+    // tenant we land on as comped (bypasses the Stripe billing gate) and clear
+    // the marker. Keyed here because tenant IDs are derived from ig_user_id.
+    const joinCompRaw = request.cookies.get(JOIN_COMP_COOKIE)?.value;
+    const joinCompId = joinCompRaw ? Number(joinCompRaw) : null;
+    const applyJoinComp = async (response: NextResponse, tenantId: string) => {
+      if (joinCompId == null || Number.isNaN(joinCompId)) return;
+      try {
+        await setTenantCompFromJoin(tenantId, joinCompId);
+      } catch {
+        /* non-fatal — they can still be comped manually in HQ */
+      }
+      response.cookies.set({
+        name: JOIN_COMP_COOKIE,
+        value: "",
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "lax",
+        path: "/",
+        maxAge: 0,
+      });
+    };
+
     // Multi-Page accounts route through the picker so the user chooses which
     // Page+IG to wire up. We persist the token immediately (encrypted at rest)
     // under a stable fb-id-keyed tenant so the picker has it available.
@@ -83,6 +108,7 @@ export async function GET(request: NextRequest) {
       const pickerUrl = new URL("/onboarding/select-page", request.url);
       const response = NextResponse.redirect(pickerUrl);
       setTenantCookie(response, tenantId);
+      await applyJoinComp(response, tenantId);
       return response;
     }
 
@@ -141,6 +167,7 @@ export async function GET(request: NextRequest) {
       : new URL("/onboarding/select-ad-account", request.url);
     const response = NextResponse.redirect(nextUrl);
     setTenantCookie(response, tenantId);
+    await applyJoinComp(response, tenantId);
     return response;
   } catch (err) {
     console.error("Facebook OAuth callback error:", err);

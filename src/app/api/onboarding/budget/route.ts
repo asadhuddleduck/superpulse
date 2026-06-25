@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getTenantCookie } from "@/lib/auth";
+import { impersonationGuard } from "@/lib/hq-auth";
 import { getTenantById, setTenantBudget } from "@/lib/queries/tenants";
 import { getLocationsForTenant } from "@/lib/queries/locations";
 import { validateTenantBudget, monthlyFromPerLocationDaily, PER_ADSET_FLOOR } from "@/lib/v8/budget-plan";
@@ -12,6 +13,8 @@ interface BudgetBody {
 }
 
 export async function POST(request: NextRequest) {
+  const ro = await impersonationGuard();
+  if (ro) return ro;
   const tenantId = await getTenantCookie();
   if (!tenantId) return NextResponse.json({ error: "Not signed in" }, { status: 401 });
 

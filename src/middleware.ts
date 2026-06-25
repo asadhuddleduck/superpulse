@@ -16,7 +16,13 @@ const PUBLIC_PATH_PREFIXES = [
   "/onboarding",
   "/login",
   "/dashboard",
+  // HQ join links (25 Jun 2026): a client redeems superpulse.io/join/<token>
+  // without the beta gate. The route validates the token itself.
+  "/join",
 ];
+
+// HQ console surfaces reachable WITHOUT an operator session (login + recovery).
+const ADMIN_PUBLIC_PATHS = ["/admin/login", "/admin/forgot", "/admin/reset", "/admin/accept"];
 
 const PUBLIC_FILES = new Set(["/robots.txt", "/sitemap.xml"]);
 
@@ -40,33 +46,56 @@ function ctEqual(a: string, b: string): boolean {
   return diff === 0;
 }
 
-// Internal /admin dashboard: fail CLOSED (no key set = no access), cookie-based,
-// with a one-time ?key= handoff that immediately strips the key from the URL and
-// stores only a hash in an HttpOnly cookie. Keeps the secret out of the page,
-// browser history (after redirect), and Referer headers.
+// Agency HQ gate (/admin/*). Coarse, edge-safe: it lets login/recovery pages
+// through, allows any request carrying an `sp_hq` session cookie (the server
+// layout is the authoritative validator), and keeps the legacy ADMIN_DASH_KEY
+// gate working for /admin/funnel. Anything else → /admin/login (or 401 for API).
 async function adminGate(req: NextRequest): Promise<NextResponse> {
-  const key = process.env.ADMIN_DASH_KEY;
-  if (!key) return new NextResponse("Not found", { status: 404 }); // fail closed
+  const { pathname } = req.nextUrl;
 
-  const expected = await sha256Hex(`sp-admin-v1:${key}`);
-  const cookie = req.cookies.get(ADMIN_COOKIE)?.value;
-  if (cookie && ctEqual(cookie, expected)) return NextResponse.next();
-
-  const provided = req.nextUrl.searchParams.get("key");
-  if (provided && ctEqual(provided, key)) {
-    const url = req.nextUrl.clone();
-    url.searchParams.delete("key");
-    const res = NextResponse.redirect(url);
-    res.cookies.set(ADMIN_COOKIE, expected, {
-      httpOnly: true,
-      secure: true,
-      sameSite: "strict",
-      path: "/admin",
-      maxAge: 60 * 60 * 24 * 30,
-    });
-    return res;
+  // Public HQ surfaces (login + password recovery) and their auth endpoints.
+  if (ADMIN_PUBLIC_PATHS.some((p) => pathname === p || pathname.startsWith(p + "/"))) {
+    return NextResponse.next();
   }
-  return new NextResponse("Not found", { status: 404 });
+  if (pathname.startsWith("/admin/api/auth/")) return NextResponse.next();
+
+  // Authenticated operator session — coarse presence check; layout validates.
+  if (req.cookies.get("sp_hq")?.value) return NextResponse.next();
+
+  // Backward-compat: the legacy single-key gate keeps existing /admin/funnel
+  // bookmarks (and the ?key= handoff) working until fully migrated.
+  const key = process.env.ADMIN_DASH_KEY;
+  if (key) {
+    const expected = await sha256Hex(`sp-admin-v1:${key}`);
+    const cookie = req.cookies.get(ADMIN_COOKIE)?.value;
+    if (cookie && ctEqual(cookie, expected)) return NextResponse.next();
+    const provided = req.nextUrl.searchParams.get("key");
+    if (provided && ctEqual(provided, key)) {
+      const url = req.nextUrl.clone();
+      url.searchParams.delete("key");
+      const res = NextResponse.redirect(url);
+      res.cookies.set(ADMIN_COOKIE, expected, {
+        httpOnly: true,
+        secure: true,
+        sameSite: "strict",
+        path: "/admin",
+        maxAge: 60 * 60 * 24 * 30,
+      });
+      return res;
+    }
+  }
+
+  // No session: API calls get a clean 401, page loads bounce to the login.
+  if (pathname.startsWith("/admin/api/")) {
+    return new NextResponse(JSON.stringify({ error: "unauthenticated" }), {
+      status: 401,
+      headers: { "content-type": "application/json" },
+    });
+  }
+  const url = req.nextUrl.clone();
+  url.pathname = "/admin/login";
+  url.search = `?next=${encodeURIComponent(pathname)}`;
+  return NextResponse.redirect(url);
 }
 
 function isPublicPath(pathname: string): boolean {

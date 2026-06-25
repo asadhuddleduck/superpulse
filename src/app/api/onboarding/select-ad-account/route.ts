@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getTenantCookie } from "@/lib/auth";
+import { impersonationGuard } from "@/lib/hq-auth";
 import { getTenantById, upsertTenant, setProvisioningStatus } from "@/lib/queries/tenants";
 import { fetchAdAccounts } from "@/lib/facebook";
 import { writeAuditEvent } from "@/lib/queries/audit-events";
@@ -75,6 +76,8 @@ async function selectAdAccount(adAccountId: string) {
 }
 
 export async function POST(request: NextRequest) {
+  const ro = await impersonationGuard();
+  if (ro) return ro;
   const body = (await request.json().catch(() => ({}))) as SelectAdAccountBody;
   const adAccountId = typeof body.adAccountId === "string" ? body.adAccountId : null;
   if (!adAccountId) {
