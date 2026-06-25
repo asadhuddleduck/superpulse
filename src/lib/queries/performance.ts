@@ -44,7 +44,7 @@ export async function getAggregatePerformance(
       COALESCE(SUM(pd.profile_visits), 0) AS total_profile_visits,
       COUNT(DISTINCT CASE WHEN ac.status = 'ACTIVE' THEN ac.meta_campaign_id END) AS active_campaigns
     FROM active_campaigns ac
-    LEFT JOIN performance_data pd ON CAST(ac.id AS TEXT) = pd.campaign_id
+    LEFT JOIN performance_data pd ON ac.meta_campaign_id = pd.campaign_id
     WHERE ac.tenant_id = ?`,
     args: [tenantId],
   });

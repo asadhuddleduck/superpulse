@@ -333,18 +333,26 @@ export async function offboardTenant(id: string): Promise<void> {
   });
 }
 
-/** Reverse an offboard: restore to active + clear paused/offboarded markers. */
-export async function reinstateTenant(id: string): Promise<void> {
+/**
+ * Reverse an offboard: restore to active + clear paused/offboarded markers.
+ * Only acts on a genuinely offboarded tenant (WHERE status = 'offboarded'), so
+ * it can't jam an in-flight onboarding tenant to 'active'. Returns true iff it
+ * actually reinstated. Does NOT restore comp — offboard cleared it, so a
+ * previously-comped client must be re-comped explicitly (the dashboard re-gates
+ * on subscription/comp, so without it they correctly land on /pricing).
+ */
+export async function reinstateTenant(id: string): Promise<boolean> {
   const now = new Date().toISOString();
-  await db.execute({
+  const res = await db.execute({
     sql: `UPDATE tenants
             SET status = 'active',
                 hq_paused = 0,
                 offboarded_at = NULL,
                 updated_at = ?
-          WHERE id = ?`,
+          WHERE id = ? AND status = 'offboarded'`,
     args: [now, id],
   });
+  return res.rowsAffected === 1;
 }
 
 /**

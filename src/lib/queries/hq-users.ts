@@ -81,6 +81,15 @@ export async function listHqUsers(): Promise<HqUser[]> {
   return result.rows.map(rowToHqUser);
 }
 
+/** Count active owners — used to refuse any action that would remove the last one. */
+export async function countActiveOwners(): Promise<number> {
+  const result = await db.execute({
+    sql: `SELECT COUNT(*) AS n FROM hq_users WHERE role = 'owner' AND status = 'active'`,
+    args: [],
+  });
+  return Number((result.rows[0] as { n?: number } | undefined)?.n ?? 0);
+}
+
 export async function setHqUserPassword(id: string, passwordHash: string): Promise<void> {
   await db.execute({
     sql: `UPDATE hq_users SET password_hash = ?, status = 'active' WHERE id = ?`,

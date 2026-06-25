@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
-import { getTenantCookie } from "@/lib/auth";
-import { getTenantById } from "@/lib/queries/tenants";
+import { getCurrentTenant } from "@/lib/auth";
 import { getLocationsForTenant } from "@/lib/queries/locations";
 import LocationsManager from "@/components/LocationsManager";
 import { ContinueToBudget } from "./continue-to-budget";
@@ -13,14 +12,12 @@ export const metadata: Metadata = {
 export const dynamic = "force-dynamic";
 
 export default async function OnboardingLocationsPage() {
-  const tenantId = await getTenantCookie();
-  if (!tenantId) redirect("/login");
-
-  const tenant = await getTenantById(tenantId);
+  // Impersonation-aware: during "view as client" this reads the client's tenant.
+  const tenant = await getCurrentTenant();
   if (!tenant) redirect("/login");
   if (tenant.provisioningStatus !== "pending_locations") redirect("/dashboard");
 
-  const locations = await getLocationsForTenant(tenantId);
+  const locations = await getLocationsForTenant(tenant.id);
 
   return (
     <div className="min-h-screen bg-black px-6 py-12">

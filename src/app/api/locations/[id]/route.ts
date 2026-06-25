@@ -1,15 +1,21 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getTenantCookie } from "@/lib/auth";
+import { getCurrentTenant } from "@/lib/auth";
+import { impersonationGuard } from "@/lib/hq-auth";
 import { db } from "@/lib/db";
 
 export async function DELETE(
   _request: NextRequest,
   context: { params: Promise<{ id: string }> },
 ) {
-  const tenantId = await getTenantCookie();
-  if (!tenantId) {
+  // View-as-client is read-only — never delete a client's location.
+  const ro = await impersonationGuard();
+  if (ro) return ro;
+
+  const tenant = await getCurrentTenant();
+  if (!tenant) {
     return NextResponse.json({ error: "Not signed in" }, { status: 401 });
   }
+  const tenantId = tenant.id;
 
   const { id } = await context.params;
   const numericId = Number(id);

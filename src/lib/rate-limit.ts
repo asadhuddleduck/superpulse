@@ -12,36 +12,51 @@ const DEFAULTS: Record<string, LimitConfig> = {
   upsell: { windowSeconds: 60, maxHits: 3 },
   demo: { windowSeconds: 60, maxHits: 3 },
   "audit-offer": { windowSeconds: 60, maxHits: 5 },
+  // Agency HQ auth surface — bound online password-spray + reset-bombing on the
+  // keys-to-the-kingdom console. 15-min windows.
+  "hq-login": { windowSeconds: 900, maxHits: 10 },
+  "hq-forgot": { windowSeconds: 900, maxHits: 5 },
+  "hq-forgot-email": { windowSeconds: 900, maxHits: 3 },
 };
 
 export type RateLimitResult = { ok: true } | { ok: false; retryAfterSeconds: number };
 
-function bucketKey(scope: string, ip: string, windowSeconds: number): { key: string; windowStart: string } {
+function bucketKey(scope: string, id: string, windowSeconds: number): { key: string; windowStart: string } {
   const now = Math.floor(Date.now() / 1000);
   const bucket = Math.floor(now / windowSeconds) * windowSeconds;
   return {
-    key: `${scope}:${ip}`,
+    key: `${scope}:${id}`,
     windowStart: new Date(bucket * 1000).toISOString(),
   };
 }
 
 let warnedUnknownIp = false;
 
+// `opts.identifier` keys the bucket by an explicit value (e.g. a lowercased
+// email) instead of the client IP — call once per-IP and once per-identifier to
+// throttle both dimensions (e.g. forgot-password: per-IP + per-email).
 export async function checkRateLimit(
   scope: keyof typeof DEFAULTS,
   headers: Headers,
+  opts?: { identifier?: string },
 ): Promise<RateLimitResult> {
-  const ip = getClientIp(headers) ?? "unknown";
-  if (ip === "unknown") {
-    if (!warnedUnknownIp) {
-      warnedUnknownIp = true;
-      console.warn("[rate-limit] client IP could not be resolved — rate limit bypassed for this request");
+  let id: string;
+  if (opts?.identifier) {
+    id = opts.identifier;
+  } else {
+    const ip = getClientIp(headers) ?? "unknown";
+    if (ip === "unknown") {
+      if (!warnedUnknownIp) {
+        warnedUnknownIp = true;
+        console.warn("[rate-limit] client IP could not be resolved — rate limit bypassed for this request");
+      }
+      return { ok: true };
     }
-    return { ok: true };
+    id = ip;
   }
 
   const cfg = DEFAULTS[scope];
-  const { key, windowStart } = bucketKey(scope, ip, cfg.windowSeconds);
+  const { key, windowStart } = bucketKey(scope, id, cfg.windowSeconds);
 
   try {
     await db.execute({

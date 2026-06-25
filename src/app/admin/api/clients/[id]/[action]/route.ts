@@ -59,8 +59,14 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
     }
     case "reinstate": {
       if (!(await hasRole(user, "admin"))) return forbidden;
-      await reinstateTenant(id);
-      await writeAuditEvent(id, "subscription_changed", "Reinstated via HQ");
+      const reinstated = await reinstateTenant(id);
+      if (!reinstated) {
+        return NextResponse.redirect(
+          new URL(`/admin/clients/${encodeURIComponent(id)}?error=not_offboarded`, req.url),
+          303,
+        );
+      }
+      await writeAuditEvent(id, "subscription_changed", "Reinstated via HQ — comp not restored, re-comp if needed");
       await logHqAction(user.id, "reinstate_client", { targetTenantId: id });
       return back;
     }

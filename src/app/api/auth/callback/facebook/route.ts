@@ -11,11 +11,12 @@ import {
   upsertTenant,
   setTenantCompFromJoin,
 } from "@/lib/queries/tenants";
-import { getSignupLinkByToken, isLinkRedeemable, recordLinkUse } from "@/lib/queries/signup-links";
+import { getSignupLinkByToken, consumeSignupLink } from "@/lib/queries/signup-links";
 import { handleGateCallback } from "./gate";
 
 const COOKIE_TENANT = "tenant_id";
 const JOIN_COMP_COOKIE = "sp_join_comp";
+const JOIN_MAGIC_COOKIE = "sp_join_magic";
 const SIXTY_DAYS = 60 * 60 * 24 * 60;
 
 export async function GET(request: NextRequest) {
@@ -78,9 +79,10 @@ export async function GET(request: NextRequest) {
     // can't be forged to mint free access (unlike a bare numeric id). Consume
     // the link here, at the moment comp is actually granted.
     const joinCompToken = request.cookies.get(JOIN_COMP_COOKIE)?.value ?? null;
-    const clearJoinCompCookie = (response: NextResponse) => {
+    const joinMagicToken = request.cookies.get(JOIN_MAGIC_COOKIE)?.value ?? null;
+    const clearJoinCookie = (response: NextResponse, name: string) => {
       response.cookies.set({
-        name: JOIN_COMP_COOKIE,
+        name,
         value: "",
         httpOnly: true,
         secure: process.env.NODE_ENV === "production",
@@ -91,14 +93,34 @@ export async function GET(request: NextRequest) {
     };
     const applyJoinComp = async (response: NextResponse, tenantId: string) => {
       if (!joinCompToken) return;
-      clearJoinCompCookie(response);
+      clearJoinCookie(response, JOIN_COMP_COOKIE);
       try {
         const link = await getSignupLinkByToken(joinCompToken);
-        if (!link || link.type !== "prepaid" || !isLinkRedeemable(link)) return;
-        await setTenantCompFromJoin(tenantId, link.id);
-        await recordLinkUse(link.id);
+        if (!link || link.type !== "prepaid") return;
+        // Reserve the use atomically BEFORE granting comp — closes the TOCTOU
+        // where two concurrent callbacks could both comp off one max_uses=1 link.
+        if (await consumeSignupLink(link.id)) {
+          await setTenantCompFromJoin(tenantId, link.id);
+        }
       } catch {
         /* non-fatal — they can still be comped manually in HQ */
+      }
+    };
+    // Magic re-invite: bind the target tenant ONLY to its authenticated owner.
+    // The tenant cookie is already set to the resolved tenant; we only consume
+    // the link when the person who just authenticated IS the target tenant (their
+    // Instagram resolved to targetTenantId). A leaked/forwarded magic URL resolves
+    // to the redeemer's OWN tenant, never matches, and grants nothing.
+    const applyJoinMagic = async (response: NextResponse, resolvedTenantId: string) => {
+      if (!joinMagicToken) return;
+      clearJoinCookie(response, JOIN_MAGIC_COOKIE);
+      try {
+        const link = await getSignupLinkByToken(joinMagicToken);
+        if (!link || link.type !== "magic") return;
+        if (!link.targetTenantId || link.targetTenantId !== resolvedTenantId) return;
+        await consumeSignupLink(link.id);
+      } catch {
+        /* non-fatal */
       }
     };
 
@@ -118,6 +140,7 @@ export async function GET(request: NextRequest) {
       const response = NextResponse.redirect(pickerUrl);
       setTenantCookie(response, tenantId);
       await applyJoinComp(response, tenantId);
+      await applyJoinMagic(response, tenantId);
       return response;
     }
 
@@ -177,6 +200,7 @@ export async function GET(request: NextRequest) {
     const response = NextResponse.redirect(nextUrl);
     setTenantCookie(response, tenantId);
     await applyJoinComp(response, tenantId);
+    await applyJoinMagic(response, tenantId);
     return response;
   } catch (err) {
     console.error("Facebook OAuth callback error:", err);

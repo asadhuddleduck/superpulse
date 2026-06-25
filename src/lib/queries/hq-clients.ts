@@ -116,7 +116,7 @@ export async function listClientsSummary(): Promise<ClientSummary[]> {
         (SELECT COUNT(*) FROM active_campaigns c WHERE c.tenant_id = t.id AND c.status = 'ACTIVE') AS campaigns_live,
         (SELECT COALESCE(SUM(pd.spend), 0)
            FROM performance_data pd
-           JOIN active_campaigns c2 ON CAST(c2.id AS TEXT) = pd.campaign_id
+           JOIN active_campaigns c2 ON c2.meta_campaign_id = pd.campaign_id
           WHERE c2.tenant_id = t.id AND pd.date >= ?) AS spend_month,
         (SELECT MAX(ae.created_at) FROM audit_events ae WHERE ae.tenant_id = t.id) AS last_activity
       FROM tenants t

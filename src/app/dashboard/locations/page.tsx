@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { getTenantCookie } from "@/lib/auth";
+import { getCurrentTenant } from "@/lib/auth";
 import { getLocationsForTenant } from "@/lib/queries/locations";
 import LocationsManager from "@/components/LocationsManager";
 
@@ -11,10 +11,11 @@ export const metadata: Metadata = {
 };
 
 export default async function LocationsPage() {
-  const tenantId = await getTenantCookie();
-  if (!tenantId) redirect("/login");
+  // Impersonation-aware: during "view as client" this reads the client's tenant.
+  const tenant = await getCurrentTenant();
+  if (!tenant) redirect("/login");
 
-  const locations = await getLocationsForTenant(tenantId);
+  const locations = await getLocationsForTenant(tenant.id);
 
   return (
     <div>

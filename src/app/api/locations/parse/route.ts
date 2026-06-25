@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getTenantCookie } from "@/lib/auth";
+import { getCurrentTenant } from "@/lib/auth";
+import { impersonationGuard } from "@/lib/hq-auth";
 import { parseLocationInput, type ParseResult } from "@/lib/location-parser";
 
 export const dynamic = "force-dynamic";
@@ -10,8 +11,12 @@ interface RequestBody {
 }
 
 export async function POST(request: NextRequest) {
-  const tenantId = await getTenantCookie();
-  if (!tenantId) {
+  // View-as-client is read-only — don't run parse/geocode work as the client.
+  const ro = await impersonationGuard();
+  if (ro) return ro;
+
+  const tenant = await getCurrentTenant();
+  if (!tenant) {
     return NextResponse.json({ error: "Not signed in" }, { status: 401 });
   }
 

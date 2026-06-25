@@ -1,9 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getSignupLinkByToken, isLinkRedeemable, recordLinkUse } from "@/lib/queries/signup-links";
+import { getSignupLinkByToken, isLinkRedeemable, consumeSignupLink } from "@/lib/queries/signup-links";
 
 export const dynamic = "force-dynamic";
-
-const SIXTY_DAYS = 60 * 60 * 24 * 60;
 
 function prod(): boolean {
   return process.env.NODE_ENV === "production";
@@ -13,7 +11,8 @@ function prod(): boolean {
 //   paid    -> /pricing (coupon prefilled), attribution cookie for later
 //   prepaid -> drop a comp marker cookie, send to OAuth; the FB callback flags
 //              the resulting tenant comp=1 (so it survives ig-keyed tenant creation)
-//   magic   -> bind the existing target tenant and resume onboarding
+//   magic   -> carry the opaque token through OAuth; the callback binds the
+//              target tenant ONLY to the authenticated owner of that tenant
 export async function GET(req: NextRequest, ctx: { params: Promise<{ token: string }> }) {
   const { token } = await ctx.params;
   const link = await getSignupLinkByToken(token);
@@ -27,7 +26,7 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ token: stri
     if (link.stripeCoupon) url.searchParams.set("promo", link.stripeCoupon);
     const res = NextResponse.redirect(url);
     res.cookies.set("sp_join", String(link.id), { httpOnly: true, secure: prod(), sameSite: "lax", path: "/", maxAge: 3600 });
-    await recordLinkUse(link.id);
+    await consumeSignupLink(link.id);
     return res;
   }
 
@@ -42,15 +41,14 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ token: stri
   }
 
   if (link.type === "magic" && link.targetTenantId) {
-    const res = NextResponse.redirect(new URL("/dashboard", req.url));
-    res.cookies.set("tenant_id", link.targetTenantId, {
-      httpOnly: true,
-      secure: prod(),
-      sameSite: "lax",
-      path: "/",
-      maxAge: SIXTY_DAYS,
-    });
-    await recordLinkUse(link.id);
+    // SECURITY: never mint a logged-in client session from an unauthenticated
+    // GET. Carry the link's OPAQUE token through Facebook OAuth (like prepaid);
+    // the callback re-resolves it and binds the target tenant ONLY when the
+    // person who authenticates IS that tenant (their Instagram resolves to
+    // targetTenantId). A forwarded/leaked magic URL is therefore useless to
+    // anyone but the intended client. The link is consumed at bind time, not here.
+    const res = NextResponse.redirect(new URL("/onboarding/connect?join=magic", req.url));
+    res.cookies.set("sp_join_magic", link.token, { httpOnly: true, secure: prod(), sameSite: "lax", path: "/", maxAge: 3600 });
     return res;
   }
 

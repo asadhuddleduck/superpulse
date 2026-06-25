@@ -111,6 +111,30 @@ export async function recordLinkUse(id: number): Promise<void> {
   });
 }
 
+/**
+ * Atomically reserve ONE use of a link at grant time. A single conditional
+ * UPDATE (no read-then-write TOCTOU): it increments used_count and flips status
+ * -> 'used' at the cap, but ONLY while the link is still active, under its cap,
+ * and unexpired. Returns true iff this call won the use (rowsAffected === 1).
+ * Callers MUST gate the grant (comp / takeover / session) on a true result, and
+ * call this at the moment access is granted, not at click time.
+ */
+export async function consumeSignupLink(id: number): Promise<boolean> {
+  const now = new Date().toISOString();
+  const res = await db.execute({
+    sql: `UPDATE signup_links
+            SET used_count = used_count + 1,
+                last_used_at = ?,
+                status = CASE WHEN used_count + 1 >= max_uses THEN 'used' ELSE status END
+          WHERE id = ?
+            AND status = 'active'
+            AND used_count < max_uses
+            AND (expires_at IS NULL OR expires_at > ?)`,
+    args: [now, id, now],
+  });
+  return res.rowsAffected === 1;
+}
+
 export async function revokeSignupLink(id: number): Promise<void> {
   await db.execute({
     sql: `UPDATE signup_links SET status = 'revoked' WHERE id = ?`,

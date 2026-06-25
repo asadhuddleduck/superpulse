@@ -5,6 +5,7 @@ import {
   setHqUserStatus,
   setHqUserRole,
   revokeAllHqSessionsForUser,
+  countActiveOwners,
   type HqRole,
 } from "@/lib/queries/hq-users";
 import { sendHqInviteEmail } from "@/lib/email/hq";
@@ -24,9 +25,17 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
   const back = (q = "") => NextResponse.redirect(new URL(`/admin/team${q}`, req.url), 303);
   if (!target) return back("?error=not_found");
 
-  // Guard rails: only an owner can touch an owner; nobody can disable themselves.
+  // Guard rails: only an owner can touch an owner; nobody can disable or
+  // re-role themselves (a sole owner self-demoting would lock the org out with
+  // no in-app recovery).
   if (target.role === "owner" && user.role !== "owner") return back("?error=forbidden");
-  if (target.id === user.id && action === "disable") return back("?error=self");
+  if (target.id === user.id && (action === "disable" || action === "role")) return back("?error=self");
+
+  // Last-owner invariant: never let disable/demote remove the final active owner.
+  const wouldDropOwner =
+    target.role === "owner" &&
+    (action === "disable" || (action === "role" && String((await req.clone().formData()).get("role")) !== "owner"));
+  if (wouldDropOwner && (await countActiveOwners()) <= 1) return back("?error=last_owner");
 
   switch (action) {
     case "disable":

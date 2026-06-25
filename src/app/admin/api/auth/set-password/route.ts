@@ -31,7 +31,9 @@ export async function POST(req: NextRequest) {
       303,
     );
 
-  if (password.length < 8) return back("weak");
+  // Min 12 chars on the keys-to-the-kingdom console (operator accounts can comp,
+  // offboard, and view any client). Reject trivially-weak single-char fills.
+  if (password.length < 12 || /^(.)\1+$/.test(password)) return back("weak");
 
   const rec = await verifyResetToken(token);
   if (!rec) return back("invalid");

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getHqUser, mintImpersonationToken, impersonationCookie } from "@/lib/hq-auth";
+import { getHqUser, hasRole, mintImpersonationToken, impersonationCookie } from "@/lib/hq-auth";
 import { getTenantById } from "@/lib/queries/tenants";
 import { logHqAction } from "@/lib/hq-audit";
 
@@ -9,9 +9,15 @@ export const dynamic = "force-dynamic";
 // cookie and sends the operator into the client's real /dashboard (or whatever
 // onboarding step they're on). Every mutating customer route is guarded by
 // assertNotImpersonating(), so this can never change the client's account.
+// Requires admin+ : viewing as a client exposes their full PII/dashboard, so it
+// sits at the same trust floor as offboard/team-management, not open to every
+// 'member' operator.
 export async function POST(req: NextRequest, ctx: { params: Promise<{ tenantId: string }> }) {
   const user = await getHqUser();
   if (!user) return NextResponse.json({ error: "unauthenticated" }, { status: 401 });
+  if (!(await hasRole(user, "admin"))) {
+    return NextResponse.json({ error: "forbidden" }, { status: 403 });
+  }
 
   const { tenantId } = await ctx.params;
   const tenant = await getTenantById(tenantId);

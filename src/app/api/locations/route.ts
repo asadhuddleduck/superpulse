@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getTenantCookie } from "@/lib/auth";
+import { getCurrentTenant } from "@/lib/auth";
+import { impersonationGuard } from "@/lib/hq-auth";
 import {
   getLocationsForTenant,
   type LocationInput,
@@ -7,12 +8,14 @@ import {
 import { db } from "@/lib/db";
 import { geocodeAddress } from "@/lib/geocode";
 
+// Resolve the active tenant impersonation-aware: during "view as client" this is
+// the client being viewed, so the operator reads the client's real locations.
 async function requireTenantId(): Promise<string | NextResponse> {
-  const tenantId = await getTenantCookie();
-  if (!tenantId) {
+  const tenant = await getCurrentTenant();
+  if (!tenant) {
     return NextResponse.json({ error: "Not signed in" }, { status: 401 });
   }
-  return tenantId;
+  return tenant.id;
 }
 
 export async function GET() {
@@ -23,6 +26,10 @@ export async function GET() {
 }
 
 export async function POST(request: NextRequest) {
+  // View-as-client is read-only — never write to a client's account.
+  const ro = await impersonationGuard();
+  if (ro) return ro;
+
   const tenantId = await requireTenantId();
   if (typeof tenantId !== "string") return tenantId;
 
