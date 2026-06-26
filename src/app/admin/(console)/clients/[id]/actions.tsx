@@ -51,7 +51,7 @@ export default function ClientActions({
   const base = `/admin/api/clients/${encodeURIComponent(tenantId)}`;
   return (
     <div className="flex flex-wrap gap-2">
-      {!offboarded && (
+      {!offboarded && canAdmin && (
         <ActionForm action={`/admin/api/impersonate/${encodeURIComponent(tenantId)}`} variant="primary">
           View as client
         </ActionForm>

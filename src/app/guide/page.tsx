@@ -14,42 +14,49 @@ export default function ClientGuide() {
       <Hero
         kicker="For business owners"
         title="Getting started with SuperPulse"
-        sub="SuperPulse takes the posts you already put on Instagram and runs them as local ads, so more people nearby see you. You set it up once, then leave it running. Here is the whole thing, start to finish."
+        sub="Post on Instagram like you always do. SuperPulse takes your best posts and runs them as local ads that reach people near you. You set it up once, then leave it running. Here is the whole thing, start to finish."
       />
 
       <Section title="Setup, step by step">
         <Steps>
-          <Step n={1} title="Log in with Instagram" see="A Facebook permission screen, then your account is connected.">
+          <Step n={1} title="Connect with Facebook" see="A ‘Continue with Facebook’ button, then Facebook’s own permission screen.">
             <p>
-              Tap the login button and sign in through Facebook. We ask through Facebook because that is the only
-              way to run proper ads from your posts. Your password stays with Facebook, we never see it.
+              Tap the button and sign in through Facebook. Instagram&rsquo;s ad system runs through your Facebook
+              page, so that is the door we use. You approve one screen that lets us read your posts and create boosts
+              for you. Your password stays with Facebook, we never see it.
             </p>
           </Step>
-          <Step n={2} title="Pick your page" see="A short list, only if you manage more than one.">
+          <Step n={2} title="Pick your page" see="A short list, only if you manage more than one. You can switch it later in Settings.">
             <p>
-              If your account looks after a few Instagram pages, choose the one this is for. If you only have one,
-              we skip straight past this.
+              If your account looks after a few pages with Instagram on them, choose the one this is for. If you only
+              have one, we pick it and move on.
             </p>
           </Step>
-          <Step n={3} title="Choose the ad account" see="Your ad accounts, with the right one ready to confirm.">
-            <p>Pick the ad account the spend should come from. One tap and you are through.</p>
-          </Step>
-          <Step n={4} title="Tell us where you are" see="A box to type your locations, then a tick once we find them.">
+          <Step n={3} title="Choose the ad account" see="Your active ad accounts. A missing one is usually a billing issue inside Meta.">
             <p>
-              Type your shop address or postcode (one line per location if you have more than one). This sets the
-              area around each spot that your ads reach, so your budget only goes to people who could actually walk in.
+              Pick the account your ad spend should bill to. We only show accounts that are active and ready to spend.
+              This is separate from your SuperPulse subscription.
             </p>
           </Step>
-          <Step n={5} title="Set your budget" see="A simple daily amount per location.">
+          <Step n={4} title="Add your locations" see="‘Each one becomes its own local ad.’">
             <p>
-              Choose a daily budget per location. Most owners start around £5 a day each. You can change it any time,
-              and your first month is on us.
+              Add every shop or branch we should advertise around (one line per location). Each one becomes its own
+              local ad aimed at people nearby, so your budget only goes to people who could actually walk in. Got a
+              lot of sites? Paste them all into the &ldquo;add many at once&rdquo; box.
             </p>
           </Step>
-          <Step n={6} title="That is it, you are live" see="A short ‘setting things up’ screen, then your dashboard.">
+          <Step n={5} title="Set your daily budget" see="‘This is your Meta ad spend, on your own ad account, separate from your subscription.’">
             <p>
-              We start working straight away. Your first boosts usually go out within about fifteen minutes, and we
-              email you once they are live. You can close the tab, nothing else is needed from you.
+              Choose how much each location spends per day. Most owners start around £5 a day each, which is enough to
+              run steadily. We keep every location balanced so none of them runs away with your money, and you can
+              change it any time.
+            </p>
+          </Step>
+          <Step n={6} title="That is it, you are live" see="A setup progress bar (‘2 of 4 ready’), then ‘Live across your locations.’">
+            <p>
+              We build your ad sets and start your first boosts. Your first ads usually go live within about fifteen
+              minutes, once Instagram has reviewed them, and we email you when they are running. You can close the tab.
+              Nothing else is needed from you.
             </p>
           </Step>
         </Steps>
@@ -57,25 +64,26 @@ export default function ClientGuide() {
 
       <Section title="What SuperPulse does once you are set up">
         <p>
-          Every time you post on Instagram, we look at it and decide whether it is worth putting behind a local ad.
-          For the ones that are, we set the budget, pick the area, run them, watch how they do, and quietly stop the
-          ones that are not pulling their weight. All of it happens in the background, day and night.
+          You keep posting on Instagram. We watch your account, pick up your new posts, and decide which ones are
+          worth putting money behind, how much, where, and for how long. We launch each one as a small local ad, watch
+          how it does, move budget toward what is working, and quietly stop anything that is not. It runs around the
+          clock so you do not have to think about it.
         </p>
         <p>
-          The aim is simple: more of the right local people seeing you, following you, and walking in. You keep
-          posting like you always have. We do the rest.
+          The main thing we go after is profile visits: more of the right local people seeing you, following you, and
+          turning up in person.
         </p>
         <Callout>
-          Boosting this way skips the roughly 30% extra you pay when you boost inside the Instagram app, so more of
-          your budget goes to actually reaching people.
+          Boosting inside the Instagram app adds Apple&rsquo;s in-app fee of roughly 30% on top of your spend. We boost
+          through Meta&rsquo;s ad system directly, so that fee does not apply and more of your budget reaches people.
         </Callout>
       </Section>
 
       <Section title="Your dashboard">
         <p>
-          When you log back in you will see a simple status panel: when we last checked your posts, how many we have
-          boosted, how many ads are live, and what you have spent. Below that is a short feed of what has happened
-          recently. You do not have to check it. It is there when you are curious.
+          When you log back in you will see a simple status panel: when we last checked your account, how many posts
+          we found, how many we boosted, how many ads are live, and what you have spent this month. Below that is a
+          plain-English feed of the last things we did. You do not have to check it. It is there when you are curious.
         </p>
       </Section>
 
@@ -83,28 +91,32 @@ export default function ClientGuide() {
         <Faq
           items={[
             {
-              q: "Do I need to do anything after setup?",
-              a: "No. Keep posting on Instagram as normal. We handle which posts to put money behind, how much, where, and when to stop.",
+              q: "Do I need to do anything day to day?",
+              a: "No. Keep posting on Instagram as normal. We handle which posts to put money behind, how much, where, and when to stop. Check the dashboard whenever you fancy, but you do not need to.",
             },
             {
               q: "How long until I see something?",
-              a: "First boosts usually go out within about fifteen minutes of finishing setup. Followers and profile visits tend to move first, over the following days.",
+              a: "Your first boosts usually go live within about fifteen minutes of finishing setup, once Instagram has reviewed the ads. Profile visits and views build over the following days.",
             },
             {
               q: "How much does it cost?",
-              a: "£300 a month plus VAT, and your first month is free. Your ad budget is separate and set by you (most owners start around £5 a day per location). You stay in control of the spend.",
+              a: "Two separate things. Your SuperPulse subscription is £300 a month plus VAT, and your first month is free. Your ad spend is the daily budget you set per location (we suggest around £5 a day each), billed on your own Meta ad account, not by us.",
             },
             {
               q: "Can I pause or stop?",
-              a: "Yes. Message us any time and we can pause everything or stop it. Nothing is locked in.",
+              a: "Yes. You can change your budget or settings any time. For a full stop, message us and we pause everything. Nothing gets deleted.",
             },
             {
               q: "What about the posts I have already made?",
-              a: "Those count too. We look at what you post going forward and put the strongest ones to work locally.",
+              a: "We work with the posts on your account, and new ones get picked up automatically as you publish. You do not need to re-upload or change anything.",
             },
             {
-              q: "Is my account safe?",
-              a: "Yes. You log in through Facebook, so we never see your password, and we only ever touch your own ad account. We never post on your behalf.",
+              q: "Is my account safe? Will you post for me?",
+              a: "We never post on your behalf. We only read your posts and create the ad boosts. You log in through Facebook’s own secure screen, so we never see your password, and we only ever touch your own ad account.",
+            },
+            {
+              q: "Can I change which Instagram or ad account you use?",
+              a: "You can switch your page later in Settings. For any other connection change, get in touch and we will sort it.",
             },
             {
               q: "Who do I talk to if I am stuck?",
