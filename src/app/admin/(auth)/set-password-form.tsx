@@ -3,7 +3,7 @@
 // / Apple Passwords associates the new password with the right account.
 
 const ERRORS: Record<string, string> = {
-  weak: "Use at least 8 characters.",
+  weak: "Use at least 12 characters.",
   invalid: "That link is invalid or has expired. Request a new one.",
 };
 
@@ -51,10 +51,10 @@ export default function SetPasswordForm({
             autoComplete="new-password"
             autoFocus
             required
-            minLength={8}
+            minLength={12}
             className="w-full rounded-lg border border-zinc-800 bg-black px-3 py-2.5 text-sm outline-none focus:border-viridian"
           />
-          <p className="mt-1 text-xs text-zinc-600">At least 8 characters.</p>
+          <p className="mt-1 text-xs text-zinc-600">At least 12 characters.</p>
         </div>
         <button
           type="submit"
