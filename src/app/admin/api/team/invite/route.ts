@@ -32,12 +32,17 @@ export async function POST(req: NextRequest) {
   const token = await createResetToken(id, "invite");
   const link = new URL(`/admin/accept?token=${token}`, req.url).toString();
 
+  let emailed = true;
   try {
     await sendHqInviteEmail({ to: email, name, inviterName: user.name, link });
-  } catch {
-    // Email may fail (e.g. RESEND not set in dev) — the page still shows the link.
+  } catch (err) {
+    // Fail loud (don't block — the page still shows the link to copy). The most
+    // common prod cause is a missing RESEND_API_KEY.
+    emailed = false;
+    console.error("[hq invite] invite email failed to send — copy the link manually. Is RESEND_API_KEY set in prod?", err);
   }
-  await logHqAction(user.id, "invite_member", { metadata: { email, role } });
+  await logHqAction(user.id, "invite_member", { metadata: { email, role, emailed } });
 
-  return NextResponse.redirect(new URL(`/admin/team?invited=${token}&to=${encodeURIComponent(email)}`, req.url), 303);
+  const back = `/admin/team?invited=${token}&to=${encodeURIComponent(email)}${emailed ? "" : "&emailed=0"}`;
+  return NextResponse.redirect(new URL(back, req.url), 303);
 }

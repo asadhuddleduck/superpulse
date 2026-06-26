@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getHqUser } from "@/lib/hq-auth";
 import { createSignupLink, type SignupLinkType } from "@/lib/queries/signup-links";
+import { getTenantById } from "@/lib/queries/tenants";
 import { logHqAction } from "@/lib/hq-audit";
 
 export const dynamic = "force-dynamic";
@@ -26,6 +27,18 @@ export async function POST(req: NextRequest) {
 
   if (type === "magic" && !targetTenantId) {
     return NextResponse.redirect(new URL("/admin/links?error=magic_target", req.url), 303);
+  }
+  // A magic link can only bind to a tenant that has an Instagram identity (the
+  // redeemer must authenticate AS that tenant). Refuse a magic link to a tenant
+  // with no ig_user_id — it could never bind and would silently grant nothing.
+  if (type === "magic" && targetTenantId) {
+    const target = await getTenantById(targetTenantId);
+    if (!target) {
+      return NextResponse.redirect(new URL("/admin/links?error=magic_notfound", req.url), 303);
+    }
+    if (!target.igUserId) {
+      return NextResponse.redirect(new URL("/admin/links?error=magic_no_ig", req.url), 303);
+    }
   }
 
   const link = await createSignupLink({

@@ -304,6 +304,25 @@ export async function setTenantPaused(id: string, paused: boolean): Promise<void
   });
 }
 
+/**
+ * After a paid checkout is reconciled onto the real IG-keyed tenant, neutralise
+ * any `cust_<id>` placeholder the Stripe webhook created for the same customer
+ * (it has no IG connection / campaigns / spend). Nulls its stripe linkage and
+ * marks it 'merged' so getTenantByStripeCustomerId resolves to the IG tenant and
+ * the placeholder never gates a dashboard. Non-destructive (no delete).
+ */
+export async function neutraliseCustomerPlaceholder(
+  keepTenantId: string,
+  stripeCustomerId: string,
+): Promise<void> {
+  await db.execute({
+    sql: `UPDATE tenants
+            SET stripe_customer_id = NULL, status = 'merged', subscription_status = 'merged', updated_at = ?
+          WHERE stripe_customer_id = ? AND id != ?`,
+    args: [new Date().toISOString(), stripeCustomerId, keepTenantId],
+  });
+}
+
 /** Flip the comp (prepaid) flag — comped clients bypass the Stripe billing gate. */
 export async function setTenantComp(id: string, comp: boolean): Promise<void> {
   await db.execute({

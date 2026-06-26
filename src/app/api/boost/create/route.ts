@@ -12,6 +12,7 @@ import {
   checkBoostEligibility,
 } from "@/lib/facebook";
 import { classifyMetaError } from "@/lib/meta-errors";
+import { SUPERPULSE_VERSION } from "@/lib/version";
 import { upsertTenant } from "@/lib/queries/tenants";
 import { getLocationsForTenant } from "@/lib/queries/locations";
 import { upsertCampaign, getCampaignsByTenant } from "@/lib/queries/campaigns";
@@ -119,7 +120,7 @@ export async function POST(request: NextRequest) {
         continue;
       }
 
-      const campaignName = `SuperPulse v7 | ${location.name} | ${shortCaption}`;
+      const campaignName = `SuperPulse ${SUPERPULSE_VERSION} | ${location.name} | ${shortCaption}`;
       // Hoisted for orphan cleanup if a downstream step fails after Meta has
       // already accepted the campaign create.
       let createdCampaignId: string | null = null;

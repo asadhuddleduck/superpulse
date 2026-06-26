@@ -10,7 +10,11 @@ export const metadata: Metadata = {
   title: "Connect Instagram — SuperPulse",
 };
 
-export default async function ConnectPage() {
+export default async function ConnectPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ session_id?: string }>;
+}) {
   const tenant = await getCurrentTenant();
 
   // Already connected? Skip ahead.
@@ -22,7 +26,12 @@ export default async function ConnectPage() {
   const host = headersList.get("host") ?? "localhost:3000";
   const protocol = host.startsWith("localhost") ? "http" : "https";
   const redirectUri = `${protocol}://${host}/api/auth/callback/facebook`;
-  const state = crypto.randomBytes(16).toString("hex");
+  // Arriving from Stripe checkout carries ?session_id. Round-trip it through the
+  // OAuth `state` so the callback can attach the subscription to the real
+  // IG-keyed tenant (Stripe session ids are unguessable, so they double as the
+  // CSRF nonce here). Organic visits get a random state.
+  const { session_id } = await searchParams;
+  const state = session_id ? `chk:${session_id}` : crypto.randomBytes(16).toString("hex");
   const oauthUrl = buildOAuthURL(redirectUri, state);
 
   return (

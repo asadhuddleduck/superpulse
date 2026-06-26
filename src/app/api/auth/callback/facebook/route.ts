@@ -10,8 +10,11 @@ import {
   getTenantByIgUserId,
   upsertTenant,
   setTenantCompFromJoin,
+  setTenantStripeFields,
+  neutraliseCustomerPlaceholder,
 } from "@/lib/queries/tenants";
 import { getSignupLinkByToken, consumeSignupLink } from "@/lib/queries/signup-links";
+import { stripe } from "@/lib/stripe";
 import { handleGateCallback } from "./gate";
 
 const COOKIE_TENANT = "tenant_id";
@@ -80,6 +83,10 @@ export async function GET(request: NextRequest) {
     // the link here, at the moment comp is actually granted.
     const joinCompToken = request.cookies.get(JOIN_COMP_COOKIE)?.value ?? null;
     const joinMagicToken = request.cookies.get(JOIN_MAGIC_COOKIE)?.value ?? null;
+    // Paid signup: the Stripe checkout session id rides in the OAuth `state`
+    // (chk:<id>) from /onboarding/connect, so we can attach the subscription to
+    // THIS IG-keyed tenant instead of leaving it orphaned on a cust_ placeholder.
+    const checkoutSessionId = state.startsWith("chk:") ? state.slice(4) : null;
     const clearJoinCookie = (response: NextResponse, name: string) => {
       response.cookies.set({
         name,
@@ -117,10 +124,45 @@ export async function GET(request: NextRequest) {
       try {
         const link = await getSignupLinkByToken(joinMagicToken);
         if (!link || link.type !== "magic") return;
-        if (!link.targetTenantId || link.targetTenantId !== resolvedTenantId) return;
+        if (!link.targetTenantId || link.targetTenantId !== resolvedTenantId) {
+          // Present but the authenticated identity isn't the link's target tenant
+          // — by design we grant nothing, but log it so a mis-sent magic link is
+          // visible rather than silently doing nothing.
+          console.warn(
+            `[oauth] magic link did not bind: target=${link.targetTenantId} resolved=${resolvedTenantId}`,
+          );
+          return;
+        }
         await consumeSignupLink(link.id);
       } catch {
         /* non-fatal */
+      }
+    };
+    // Paid checkout reconcile: pull the subscription off the Stripe checkout
+    // session and stamp it onto the real IG-keyed tenant, then neutralise the
+    // cust_<id> placeholder the webhook may have created. Reads Stripe directly,
+    // so it works whether or not the webhook has fired yet (both race orders).
+    const applyCheckoutSubscription = async (response: NextResponse, tenantId: string) => {
+      if (!checkoutSessionId) return;
+      try {
+        const session = await stripe.checkout.sessions.retrieve(checkoutSessionId, {
+          expand: ["subscription"],
+        });
+        if (session.mode !== "subscription") return;
+        const customerId =
+          typeof session.customer === "string" ? session.customer : session.customer?.id ?? null;
+        if (!customerId) return;
+        const sub = session.subscription;
+        const subscriptionId = typeof sub === "string" ? sub : sub?.id ?? null;
+        const status = typeof sub === "object" && sub?.status ? sub.status : "active";
+        await setTenantStripeFields(tenantId, {
+          stripeCustomerId: customerId,
+          stripeSubscriptionId: subscriptionId,
+          subscriptionStatus: status,
+        });
+        await neutraliseCustomerPlaceholder(tenantId, customerId);
+      } catch (err) {
+        console.error("[oauth] checkout subscription reconcile failed", err);
       }
     };
 
@@ -141,6 +183,7 @@ export async function GET(request: NextRequest) {
       setTenantCookie(response, tenantId);
       await applyJoinComp(response, tenantId);
       await applyJoinMagic(response, tenantId);
+      await applyCheckoutSubscription(response, tenantId);
       return response;
     }
 

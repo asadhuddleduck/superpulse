@@ -1,9 +1,9 @@
 # SuperPulse — Smart Instagram Post Boosting for Local Businesses
 
 ## Version
-**Current: v7** — Meta campaign naming uses this (e.g. "SuperPulse v7 | caption"). Bump this number when shipping significant improvements to the boost engine, scoring algorithm, or campaign creation flow. Update it in `src/app/api/boost/create/route.ts` and `src/app/api/cron/scan-posts/route.ts`.
+**Current: v9 (private-beta milestone, 26 Jun 2026).** Single source of truth: `src/lib/version.ts` → `SUPERPULSE_VERSION`. The client-facing v8 campaign name stays exactly "SuperPulse" by design (V8-SPEC §4, `src/lib/v8/provision.ts` CAMPAIGN_NAME) so a client's Ads Manager reads cleanly — the version is INTERNAL (logging + the legacy `boost/create` path). Bump `SUPERPULSE_VERSION` when shipping significant boost-engine/scoring/campaign-flow changes.
 
-**Frozen 2026-05-03 — process redesign in progress.** Do NOT bump v7 → v8 until the new boost flow is approved + shipped. v7 is the freeze marker. See INCIDENT-LOG 2026-05-03 entry and the parent Notion task `https://www.notion.so/35584fd7bc4e81d48805e70695d3fc3e`.
+**Freeze lifted in v9 (26 Jun 2026):** the v8 engine is shipped and being brought live via `V8_ENGINE_ENABLED=on`, and the paid-onboarding path (Stripe subscription → IG tenant) is fixed. The 2026-05-03 freeze (see INCIDENT-LOG) is being retired. Legacy clients stay on v7 manual (no v8 migration).
 
 **v8 spec locked 2026-05-03.** The canonical reference is `docs/V8-SPEC.md`. Where this file conflicts with V8-SPEC.md (scoring formula, "7 decision types", multi-tier pricing, 2h/6h cron cadence, "9 decisions automated" framing), V8-SPEC.md wins. The body below is preserved as v7 historical context. Do NOT update v7 sections in this file — update V8-SPEC.md instead.
 
