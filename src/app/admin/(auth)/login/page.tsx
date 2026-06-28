@@ -41,7 +41,7 @@ export default async function HqLoginPage({
             autoComplete="username"
             autoFocus
             required
-            placeholder="hello@asadshah.co.uk"
+            placeholder="you@company.com"
             className="w-full rounded-lg border border-zinc-800 bg-black px-3 py-2.5 text-sm outline-none focus:border-viridian"
           />
         </div>

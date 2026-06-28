@@ -1,6 +1,7 @@
 import { headers } from "next/headers";
 import { listSignupLinks, isLinkRedeemable } from "@/lib/queries/signup-links";
 import { shortDate, timeAgo } from "@/lib/hq-format";
+import { publicAppOrigin } from "@/lib/ig-gate";
 import { Pill } from "../ui";
 import CopyField from "./copy-field";
 import LinkForm from "./link-form";
@@ -16,11 +17,11 @@ const ERRORS: Record<string, string> = {
   not_found: "Link not found.",
 };
 
+// Join links must point at the PUBLIC client-facing host, never the operator
+// console host — admin.superpulse.io bounces /join to the operator sign-in.
 async function origin(): Promise<string> {
   const h = await headers();
-  const host = h.get("host") ?? "localhost:3000";
-  const proto = host.startsWith("localhost") ? "http" : "https";
-  return `${proto}://${host}`;
+  return publicAppOrigin(h.get("host"));
 }
 
 export default async function LinksPage({
