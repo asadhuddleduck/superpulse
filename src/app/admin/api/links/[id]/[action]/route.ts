@@ -3,6 +3,7 @@ import { getHqUser } from "@/lib/hq-auth";
 import { revokeSignupLink, listSignupLinks } from "@/lib/queries/signup-links";
 import { sendJoinLinkEmail } from "@/lib/email/hq";
 import { logHqAction } from "@/lib/hq-audit";
+import { publicAppOrigin } from "@/lib/ig-gate";
 
 export const dynamic = "force-dynamic";
 
@@ -24,7 +25,8 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
 
   if (action === "email") {
     if (!link.email) return NextResponse.redirect(new URL("/admin/links?error=no_email", req.url), 303);
-    const joinUrl = new URL(`/join/${link.token}`, req.url).toString();
+    // Public host, never the operator console host (admin.* bounces /join to login).
+    const joinUrl = `${publicAppOrigin(req.headers.get("host"))}/join/${link.token}`;
     try {
       await sendJoinLinkEmail({ to: link.email, link: joinUrl, type: link.type });
     } catch {

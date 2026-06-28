@@ -77,3 +77,16 @@ export function safeBaseUrl(host: string | null | undefined): string {
   if (h.startsWith("localhost") || h.startsWith("127.0.0.1")) return `http://${h}`;
   return "https://www.superpulse.io";
 }
+
+/**
+ * Public client-facing origin for onboarding links (/join, /pricing, /onboarding).
+ * NEVER the operator console host: admin.superpulse.io is console-only and bounces
+ * every non-/admin path to the operator sign-in, so a join link built on the admin
+ * host dead-ends at login. Prod → canonical public site; dev → strip the admin. prefix.
+ */
+export function publicAppOrigin(host: string | null | undefined): string {
+  const h = (host ?? "").toLowerCase().trim();
+  if (h.startsWith("admin.localhost")) return `http://${h.replace(/^admin\./, "")}`;
+  if (h.startsWith("localhost") || h.startsWith("127.0.0.1")) return `http://${h}`;
+  return "https://www.superpulse.io";
+}
