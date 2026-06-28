@@ -54,12 +54,12 @@ export default function OnboardingSupportPage() {
                   hiccups. Most people are sorted in 10-15 minutes.
                 </p>
                 <a
-                  href="https://www.facebook.com/business/learn/lessons/get-started-meta-business-suite"
+                  href="https://www.facebook.com/business/tools/meta-business-suite/get-started"
                   target="_blank"
                   rel="noopener noreferrer"
                   className="inline-flex items-center gap-1 text-sm text-viridian hover:underline"
                 >
-                  Open Meta&apos;s onboarding course →
+                  Open Meta&apos;s getting-started guide →
                 </a>
               </div>
             </div>
