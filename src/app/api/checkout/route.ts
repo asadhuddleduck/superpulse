@@ -1,11 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { stripe } from "@/lib/stripe";
+import { clampSeatCount, getSeatPriceId } from "@/lib/seats";
 
 export const dynamic = "force-dynamic";
 
 interface CheckoutBody {
   promo_code?: string;
   email?: string;
+  locations?: number;
 }
 
 export async function POST(request: NextRequest) {
@@ -13,13 +15,18 @@ export async function POST(request: NextRequest) {
   try {
     body = (await request.json()) as CheckoutBody;
   } catch {
-    // Empty body is fine — promo + email are optional.
+    // Empty body is fine — promo + email + locations are optional.
   }
 
-  const priceId = process.env.STRIPE_PRICE_SUPERPULSE_MONTHLY;
-  if (!priceId) {
+  // Per-location pricing: charge £27 × number of locations. quantity = seats.
+  const quantity = clampSeatCount(body.locations ?? 1);
+
+  let priceId: string;
+  try {
+    priceId = getSeatPriceId();
+  } catch (err) {
     return NextResponse.json(
-      { error: "STRIPE_PRICE_SUPERPULSE_MONTHLY is not set" },
+      { error: err instanceof Error ? err.message : "Seat price is not set" },
       { status: 500 },
     );
   }
@@ -35,7 +42,7 @@ export async function POST(request: NextRequest) {
   try {
     const session = await stripe.checkout.sessions.create({
       mode: "subscription",
-      line_items: [{ price: priceId, quantity: 1 }],
+      line_items: [{ price: priceId, quantity }],
       discounts: applyCoupon ? [{ coupon: applyCoupon }] : undefined,
       payment_method_collection: "always",
       success_url: `${baseUrl}/onboarding/connect?session_id={CHECKOUT_SESSION_ID}`,
@@ -43,7 +50,7 @@ export async function POST(request: NextRequest) {
       automatic_tax: { enabled: true },
       customer_email: body.email,
       subscription_data: {
-        metadata: { source: "superpulse-direct" },
+        metadata: { source: "superpulse-direct", locations: String(quantity) },
       },
       // Tax ID collection for UK businesses (lets them claim VAT).
       tax_id_collection: { enabled: true },

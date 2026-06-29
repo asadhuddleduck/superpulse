@@ -91,7 +91,7 @@ export default function TeamGuide() {
         <p>Three types:</p>
         <ul className="ml-5 list-disc space-y-2 text-zinc-300">
           <li>
-            <strong className="text-white">Paid:</strong> the normal one. They check out (£300/mo) on the pricing page
+            <strong className="text-white">Paid:</strong> the normal one. They check out (£27/location) on the pricing page
             before they get access. You can prefill a Stripe coupon (for example FIRSTMONTHFREE). Use for a standard
             new paying client.
           </li>

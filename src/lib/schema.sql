@@ -39,6 +39,13 @@ CREATE TABLE IF NOT EXISTS locations (
 
 CREATE INDEX IF NOT EXISTS idx_locations_tenant_id ON locations(tenant_id);
 
+-- One row per (tenant, address). Makes the self-serve "add a location" path
+-- idempotent: a lost-ACK retry or replay of the same address ON CONFLICT DO
+-- NOTHING returns the existing row instead of inserting a duplicate + charging a
+-- second £27 seat (added 2026-06-29). Safe: zero duplicate (tenant_id,address)
+-- rows existed at creation time.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_locations_tenant_address ON locations(tenant_id, address);
+
 CREATE TABLE IF NOT EXISTS api_call_log (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   tenant_id TEXT,
@@ -153,6 +160,20 @@ CREATE INDEX IF NOT EXISTS idx_audit_purchases_customer ON audit_purchases(strip
 CREATE INDEX IF NOT EXISTS idx_audit_purchases_parent ON audit_purchases(parent_session_id);
 CREATE INDEX IF NOT EXISTS idx_audit_purchases_pi ON audit_purchases(stripe_payment_intent_id);
 
+-- Auto-fulfilment of the £27 audit (build started 25 Jun 2026). The Stripe webhook
+-- sets audit_status='new' on a fresh audit-27 row; /api/cron/audit-fulfilment runs the
+-- generate -> QA -> send state machine. Idempotent ALTERs (runSchema swallows dupes).
+ALTER TABLE audit_purchases ADD COLUMN audit_status TEXT;            -- new|generating|ready|held|sent|failed (NULL = not enrolled, e.g. audit-97)
+ALTER TABLE audit_purchases ADD COLUMN audit_attempts INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE audit_purchases ADD COLUMN audit_data TEXT;             -- JSON: scraped ig-data + research brief (resume/audit trail)
+ALTER TABLE audit_purchases ADD COLUMN audit_html TEXT;            -- the final audit HTML; PDF rendered from this at send time
+ALTER TABLE audit_purchases ADD COLUMN audit_qa_report TEXT;       -- JSON verdict (layers + remaining issues)
+ALTER TABLE audit_purchases ADD COLUMN audit_generated_at TEXT;
+ALTER TABLE audit_purchases ADD COLUMN audit_sent_at TEXT;
+ALTER TABLE audit_purchases ADD COLUMN audit_resend_id TEXT;
+ALTER TABLE audit_purchases ADD COLUMN audit_error TEXT;
+CREATE INDEX IF NOT EXISTS idx_audit_purchases_status ON audit_purchases(audit_status, created_at);
+
 CREATE TABLE IF NOT EXISTS qualifier_responses (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   email TEXT NOT NULL UNIQUE,
@@ -211,6 +232,16 @@ ALTER TABLE tenants ADD COLUMN stripe_customer_id TEXT;
 ALTER TABLE tenants ADD COLUMN stripe_subscription_id TEXT;
 ALTER TABLE tenants ADD COLUMN email TEXT;
 ALTER TABLE tenants ADD COLUMN legacy INTEGER DEFAULT 0;
+
+-- Per-location billing (added 2026-06-29). paid_locations is the number of
+-- seats the tenant is paying for = the Stripe subscription quantity (£27 each).
+-- It is the source of truth the locations gate reads: a tenant may add up to
+-- paid_locations locations; the next one bumps the Stripe quantity on the saved
+-- card. Synced FROM Stripe by the webhook (checkout.session.completed +
+-- customer.subscription.updated) and the OAuth checkout reconcile. NULL for
+-- legacy/comp tenants (unlimited — they bypass the gate) and any tenant created
+-- before this column existed.
+ALTER TABLE tenants ADD COLUMN paid_locations INTEGER;
 
 CREATE INDEX IF NOT EXISTS idx_tenants_stripe_customer_id ON tenants(stripe_customer_id);
 
@@ -539,3 +570,10 @@ ALTER TABLE tenants ADD COLUMN comp INTEGER DEFAULT 0;
 ALTER TABLE tenants ADD COLUMN hq_paused INTEGER DEFAULT 0;
 ALTER TABLE tenants ADD COLUMN signup_link_id INTEGER;
 ALTER TABLE tenants ADD COLUMN offboarded_at TEXT;
+
+-- Self-serve pause (29 Jun 2026). The CLIENT's own "Pause SuperPulse" button
+-- (distinct from operator hq_paused). When 1, every v8 cron skips the tenant
+-- (scan/monitor/reconcile via getActiveTenants, decide/execute/provision via
+-- getTenantsAwaitingProvision) and live campaigns are paused so ad spend stops.
+-- Resuming clears it; the engine re-activates on its next cycle.
+ALTER TABLE tenants ADD COLUMN self_paused INTEGER DEFAULT 0;

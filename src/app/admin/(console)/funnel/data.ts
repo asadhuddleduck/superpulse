@@ -200,10 +200,10 @@ export const WEBHOOK_NOTE = {
   title: "Stripe webhook (behind the scenes)",
   route: "/api/webhook/stripe",
   detail:
-    "Stripe calls this server-to-server on every payment. It writes the real purchase records (audit_purchases), fires the CAPI Purchase event, and Slack-alerts every money event (£27, £97, refunds, disputes, new £300/mo subs, failed payments), and (since 1 Jun 2026) emails the buyer a branded SuperPulse audit confirmation (PDF in 24h). MUST point at www.superpulse.io (the apex silently drops events — cost 3 lost payments on 29 May).",
+    "Stripe calls this server-to-server on every payment. It writes the real purchase records (audit_purchases), fires the CAPI Purchase event, and Slack-alerts every money event (£27, £97, refunds, disputes, new per-location subs, failed payments), and (since 1 Jun 2026) emails the buyer a branded SuperPulse audit confirmation (PDF in 24h). MUST point at www.superpulse.io (the apex silently drops events — cost 3 lost payments on 29 May).",
 };
 
-// The SaaS side: what happens after someone subscribes to the £300/mo product.
+// The SaaS side: what happens after someone subscribes to the £27/location product.
 // (Separate from the audit funnel above. Almost nobody is here yet — 1 legacy tenant.)
 export const APP_JOURNEY: AppState[] = [
   {
@@ -212,7 +212,7 @@ export const APP_JOURNEY: AppState[] = [
     route: "/pricing",
     signal: "No active subscription yet",
     whatHappens:
-      "£300/mo + VAT, single tier. FIRSTMONTHFREE coupon can zero month 1. Subscribing opens a Stripe subscription checkout.",
+      "£27/location/mo + VAT. The buyer picks how many locations; quantity = locations. FIRSTMONTHFREE coupon can zero month 1. Subscribing opens a Stripe subscription checkout.",
     next: ["Paid → Connect Instagram"],
   },
   {

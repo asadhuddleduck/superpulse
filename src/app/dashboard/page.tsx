@@ -5,6 +5,7 @@ import { getCurrentTenant } from "@/lib/auth";
 import { fetchMe, fetchPagesWithIG, fetchAdAccounts } from "@/lib/facebook";
 import type { PageWithIG, AdAccount } from "@/lib/facebook";
 import StatusPanel from "@/components/StatusPanel";
+import BoostControl from "@/components/BoostControl";
 import { getLocationsForTenant } from "@/lib/queries/locations";
 
 export const metadata: Metadata = {
@@ -51,6 +52,9 @@ export default async function DashboardPage() {
           <p className="text-zinc-500 mt-1">{user.email}</p>
         )}
       </div>
+
+      {/* Pause / Resume the whole engine (self-serve) */}
+      <BoostControl initialPaused={tenant.selfPaused} />
 
       {/* Locations onboarding banner — only when none added yet */}
       {locationCount === 0 && (

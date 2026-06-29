@@ -30,7 +30,10 @@ export type AuditEventType =
   | "v8_provision_failed"
   | "v8_batch_error"
   | "insights_pagination_capped"
-  | "budget_approved";
+  | "budget_approved"
+  // Self-serve pause/resume (added 29 Jun 2026).
+  | "boost_paused"
+  | "boost_resumed";
 
 export interface AuditEventRow {
   id: number;

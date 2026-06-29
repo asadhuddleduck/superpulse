@@ -11,10 +11,12 @@ import {
   upsertTenant,
   setTenantCompFromJoin,
   setTenantStripeFields,
+  setTenantPaidLocations,
   neutraliseCustomerPlaceholder,
 } from "@/lib/queries/tenants";
 import { getSignupLinkByToken, consumeSignupLink } from "@/lib/queries/signup-links";
 import { stripe } from "@/lib/stripe";
+import { getSubscriptionQuantity } from "@/lib/seats";
 import { handleGateCallback } from "./gate";
 
 const COOKIE_TENANT = "tenant_id";
@@ -160,6 +162,14 @@ export async function GET(request: NextRequest) {
           stripeSubscriptionId: subscriptionId,
           subscriptionStatus: status,
         });
+        // Stamp the paid-seat count (= subscription quantity) onto the IG tenant
+        // so the locations gate works straight away, before any webhook fires.
+        if (subscriptionId) {
+          const qty =
+            (typeof sub === "object" ? sub?.items?.data?.[0]?.quantity : undefined) ??
+            (await getSubscriptionQuantity(subscriptionId));
+          if (qty != null) await setTenantPaidLocations(tenantId, qty);
+        }
         await neutraliseCustomerPlaceholder(tenantId, customerId);
       } catch (err) {
         console.error("[oauth] checkout subscription reconcile failed", err);

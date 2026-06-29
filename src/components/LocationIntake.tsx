@@ -39,6 +39,10 @@ interface LineState {
   selectedIdx: number;
   error: string | null;
   saved: boolean;
+  busy: boolean;
+  // Set when the server returns 402 seat_required: the line is at the paid
+  // location cap and needs an explicit opt-in to add a paid seat.
+  seatPrompt: { paidLocations: number; currentLocations: number } | null;
 }
 
 export default function LocationIntake({ onAdded, defaultRadius = 5 }: Props) {
@@ -85,6 +89,8 @@ export default function LocationIntake({ onAdded, defaultRadius = 5 }: Props) {
           selectedIdx: 0,
           error: null,
           saved: false,
+          busy: false,
+          seatPrompt: null,
         })),
       );
     } catch {
@@ -94,38 +100,67 @@ export default function LocationIntake({ onAdded, defaultRadius = 5 }: Props) {
     }
   }
 
-  async function handleConfirm(lineIdx: number) {
+  function patchLine(lineIdx: number, patch: Partial<LineState>) {
+    setLines((prev) => prev.map((l, i) => (i === lineIdx ? { ...l, ...patch } : l)));
+  }
+
+  // addSeat=true opts into bumping the Stripe quantity (£27/mo) on the saved card
+  // when the tenant is already at their paid location cap.
+  async function submitLine(lineIdx: number, addSeat: boolean) {
     const line = lines[lineIdx];
     if (!line.result || line.result.candidates.length === 0) return;
     const candidate = line.result.candidates[line.selectedIdx];
     if (!candidate) return;
 
-    const res = await fetch("/api/locations", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        name: candidate.name,
-        address: candidate.address,
-        latitude: candidate.latitude,
-        longitude: candidate.longitude,
-        radiusMiles: radius,
-      }),
-    });
-    const data = await res.json();
-    if (!res.ok) {
-      setLines((prev) =>
-        prev.map((l, i) =>
-          i === lineIdx ? { ...l, error: data.error ?? "Save failed." } : l,
-        ),
-      );
-      return;
+    patchLine(lineIdx, { busy: true, error: null });
+    try {
+      const res = await fetch("/api/locations", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: candidate.name,
+          address: candidate.address,
+          latitude: candidate.latitude,
+          longitude: candidate.longitude,
+          radiusMiles: radius,
+          addSeat,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+
+      if (res.status === 402 && data.error === "seat_required") {
+        patchLine(lineIdx, {
+          busy: false,
+          seatPrompt: {
+            paidLocations: Number(data.paidLocations ?? 0),
+            currentLocations: Number(data.currentLocations ?? 0),
+          },
+        });
+        return;
+      }
+      if (!res.ok) {
+        patchLine(lineIdx, {
+          busy: false,
+          seatPrompt: null,
+          error: data.message ?? data.error ?? "Save failed.",
+        });
+        return;
+      }
+      patchLine(lineIdx, { saved: true, error: null, seatPrompt: null, busy: false });
+      onAdded?.(data.location);
+    } catch {
+      patchLine(lineIdx, { busy: false, error: "Network error. Try again." });
     }
-    setLines((prev) =>
-      prev.map((l, i) =>
-        i === lineIdx ? { ...l, saved: true, error: null } : l,
-      ),
-    );
-    onAdded?.(data.location);
+  }
+
+  function handleConfirm(lineIdx: number) {
+    void submitLine(lineIdx, false);
+  }
+  function confirmAddSeat(lineIdx: number) {
+    void submitLine(lineIdx, true);
+  }
+  function cancelSeat(lineIdx: number) {
+    patchLine(lineIdx, { seatPrompt: null });
   }
 
   function handleRetry(lineIdx: number) {
@@ -268,22 +303,56 @@ Phat Buns 89 Stratford Rd, Sparkhill B11 1RA`}
                   {line.error}
                 </div>
               )}
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  onClick={() => handleConfirm(lineIdx)}
-                  className="rounded-lg bg-viridian px-4 py-2 text-sm font-semibold text-black hover:bg-viridian/90 transition"
-                >
-                  Confirm
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleRetry(lineIdx)}
-                  className="rounded-lg border border-zinc-700 px-4 py-2 text-sm text-zinc-300 hover:border-zinc-600 transition"
-                >
-                  None of these — let me retry
-                </button>
-              </div>
+              {line.seatPrompt ? (
+                <div className="rounded-lg border border-sandstorm/40 bg-sandstorm/5 px-4 py-3 mb-3">
+                  <p className="text-sm text-zinc-200">
+                    You&apos;re using all{" "}
+                    <span className="font-semibold text-sandstorm">
+                      {line.seatPrompt.paidLocations}
+                    </span>{" "}
+                    location{line.seatPrompt.paidLocations === 1 ? "" : "s"} you pay
+                    for. Add this one for{" "}
+                    <span className="font-semibold text-white">£27/mo</span> (+ VAT)
+                    on the card you already have on file?
+                  </p>
+                  <div className="mt-3 flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => confirmAddSeat(lineIdx)}
+                      disabled={line.busy}
+                      className="rounded-lg bg-viridian px-4 py-2 text-sm font-semibold text-black hover:bg-viridian/90 disabled:opacity-50 transition"
+                    >
+                      {line.busy ? "Adding…" : "Add location (£27/mo)"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => cancelSeat(lineIdx)}
+                      disabled={line.busy}
+                      className="rounded-lg border border-zinc-700 px-4 py-2 text-sm text-zinc-300 hover:border-zinc-600 disabled:opacity-50 transition"
+                    >
+                      Not now
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => handleConfirm(lineIdx)}
+                    disabled={line.busy}
+                    className="rounded-lg bg-viridian px-4 py-2 text-sm font-semibold text-black hover:bg-viridian/90 disabled:opacity-50 transition"
+                  >
+                    {line.busy ? "Saving…" : "Confirm"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleRetry(lineIdx)}
+                    className="rounded-lg border border-zinc-700 px-4 py-2 text-sm text-zinc-300 hover:border-zinc-600 transition"
+                  >
+                    None of these — let me retry
+                  </button>
+                </div>
+              )}
             </>
           ) : (
             <>

@@ -3,6 +3,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getCurrentTenant } from "@/lib/auth";
 import { getLocationsForTenant } from "@/lib/queries/locations";
+import { resolveSeatCap } from "@/lib/seats";
 import LocationsManager from "@/components/LocationsManager";
 
 export const metadata: Metadata = {
@@ -15,7 +16,10 @@ export default async function LocationsPage() {
   const tenant = await getCurrentTenant();
   if (!tenant) redirect("/login");
 
-  const locations = await getLocationsForTenant(tenant.id);
+  const [locations, cap] = await Promise.all([
+    getLocationsForTenant(tenant.id),
+    resolveSeatCap(tenant),
+  ]);
 
   return (
     <div>
@@ -34,7 +38,11 @@ export default async function LocationsPage() {
         </p>
       </div>
 
-      <LocationsManager initialLocations={locations} />
+      <LocationsManager
+        initialLocations={locations}
+        paidLocations={cap === Infinity ? null : cap}
+        unlimited={cap === Infinity}
+      />
     </div>
   );
 }

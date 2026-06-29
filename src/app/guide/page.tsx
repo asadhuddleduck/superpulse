@@ -100,7 +100,7 @@ export default function ClientGuide() {
             },
             {
               q: "How much does it cost?",
-              a: "Two separate things. Your SuperPulse subscription is £300 a month plus VAT, and your first month is free. Your ad spend is the daily budget you set per location (we suggest around £5 a day each), billed on your own Meta ad account, not by us.",
+              a: "Two separate things. Your SuperPulse subscription is £27 per location per month plus VAT, and your first month is free. Your ad spend is the daily budget you set per location (we suggest around £5 a day each), billed on your own Meta ad account, not by us.",
             },
             {
               q: "Can I pause or stop?",

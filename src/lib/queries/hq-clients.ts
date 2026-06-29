@@ -81,13 +81,16 @@ function planLabel(t: {
   comp: boolean;
   subscriptionStatus: string;
   status: string;
+  paidLocations?: number | null;
 }): string {
   if (t.status === "offboarded") return "Ended";
   if (t.legacy) return "Legacy £297";
   if (t.comp) return "Comped";
   switch (t.subscriptionStatus) {
     case "active":
-      return "£300/mo";
+      return t.paidLocations != null
+        ? `£${27 * t.paidLocations}/mo (${t.paidLocations} loc)`
+        : "£27/location";
     case "trialing":
       return "Trial";
     case "past_due":
@@ -110,7 +113,7 @@ export async function listClientsSummary(): Promise<ClientSummary[]> {
       SELECT
         t.id, t.name, t.ig_username, t.email, t.ad_account_id, t.status,
         t.subscription_status, t.provisioning_status, t.legacy, t.comp,
-        t.hq_paused, t.offboarded_at, t.created_at,
+        t.paid_locations, t.hq_paused, t.offboarded_at, t.created_at,
         (t.meta_access_token IS NOT NULL) AS has_token,
         (SELECT COUNT(*) FROM locations l WHERE l.tenant_id = t.id) AS locations_count,
         (SELECT COUNT(*) FROM active_campaigns c WHERE c.tenant_id = t.id AND c.status = 'ACTIVE') AS campaigns_live,
@@ -139,6 +142,7 @@ export async function listClientsSummary(): Promise<ClientSummary[]> {
       provisioningStatus: (row.provisioning_status as string | null) ?? null,
       legacy: Number(row.legacy ?? 0) === 1,
       comp: Number(row.comp ?? 0) === 1,
+      paidLocations: row.paid_locations == null ? null : Number(row.paid_locations),
       hqPaused: Number(row.hq_paused ?? 0) === 1,
       offboardedAt: (row.offboarded_at as string | null) ?? null,
       createdAt: row.created_at as string,
@@ -158,6 +162,7 @@ export async function listClientsSummary(): Promise<ClientSummary[]> {
 export interface StripeBilling {
   status: string;
   amountPennies: number | null;
+  quantity: number | null;
   interval: string | null;
   currentPeriodEnd: string | null;
   discountLabel: string | null;
@@ -173,13 +178,18 @@ export async function getStripeBilling(stripeSubscriptionId: string | null): Pro
       current_period_end?: number;
       cancel_at_period_end?: boolean;
       discount?: { coupon?: { name?: string | null; id?: string } } | null;
-      items?: { data: { price?: { unit_amount?: number | null; recurring?: { interval?: string } } }[] };
+      items?: { data: { quantity?: number; price?: { unit_amount?: number | null; recurring?: { interval?: string } } }[] };
     };
-    const price = sub.items?.data?.[0]?.price;
+    const item = sub.items?.data?.[0];
+    const price = item?.price;
+    const quantity = item?.quantity ?? null;
     const coupon = sub.discount?.coupon;
+    // Per-location: monthly total = unit × quantity (seats).
+    const unit = price?.unit_amount ?? null;
     return {
       status: sub.status,
-      amountPennies: price?.unit_amount ?? null,
+      amountPennies: unit != null ? unit * (quantity ?? 1) : null,
+      quantity,
       interval: price?.recurring?.interval ?? null,
       currentPeriodEnd: sub.current_period_end ? new Date(sub.current_period_end * 1000).toISOString() : null,
       discountLabel: coupon ? coupon.name || coupon.id || null : null,

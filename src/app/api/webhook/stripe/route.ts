@@ -5,6 +5,7 @@ import {
   createPendingTenant,
   getTenantByStripeCustomerId,
   setTenantStripeFields,
+  setTenantPaidLocations,
 } from "@/lib/queries/tenants";
 import { writeAuditEvent } from "@/lib/queries/audit-events";
 import { updateLocalCampaignStatus, getActiveCampaigns } from "@/lib/queries/campaigns";
@@ -18,6 +19,27 @@ import { sendAuditConfirmation } from "@/lib/email/confirmation";
 
 function gbp(pennies: number | null | undefined): string {
   return `£${((pennies ?? 0) / 100).toFixed(2)}`;
+}
+
+// Per-location subscriptions: quantity = number of locations, unit = £27. Read
+// the live subscription so logs/Slack and the synced seat count reflect the real
+// amount, not a hardcoded flat price.
+async function summariseSubscription(
+  subscriptionId: string,
+): Promise<{ quantity: number; totalPennies: number; label: string } | null> {
+  if (!subscriptionId) return null;
+  try {
+    const sub = await stripe.subscriptions.retrieve(subscriptionId);
+    const item = sub.items?.data?.[0];
+    const quantity = item?.quantity ?? 1;
+    const unit = item?.price?.unit_amount ?? 0;
+    const totalPennies = unit * quantity;
+    const label = `${gbp(totalPennies)}/mo (${quantity} location${quantity === 1 ? "" : "s"})`;
+    return { quantity, totalPennies, label };
+  } catch (err) {
+    console.error("[webhook] summariseSubscription failed", err);
+    return null;
+  }
 }
 
 export const dynamic = "force-dynamic";
@@ -94,6 +116,9 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
 
   if (!customerId || !email) return;
 
+  const summary = subscriptionId ? await summariseSubscription(subscriptionId) : null;
+  const amountLabel = summary?.label ?? "per location";
+
   const existing = await getTenantByStripeCustomerId(customerId);
   if (existing) {
     await setTenantStripeFields(existing.id, {
@@ -101,13 +126,14 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
       stripeSubscriptionId: subscriptionId || null,
       email,
     });
+    if (summary) await setTenantPaidLocations(existing.id, summary.quantity);
     await writeAuditEvent(
       existing.id,
       "subscription_changed",
-      `Subscription activated (£300/mo)`,
-      { customerId, subscriptionId },
+      `Subscription activated (${amountLabel})`,
+      { customerId, subscriptionId, locations: summary?.quantity },
     );
-    void notifySlack(`🟢 Subscription reactivated (£300/mo)\n*Email:* ${email}`);
+    void notifySlack(`🟢 Subscription reactivated (${amountLabel})\n*Email:* ${email}`);
     return;
   }
 
@@ -118,14 +144,15 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
     stripeSubscriptionId: subscriptionId || null,
     subscriptionStatus: "active",
   });
+  if (summary) await setTenantPaidLocations(tenantId, summary.quantity);
   await writeAuditEvent(
     tenantId,
     "subscription_changed",
-    `Subscription activated (£300/mo) — awaiting Instagram connection`,
-    { customerId, subscriptionId, email },
+    `Subscription activated (${amountLabel}) — awaiting Instagram connection`,
+    { customerId, subscriptionId, email, locations: summary?.quantity },
   );
   void notifySlack(
-    `🟢 New SuperPulse subscription (£300/mo)\n*Email:* ${email}\nAwaiting Instagram connection.`,
+    `🟢 New SuperPulse subscription (${amountLabel})\n*Email:* ${email}\nAwaiting Instagram connection.`,
   );
 }
 
@@ -145,15 +172,25 @@ async function handleSubscriptionUpdated(sub: Stripe.Subscription) {
   };
   const subscriptionStatus = statusMap[sub.status] ?? "pending";
 
+  // Sync the paid-seat count back whenever the quantity changes (self-serve seat
+  // add, an HQ change, or a Stripe-dashboard edit all land here).
+  const quantity = sub.items?.data?.[0]?.quantity;
+
   await setTenantStripeFields(tenant.id, {
     subscriptionStatus,
     stripeSubscriptionId: sub.id,
   });
+  if (typeof quantity === "number") {
+    await setTenantPaidLocations(tenant.id, quantity);
+  }
   await writeAuditEvent(
     tenant.id,
     "subscription_changed",
-    `Subscription status: ${subscriptionStatus}`,
-    { stripeStatus: sub.status },
+    `Subscription status: ${subscriptionStatus}` +
+      (typeof quantity === "number"
+        ? ` (${quantity} location${quantity === 1 ? "" : "s"})`
+        : ""),
+    { stripeStatus: sub.status, quantity },
   );
 }
 
@@ -297,6 +334,15 @@ async function handleAuditPayment(session: Stripe.Checkout.Session) {
   // Branded SuperPulse confirmation — only on a genuinely new purchase row.
   if (auditIns.rowsAffected > 0 && email) {
     void sendAuditConfirmation(email, name.split(" ")[0] ?? "", product === "audit-97" ? "audit-97" : "audit-27");
+  }
+
+  // Enrol new £27 audits into auto-fulfilment. /api/cron/audit-fulfilment generates
+  // the PDF and sends it ~1h later. No-op unless AUDIT_AUTOFULFIL_ENABLED=1 at cron time.
+  if (auditIns.rowsAffected > 0 && product === "audit-27") {
+    await db.execute({
+      sql: `UPDATE audit_purchases SET audit_status='new' WHERE stripe_session_id=?`,
+      args: [sessionId],
+    });
   }
 }
 

@@ -5,7 +5,7 @@ import { useState } from "react";
 type LinkType = "paid" | "prepaid" | "magic";
 
 const TYPES: { key: LinkType; label: string; blurb: string }[] = [
-  { key: "paid", label: "Pay to join", blurb: "Client checks out (£300/mo) before they get access." },
+  { key: "paid", label: "Pay to join", blurb: "Client checks out (£27/location) before they get access." },
   { key: "prepaid", label: "Prepaid / comp", blurb: "Granted access free, no Stripe charge. Straight to setup." },
   { key: "magic", label: "Resume / magic", blurb: "Re-invite an existing client to finish or reconnect." },
 ];

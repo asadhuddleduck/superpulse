@@ -176,8 +176,11 @@ export default async function ClientDetailPage({
                 label="Plan"
                 value={
                   billing.amountPennies != null
-                    ? `${gbpFromPennies(billing.amountPennies)}/${billing.interval ?? "mo"}`
-                    : "£300/mo"
+                    ? `${gbpFromPennies(billing.amountPennies)}/${billing.interval ?? "mo"}` +
+                      (billing.quantity != null
+                        ? ` (${billing.quantity} location${billing.quantity === 1 ? "" : "s"} × £27)`
+                        : "")
+                    : "£27/location"
                 }
               />
               <Row label="Status" value={billing.status} />
@@ -187,7 +190,7 @@ export default async function ClientDetailPage({
             </>
           ) : (
             <>
-              <Row label="Plan" value="£300/mo (not yet subscribed)" />
+              <Row label="Plan" value="£27/location (not yet subscribed)" />
               <Row label="Status" value={tenant.subscriptionStatus} />
             </>
           )}

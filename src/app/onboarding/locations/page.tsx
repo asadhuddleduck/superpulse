@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { getCurrentTenant } from "@/lib/auth";
 import { getLocationsForTenant } from "@/lib/queries/locations";
+import { resolveSeatCap } from "@/lib/seats";
 import LocationsManager from "@/components/LocationsManager";
 import { ContinueToBudget } from "./continue-to-budget";
 
@@ -17,7 +18,10 @@ export default async function OnboardingLocationsPage() {
   if (!tenant) redirect("/login");
   if (tenant.provisioningStatus !== "pending_locations") redirect("/dashboard");
 
-  const locations = await getLocationsForTenant(tenant.id);
+  const [locations, cap] = await Promise.all([
+    getLocationsForTenant(tenant.id),
+    resolveSeatCap(tenant),
+  ]);
 
   return (
     <div className="min-h-screen bg-black px-6 py-12">
@@ -33,7 +37,11 @@ export default async function OnboardingLocationsPage() {
           </p>
         </header>
 
-        <LocationsManager initialLocations={locations} />
+        <LocationsManager
+          initialLocations={locations}
+          paidLocations={cap === Infinity ? null : cap}
+          unlimited={cap === Infinity}
+        />
 
         <ContinueToBudget />
       </main>

@@ -184,12 +184,18 @@ export async function getFunnelMetrics(): Promise<FunnelMetrics> {
   );
 
   const subRow = await one(
-    `SELECT SUM(CASE WHEN COALESCE(legacy,0)=0 THEN 1 ELSE 0 END) np, SUM(CASE WHEN COALESCE(legacy,0)=1 THEN 1 ELSE 0 END) lg, COUNT(*) total FROM tenants WHERE subscription_status IN ('active','trialing')`,
+    `SELECT SUM(CASE WHEN COALESCE(legacy,0)=0 THEN 1 ELSE 0 END) np,
+            SUM(CASE WHEN COALESCE(legacy,0)=1 THEN 1 ELSE 0 END) lg,
+            COUNT(*) total,
+            COALESCE(SUM(CASE WHEN COALESCE(legacy,0)=0 THEN COALESCE(paid_locations,1) ELSE 0 END),0) np_seats
+       FROM tenants WHERE subscription_status IN ('active','trialing')`,
   );
   const newPaying = n(subRow.np);
   const legacySubs = n(subRow.lg);
   const activeSubs = n(subRow.total);
-  const mrr = newPaying * 300 + legacySubs * 297;
+  // Per-location: £27 × seats across non-legacy subs, plus grandfathered legacy at £297.
+  const newPayingSeats = n(subRow.np_seats);
+  const mrr = newPayingSeats * 27 + legacySubs * 297;
 
   const onboardingStages = (
     await rows(

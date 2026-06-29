@@ -6,10 +6,18 @@ import LocationIntake from "@/components/LocationIntake";
 
 interface Props {
   initialLocations: Location[];
+  /** Seats the tenant pays for. null = unlimited (legacy/comp). */
+  paidLocations?: number | null;
+  unlimited?: boolean;
 }
 
-export default function LocationsManager({ initialLocations }: Props) {
+export default function LocationsManager({
+  initialLocations,
+  paidLocations = null,
+  unlimited = false,
+}: Props) {
   const [locations, setLocations] = useState<Location[]>(initialLocations);
+  const [cap, setCap] = useState<number | null>(paidLocations);
   const [bulkText, setBulkText] = useState("");
   const [bulkBusy, setBulkBusy] = useState(false);
   const [bulkProgress, setBulkProgress] = useState<{ done: number; total: number } | null>(null);
@@ -23,19 +31,25 @@ export default function LocationsManager({ initialLocations }: Props) {
     longitude: number;
     radiusMiles: number;
   }) {
-    setLocations((prev) => [
-      ...prev,
-      {
-        id: loc.id,
-        tenantId: "",
-        name: loc.name,
-        address: loc.address,
-        latitude: loc.latitude,
-        longitude: loc.longitude,
-        radiusMiles: loc.radiusMiles,
-        createdAt: new Date().toISOString(),
-      },
-    ]);
+    setLocations((prev) => {
+      const next = [
+        ...prev,
+        {
+          id: loc.id,
+          tenantId: "",
+          name: loc.name,
+          address: loc.address,
+          latitude: loc.latitude,
+          longitude: loc.longitude,
+          radiusMiles: loc.radiusMiles,
+          createdAt: new Date().toISOString(),
+        },
+      ];
+      // A confirmed add beyond the cap means a seat was just bought — keep the
+      // displayed usage in step until the next reload reconciles it.
+      if (!unlimited && cap != null && next.length > cap) setCap(next.length);
+      return next;
+    });
   }
 
   // Bulk paste — one address per line. Posts each to /api/locations sequentially
@@ -58,8 +72,13 @@ export default function LocationsManager({ initialLocations }: Props) {
           body: JSON.stringify({ name, address: line }),
         });
         const data = await res.json().catch(() => ({}));
-        if (!res.ok) errs.push(`${line}: ${data.error ?? `HTTP ${res.status}`}`);
-        else if (data.location) handleAdded(data.location);
+        if (res.status === 402 && data.error === "seat_required") {
+          errs.push(
+            `${line}: skipped — you've used all ${data.paidLocations ?? cap ?? 0} paid locations. Add it on its own above to buy another seat (£27/mo).`,
+          );
+        } else if (!res.ok) {
+          errs.push(`${line}: ${data.message ?? data.error ?? `HTTP ${res.status}`}`);
+        } else if (data.location) handleAdded(data.location);
       } catch (e) {
         errs.push(`${line}: ${e instanceof Error ? e.message : "failed"}`);
       }
@@ -130,9 +149,18 @@ export default function LocationsManager({ initialLocations }: Props) {
       </details>
 
       <section>
-        <h2 className="text-lg font-semibold mb-4">
-          Your locations ({locations.length})
-        </h2>
+        <div className="mb-4 flex items-baseline justify-between gap-3">
+          <h2 className="text-lg font-semibold">
+            Your locations ({locations.length})
+          </h2>
+          {!unlimited && cap != null ? (
+            <span className="text-sm text-zinc-500">
+              {locations.length} of {cap} paid {cap === 1 ? "location" : "locations"} used
+            </span>
+          ) : unlimited ? (
+            <span className="text-sm text-zinc-500">Unlimited locations</span>
+          ) : null}
+        </div>
         {locations.length === 0 ? (
           <div className="rounded-xl border border-dashed border-zinc-800 bg-zinc-900/20 p-8 text-center text-zinc-500">
             No locations yet. Add your first one above to start boosting.

@@ -18,6 +18,10 @@ export interface Tenant {
   stripeSubscriptionId: string | null;
   email: string | null;
   legacy: boolean;
+  // Per-location billing (added 2026-06-29). Seats the tenant pays for =
+  // Stripe subscription quantity. The locations gate reads this. NULL =
+  // unlimited (legacy/comp) or not-yet-synced.
+  paidLocations: number | null;
   // v8 provisioning + budget intake (added 2026-06-02). NULL on every existing
   // tenant — a separate axis from `status` so the live dashboard gate is untouched.
   provisioningStatus: string | null;
@@ -26,6 +30,9 @@ export interface Tenant {
   // Agency HQ (added 25 Jun 2026)
   comp: boolean;
   hqPaused: boolean;
+  // Self-serve pause: the client's own "Pause SuperPulse" toggle (added 29 Jun
+  // 2026). Distinct from operator hqPaused; both make the v8 crons skip.
+  selfPaused: boolean;
   signupLinkId: number | null;
   offboardedAt: string | null;
   createdAt: string;
@@ -49,11 +56,13 @@ function rowToTenant(row: Record<string, unknown>): Tenant {
     stripeSubscriptionId: (row.stripe_subscription_id as string | null) ?? null,
     email: (row.email as string | null) ?? null,
     legacy: Number(row.legacy ?? 0) === 1,
+    paidLocations: row.paid_locations == null ? null : Number(row.paid_locations),
     provisioningStatus: (row.provisioning_status as string | null) ?? null,
     monthlyAdBudgetPennies: row.monthly_ad_budget_pennies == null ? null : Number(row.monthly_ad_budget_pennies),
     budgetApprovedAt: (row.budget_approved_at as string | null) ?? null,
     comp: Number(row.comp ?? 0) === 1,
     hqPaused: Number(row.hq_paused ?? 0) === 1,
+    selfPaused: Number(row.self_paused ?? 0) === 1,
     signupLinkId: row.signup_link_id == null ? null : Number(row.signup_link_id),
     offboardedAt: (row.offboarded_at as string | null) ?? null,
     createdAt: row.created_at as string,
@@ -128,6 +137,7 @@ export async function getActiveTenants(): Promise<Tenant[]> {
       WHERE status = 'active'
         AND meta_access_token IS NOT NULL
         AND COALESCE(hq_paused, 0) = 0
+        AND COALESCE(self_paused, 0) = 0
         AND (
           legacy = 1
           OR comp = 1
@@ -187,6 +197,8 @@ export async function getTenantsAwaitingProvision(): Promise<Tenant[]> {
       WHERE status = 'active'
         AND provisioning_status IN ('provisioning', 'provisioned')
         AND COALESCE(legacy, 0) = 0
+        AND COALESCE(hq_paused, 0) = 0
+        AND COALESCE(self_paused, 0) = 0
         AND meta_access_token IS NOT NULL
     `,
     args: [],
@@ -292,6 +304,18 @@ export async function setTenantStripeFields(
   });
 }
 
+/**
+ * Set the paid-seat count (= Stripe subscription quantity). Source of truth for
+ * the locations gate. Written by the Stripe webhook, the OAuth checkout reconcile,
+ * and the self-serve add-a-seat path. Idempotent.
+ */
+export async function setTenantPaidLocations(id: string, paidLocations: number): Promise<void> {
+  await db.execute({
+    sql: `UPDATE tenants SET paid_locations = ?, updated_at = ? WHERE id = ?`,
+    args: [paidLocations, new Date().toISOString(), id],
+  });
+}
+
 // ---------------------------------------------------------------------------
 // Agency HQ lifecycle mutators (added 25 Jun 2026)
 // ---------------------------------------------------------------------------
@@ -300,6 +324,14 @@ export async function setTenantStripeFields(
 export async function setTenantPaused(id: string, paused: boolean): Promise<void> {
   await db.execute({
     sql: `UPDATE tenants SET hq_paused = ?, updated_at = ? WHERE id = ?`,
+    args: [paused ? 1 : 0, new Date().toISOString(), id],
+  });
+}
+
+/** Client self-serve Pause / Resume — stops all v8 crons; subscription untouched. */
+export async function setTenantSelfPaused(id: string, paused: boolean): Promise<void> {
+  await db.execute({
+    sql: `UPDATE tenants SET self_paused = ?, updated_at = ? WHERE id = ?`,
     args: [paused ? 1 : 0, new Date().toISOString(), id],
   });
 }

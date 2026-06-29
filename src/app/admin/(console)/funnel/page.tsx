@@ -251,7 +251,7 @@ export default async function FunnelDashboard() {
           The SaaS journey (after someone subscribes)
         </h2>
         <p className="mb-4 text-xs text-neutral-500">
-          Separate £300/mo product. Almost empty today: {m.activeSubs} subscriber(s).
+          Separate £27/location product. Almost empty today: {m.activeSubs} subscriber(s).
         </p>
         <div className="space-y-2">
           {APP_JOURNEY.map((s) => (

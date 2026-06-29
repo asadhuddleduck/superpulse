@@ -5,7 +5,7 @@ import PricingClient from "./PricingClient";
 export const metadata: Metadata = {
   title: "Pricing — SuperPulse",
   description:
-    "Single tier — £300 per month plus VAT. Boost every Instagram post you've already made into a local ad that runs forever.",
+    "£27 per location per month plus VAT. Boost every Instagram post you've already made into a local ad that runs forever.",
 };
 
 export default function PricingPage({
@@ -48,22 +48,17 @@ export default function PricingPage({
           One simple plan.
         </h1>
         <p className="text-zinc-400 mb-10">
-          Auto-boosts every post you make on Instagram. Multi-location, daily AI scoring, and a finger-on-the-pulse dashboard.
+          £27 per location, per month. Auto-boosts every post you make on
+          Instagram, with daily scoring and a finger-on-the-pulse dashboard.
         </p>
 
         <div className="rounded-2xl border border-zinc-800 bg-zinc-900/40 p-8">
-          <div className="flex items-baseline gap-2 mb-1">
-            <span className="text-5xl font-bold">£300</span>
-            <span className="text-zinc-400">/ month</span>
-          </div>
-          <p className="text-sm text-zinc-500 mb-6">+ VAT for UK businesses</p>
-
           <ul className="space-y-3 mb-8 text-sm text-zinc-300">
             <Bullet>AI-driven Instagram boost automation, 24/7</Bullet>
-            <Bullet>Multi-location targeting with radius control</Bullet>
+            <Bullet>£27 per location — add or remove locations whenever</Bullet>
+            <Bullet>Radius targeting around each location</Bullet>
             <Bullet>Daily scoring + auto-launch (no clicks needed)</Bullet>
             <Bullet>Real-time dashboard — last scan, posts boosted, spend, performance</Bullet>
-            <Bullet>Email when your first boosts go live</Bullet>
             <Bullet>Cancel anytime — no contracts</Bullet>
           </ul>
 

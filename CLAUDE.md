@@ -159,7 +159,9 @@ permanent rejection pattern shows up in `api_call_log`.
 
 ## Pricing
 
-**v8 launch (2026-05-03 lock): £300/month flat + VAT.** Single tier. `FIRSTMONTHFREE` Stripe coupon zeroes month 1. Per-location pricing slot reserved in schema but disabled at launch. Multi-tier (Starter/Growth/Pro) is deferred — see V8-SPEC.md §Pricing.
+**Per-location pricing (29 Jun 2026): £27 per location per month + VAT.** The Stripe subscription quantity = number of locations, so the buyer picks N on `/pricing` and pays £27×N/mo. Recurring price env `STRIPE_PRICE_SUPERPULSE_SEAT` (`price_1TnkV1EMAaEi0IogrEGeYAoo`, GBP, `tax_behavior: exclusive`); the old flat `STRIPE_PRICE_SUPERPULSE_MONTHLY` (£300) is retired from checkout but left in env. `tenants.paid_locations` (= live Stripe quantity, synced by the webhook + OAuth reconcile) is the source of truth for the locations gate: a tenant adds up to `paid_locations` for free; the N+1th triggers a self-serve "add a location" that bumps the Stripe quantity on the saved card (`src/app/api/locations/route.ts`, `src/lib/seats.ts`). Legacy/comp tenants are unlimited (bypass the gate). The add path is idempotent (UNIQUE `(tenant_id,address)` + `ON CONFLICT`, insert-then-bump-to-authoritative-count) so a lost-ACK retry can't double-charge. `FIRSTMONTHFREE` coupon still zeroes month 1. Multi-tier (Starter/Growth/Pro) is deferred — see V8-SPEC.md §Pricing.
+
+> **History:** v8 launched 2026-05-03 on a flat £300/mo single tier; switched to £27/location on 29 Jun 2026 (Notion task "Switch Superpulse to £27/location pricing + sync paid↔addable locations").
 
 **Audit upsell** (mini-product at `/waitlist/audit`): £19 base / +£50 Loom order-bump / +£250 1:1 consult upsell. Apify-powered IG scrape, hybrid AI+human fulfillment day 1. Separate from the SaaS subscription.
 
@@ -299,7 +301,7 @@ The 13 Apr 2026 NEC waitlist (password-gated, name+email+phone only) was retired
 3. `/waitlist/demo` → inline Cal.com embed (prefilled name+email + hidden `sp_email`). Picking a slot drops the call into the founder's calendar; the `bookingSuccessfulV2` callback fires the browser Schedule pixel (event_id = booking uid) and redirects to `/waitlist/offer?demo=1`. The **Cal webhook** (`/api/webhook/cal`) is the source of truth: sets `demo_scheduled_at`/`cal_booking_uid`/`demo_booking_status='booked'` (+ `demo_requested_at` once), fires Slack `📞 demo BOOKED` + server CAPI Schedule (deduped on uid) + the pre-call resources email. "No thanks" posts `/api/demo` choice=no → `/waitlist/offer`. Env: `NEXT_PUBLIC_CAL_LINK`, `CAL_WEBHOOK_SECRET`.
 4. `/waitlist/offer` → `/api/audit-offer` records `audit_offer_choice` and creates the £27 Stripe Checkout (idempotency key includes the demo branch; cancel_url returns to the same offer variant). Success URL is `/waitlist/upsell?session_id=…[&demo=1]`.
 5. `/waitlist/upsell` → £97 button → Stripe Checkout → success URL is `/waitlist/done?session_id=…&upsell=1`. Skip link → `/waitlist/done?session_id=…[&demo=1]`.
-6. Webhook handler (`src/app/api/webhook/stripe/route.ts` → `handleAuditPayment`) inserts both purchases into `audit_purchases` (idempotent on `stripe_session_id`), fires Meta CAPI Purchase, and posts a Slack alert. **All money events Slack-alert** (audits, £300/mo subs, refunds, disputes, failed payments) via `notifySlack` (`SLACK_WEBHOOK_URL`).
+6. Webhook handler (`src/app/api/webhook/stripe/route.ts` → `handleAuditPayment`) inserts both purchases into `audit_purchases` (idempotent on `stripe_session_id`), fires Meta CAPI Purchase, and posts a Slack alert. **All money events Slack-alert** (audits, per-location subs, refunds, disputes, failed payments) via `notifySlack` (`SLACK_WEBHOOK_URL`).
 7. Demo follow-up list (source of truth if a Slack webhook drops): `/admin/funnel` "Calls booked & requests" panel reads `demo_scheduled_at` + `demo_requested_at` from `qualifier_responses`; "Calls booked" KPI counts non-cancelled bookings.
 
 > **Webhook MUST point at `https://www.superpulse.io/api/webhook/stripe`** — the apex `superpulse.io` 307-redirects and Stripe does not follow redirects on delivery, so apex = silently dropped payments. Incident 29 May 2026: 3 live £27 payments lost this way, backfilled via `scripts/backfill-audit-purchases.mjs`. See `docs/STRIPE-INTEGRATION.md`.
@@ -401,8 +403,8 @@ legacy=1               → bypass all gates, render dashboard
 
 ```
 /                     landing
-/pricing              flat £300/mo + VAT, FIRSTMONTHFREE promo code
-/api/checkout         Stripe Checkout subscription session
+/pricing              £27/location/mo + VAT (pick N locations), FIRSTMONTHFREE promo code
+/api/checkout         Stripe Checkout subscription session (quantity = N locations)
 /onboarding/connect   Facebook Login button + "Stuck?" link → /onboarding/support
 /onboarding/select-page   multi-page picker (only if user has 2+ Pages with IG)
 /onboarding/locations     free-form intake — postcodes.io + Nominatim + Haiku 4.5 fallback
@@ -413,8 +415,8 @@ legacy=1               → bypass all gates, render dashboard
 
 ### Pricing posture
 
-- **Today:** flat £300/mo + VAT (UK). One tier. `FIRSTMONTHFREE` Stripe coupon zeroes the first month.
-- **Legacy clients:** flagged `legacy=1`, bypass all gates. Six tenants grandfathered (PhatBuns, Burger & Sauce, Boo Burger, Henny's Chicken, Drip Chicken, Halal Editions).
+- **Today:** £27/location/mo + VAT (UK). Stripe quantity = locations; `paid_locations` gates addable locations; self-serve seat add bumps the quantity on the saved card. `FIRSTMONTHFREE` coupon zeroes the first month. (Switched from flat £300/mo on 29 Jun 2026.)
+- **Legacy clients:** flagged `legacy=1`, bypass all gates (and the seat gate — unlimited). Six tenants grandfathered (PhatBuns, Burger & Sauce, Boo Burger, Henny's Chicken, Drip Chicken, Halal Editions).
 - **Multi-tier (Starter/Growth/Pro + addons):** deferred. See `docs/ONBOARDING-AUTOMATION.md` §Multi-tier roadmap.
 
 ### Visibility surface (StatusPanel)
