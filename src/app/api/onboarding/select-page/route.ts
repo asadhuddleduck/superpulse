@@ -62,6 +62,11 @@ async function selectPage(pageId: string) {
   return NextResponse.json({ ok: true, nextStatus });
 }
 
+// POST only — selectPage() rebinds the tenant's Page/IG (a state change), so it
+// must not ride on a GET. A GET write was CSRF-able under the sameSite=lax auth
+// cookie (a top-level link navigation sends the cookie) and bypassed
+// impersonationGuard. The single-page short-circuit now auto-submits to this
+// guarded POST from the client (see onboarding/select-page/page.tsx).
 export async function POST(request: NextRequest) {
   const ro = await impersonationGuard();
   if (ro) return ro;
@@ -71,17 +76,4 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "pageId is required" }, { status: 400 });
   }
   return selectPage(pageId);
-}
-
-// GET form lets the page server-redirect for the single-page short-circuit case.
-export async function GET(request: NextRequest) {
-  const pageId = request.nextUrl.searchParams.get("pageId");
-  if (!pageId) {
-    return NextResponse.redirect(new URL("/onboarding/select-page", request.url));
-  }
-  const result = await selectPage(pageId);
-  if (result.status >= 400) return result;
-  const body = await result.json();
-  const next = body.nextStatus === "active" ? "/dashboard" : "/onboarding/select-ad-account";
-  return NextResponse.redirect(new URL(next, request.url));
 }

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getCurrentTenant } from "@/lib/auth";
+import { setProvisioningStatus } from "@/lib/queries/tenants";
 import { fetchMe } from "@/lib/facebook";
 import { getLocationsForTenant } from "@/lib/queries/locations";
 import { validateTenantBudget } from "@/lib/v8/budget-plan";
@@ -56,18 +57,37 @@ export default async function DashboardLayout({
     if (tenant.provisioningStatus === "pending_budget") {
       redirect("/onboarding/budget");
     }
-    // provision_failed has two causes. Budget-too-tight is user-self-fixable, so
-    // loop them back to the budget step to re-approve (which flips them to
-    // 'provisioning' and re-enters the cron). A Meta access/token failure is
-    // operational — the provision cron has already Slack-alerted Asad — so we do
-    // NOT bounce them to budget (re-approving wouldn't help and would loop); we
-    // render the dashboard, where the activity feed shows the failure.
+    // provision_failed has two causes, recorded on the tenant by the provision
+    // cron (provisioningFailedReason) — we branch on that stored cause rather
+    // than re-deriving it from a live budget re-validation, which mis-classifies
+    // once locations/budget change between cron-park and render.
     if (tenant.provisioningStatus === "provision_failed") {
-      const locs = await getLocationsForTenant(tenant.id);
-      const budget = validateTenantBudget(tenant.monthlyAdBudgetPennies ?? 0, locs.length);
-      if (!budget.ok) {
-        redirect("/onboarding/budget?reason=provision_failed");
+      const reason = tenant.provisioningFailedReason;
+      if (reason === "budget") {
+        // Budget-too-tight is user-self-fixable. Re-check against the CURRENT
+        // location count: if it now clears the floor (e.g. they removed
+        // locations after parking), auto-resume into the cron instead of
+        // stranding them on a healthy-looking dashboard that never provisions;
+        // otherwise loop them back to re-approve a viable budget.
+        const locs = await getLocationsForTenant(tenant.id);
+        const budget = validateTenantBudget(tenant.monthlyAdBudgetPennies ?? 0, locs.length);
+        if (budget.ok) {
+          await setProvisioningStatus(tenant.id, "provisioning");
+        } else {
+          redirect("/onboarding/budget?reason=provision_failed");
+        }
+      } else if (reason == null) {
+        // Legacy rows parked before provisioningFailedReason existed: fall back
+        // to the old live re-derivation so they aren't stranded.
+        const locs = await getLocationsForTenant(tenant.id);
+        const budget = validateTenantBudget(tenant.monthlyAdBudgetPennies ?? 0, locs.length);
+        if (!budget.ok) {
+          redirect("/onboarding/budget?reason=provision_failed");
+        }
       }
+      // reason === "access": operational failure (the cron already Slack-alerted
+      // Asad). Re-approving budget wouldn't help and would loop, so render the
+      // dashboard, where the activity feed shows the failure.
     }
   }
 

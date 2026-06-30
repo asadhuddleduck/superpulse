@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
-import { getTenantCookie } from "@/lib/auth";
-import { getTenantById } from "@/lib/queries/tenants";
+import { getCurrentTenant } from "@/lib/auth";
 import { fetchAdAccounts } from "@/lib/facebook";
 import { SelectAdAccountForm } from "./select-ad-account-form";
 
@@ -12,10 +11,11 @@ export const metadata: Metadata = {
 export const dynamic = "force-dynamic";
 
 export default async function SelectAdAccountPage() {
-  const tenantId = await getTenantCookie();
-  if (!tenantId) redirect("/login");
-
-  const tenant = await getTenantById(tenantId);
+  // Impersonation-aware: during "view as client" this resolves the client's
+  // tenant (matching the dashboard layout that redirects here), so operators can
+  // read this onboarding step instead of being bounced to /login. The mutating
+  // submit route stays blocked by impersonationGuard().
+  const tenant = await getCurrentTenant();
   if (!tenant) redirect("/login");
 
   if (tenant.status !== "pending_ad_account") {

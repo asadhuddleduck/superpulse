@@ -55,9 +55,22 @@ async function selectAdAccount(adAccountId: string) {
     status: "active",
   });
 
-  // v8: kick off the budget-intake → provisioning flow. Flag-gated + non-legacy,
-  // so with V8_ENGINE_ENABLED off this is a no-op and the funnel is unchanged.
-  if (process.env.V8_ENGINE_ENABLED === "on" && !tenant.legacy) {
+  // v8: kick off the budget-intake → provisioning flow. Written for EVERY
+  // non-legacy onboarding tenant regardless of V8_ENGINE_ENABLED — the write must
+  // NOT be flag-gated. If it were (the old behaviour), a tenant who finishes
+  // onboarding while the flag is OFF lands at status='active' with
+  // provisioning_status=NULL; when the flag later flips ON they fall through every
+  // v8 gate (getTenantsAwaitingProvision requires provisioning IN
+  // ('provisioning','provisioned'); the dashboard gate only redirects on the named
+  // provisioning states) — paying, "connected", and never provisioned. Stamping
+  // pending_locations here is inert while the flag is OFF (the dashboard v8 gate
+  // and every v8 cron are themselves flag-gated, and pending_locations is not in
+  // getTenantsAwaitingProvision's set) and routes them straight into
+  // /onboarding/locations the moment the flag turns ON. Legacy/seeded short-circuit
+  // tenants never reach this route (they bind their ad account pre-seeded and jump
+  // to 'active' in the OAuth callback, skipping the picker), so this can't pull
+  // them into the funnel.
+  if (!tenant.legacy) {
     await setProvisioningStatus(tenantId, "pending_locations");
   }
 

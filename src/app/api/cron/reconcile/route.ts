@@ -1,10 +1,12 @@
 import { NextResponse } from "next/server";
 import { fetchAdInsights, fetchMe } from "@/lib/facebook";
 import { checkCronAuth } from "@/lib/cron-auth";
-import { getActiveTenants, type Tenant } from "@/lib/queries/tenants";
+import { getActiveTenants, setTenantNeedsReauth, type Tenant } from "@/lib/queries/tenants";
 import { getActiveCampaigns } from "@/lib/queries/campaigns";
 import { upsertPerformance } from "@/lib/queries/performance";
 import { logApiCall } from "@/lib/queries/api-calls";
+import { writeAuditEvent } from "@/lib/queries/audit-events";
+import { notifySlack } from "@/lib/slack";
 import { db } from "@/lib/db";
 
 /**
@@ -143,8 +145,34 @@ async function processTenant(tenant: Tenant, yesterday: string): Promise<TenantR
   result.tokenHealthy = await checkTokenHealth(tenant);
   if (!result.tokenHealthy) {
     result.error = "Token health check failed — token is dead, tenant needs to re-OAuth";
+    // A dead Meta token used to be console.error-only, so a paying tenant's
+    // boosts silently stopped ~60 days after connect (FB long-lived tokens
+    // expire and we don't proactively refresh — see header comment). Surface it
+    // loudly: flag the tenant so the dashboard can prompt a reconnect, write an
+    // audit event, and Slack Asad. Gate all three on the healthy→dead transition
+    // (needsReauth was not already set) so a weeks-dead token doesn't re-ping the
+    // daily cron every run; the flag self-dedups without a time window.
+    if (!tenant.needsReauth) {
+      await setTenantNeedsReauth(tenant.id, true);
+      await writeAuditEvent(
+        tenant.id,
+        "token_dead",
+        "Meta token failed its /me health check — tenant must reconnect Instagram",
+      );
+      void notifySlack(
+        `🔴 SuperPulse — *${tenant.name ?? tenant.id}*: Instagram/Meta token is dead. ` +
+          `Boosts have stopped (budget tilt, stop-ad, new ads all fail) but billing continues. ` +
+          `The client needs to reconnect Instagram via the dashboard / re-run OAuth.`,
+      );
+    }
     // Skip the perf snapshot — it would fail with the same dead token.
     return result;
+  }
+
+  // Token healthy — clear any prior dead-token flag (client reconnected, or a
+  // transient /me failure recovered) so the dashboard stops prompting a reconnect.
+  if (tenant.needsReauth) {
+    await setTenantNeedsReauth(tenant.id, false);
   }
 
   try {

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import type Stripe from "stripe";
-import { stripe } from "@/lib/stripe";
+import { stripe, mapSubscriptionStatus } from "@/lib/stripe";
 import {
   createPendingTenant,
   getTenantByStripeCustomerId,
@@ -16,6 +16,7 @@ import { fireCapi } from "@/lib/meta-capi";
 import { logServerError } from "@/lib/error-mapper";
 import { notifySlack } from "@/lib/slack";
 import { sendAuditConfirmation } from "@/lib/email/confirmation";
+import { isUnlimitedSeats } from "@/lib/seats";
 
 function gbp(pennies: number | null | undefined): string {
   return `£${((pennies ?? 0) / 100).toFixed(2)}`;
@@ -161,16 +162,8 @@ async function handleSubscriptionUpdated(sub: Stripe.Subscription) {
   const tenant = await getTenantByStripeCustomerId(customerId);
   if (!tenant) return;
 
-  const statusMap: Record<string, string> = {
-    active: "active",
-    trialing: "trialing",
-    past_due: "past_due",
-    unpaid: "past_due",
-    canceled: "canceled",
-    incomplete: "pending",
-    incomplete_expired: "canceled",
-  };
-  const subscriptionStatus = statusMap[sub.status] ?? "pending";
+  // Shared with the OAuth checkout reconcile so both write paths gate identically.
+  const subscriptionStatus = mapSubscriptionStatus(sub.status);
 
   // Sync the paid-seat count back whenever the quantity changes (self-serve seat
   // add, an HQ change, or a Stripe-dashboard edit all land here).
@@ -182,6 +175,26 @@ async function handleSubscriptionUpdated(sub: Stripe.Subscription) {
   });
   if (typeof quantity === "number") {
     await setTenantPaidLocations(tenant.id, quantity);
+
+    // A downgrade (Stripe-dashboard edit / HQ change) lowers the paid seat count
+    // but does NOT touch existing locations rows, so an over-provisioned tenant
+    // would keep running ad sets for locations no longer paid for (the reverse
+    // gate only blocks ADDING). There's no pause flag on the locations table to
+    // auto-reconcile safely, so surface it for manual action. Skip legacy/comp —
+    // they're unlimited and bypass the seat gate.
+    if (!isUnlimitedSeats(tenant)) {
+      const locCount = await db.execute({
+        sql: `SELECT COUNT(*) AS n FROM locations WHERE tenant_id = ?`,
+        args: [tenant.id],
+      });
+      const currentLocations = Number(locCount.rows[0]?.n ?? 0);
+      if (currentLocations > quantity) {
+        const excess = currentLocations - quantity;
+        void notifySlack(
+          `⚠️ SuperPulse downgrade leaves unpaid locations\n*Email:* ${tenant.email ?? customerId}\n*Paid seats now:* ${quantity}\n*Locations on file:* ${currentLocations}\nRemove ${excess} location${excess === 1 ? "" : "s"} so we're not running ads for unpaid seats.`,
+        );
+      }
+    }
   }
   await writeAuditEvent(
     tenant.id,
@@ -252,22 +265,59 @@ async function handlePaymentFailed(invoice: Stripe.Invoice) {
 async function handleAuditPayment(session: Stripe.Checkout.Session) {
   const product = (session.metadata?.product ?? "").trim();
 
-  // £90 onboarding handhold — a one-off "we'll connect it for you" call. It has
-  // no DB table of its own; the value is that Asad is told to action it, so
-  // alert Slack with the buyer's contact details instead of silently banking it.
+  // £90 onboarding handhold — a one-off "we'll connect it for you" call. The
+  // value is that Asad is told to action it, so persist a durable row first
+  // (reusing audit_purchases with tier='handhold') and only alert on a genuinely
+  // new row. This survives a dropped/failed fire-and-forget Slack notify and
+  // dedupes a Stripe at-least-once redelivery so the same buyer isn't actioned
+  // twice. tier='handhold' (NOT audit-27) keeps it out of the auto-fulfilment
+  // cron, which only pulls tier='audit-27' rows.
   if (product === "onboarding-handhold") {
+    const sessionId = session.id;
+    const paymentIntentId =
+      typeof session.payment_intent === "string"
+        ? session.payment_intent
+        : session.payment_intent?.id ?? null;
+    const customerId =
+      typeof session.customer === "string" ? session.customer : session.customer?.id ?? null;
     const email = (
       session.customer_details?.email ??
       session.customer_email ??
       ""
     ).trim().toLowerCase();
     const name = (session.customer_details?.name ?? "").trim();
+    const phone = session.customer_details?.phone ?? null;
     const amountTotal = session.amount_total ?? 0;
-    void notifySlack(
-      `🤝 £90 onboarding handhold purchased (${gbp(amountTotal)})\n*Email:* ${email || "unknown"}` +
-        (name ? `\n*Name:* ${name}` : "") +
-        `\nGet on a call and connect SuperPulse for them.`,
-    );
+    const currency = (session.currency ?? "gbp").toLowerCase();
+
+    const handholdIns = await db.execute({
+      sql: `INSERT INTO audit_purchases
+              (stripe_session_id, stripe_payment_intent_id, stripe_customer_id,
+               email, name, phone, instagram_handle, tier, amount_total, currency,
+               parent_session_id, source)
+            VALUES (?, ?, ?, ?, ?, ?, NULL, 'handhold', ?, ?, NULL, 'webhook')
+            ON CONFLICT(stripe_session_id) DO NOTHING`,
+      args: [
+        sessionId,
+        paymentIntentId,
+        customerId,
+        email,
+        name || null,
+        phone,
+        amountTotal,
+        currency,
+      ],
+    });
+
+    // Awaited (not fire-and-forget) so the serverless invocation can't be frozen
+    // before the Slack POST completes; gated on a new row so a redelivery is silent.
+    if (handholdIns.rowsAffected > 0) {
+      await notifySlack(
+        `🤝 £90 onboarding handhold purchased (${gbp(amountTotal)})\n*Email:* ${email || "unknown"}` +
+          (name ? `\n*Name:* ${name}` : "") +
+          `\nGet on a call and connect SuperPulse for them.`,
+      );
+    }
     return;
   }
 

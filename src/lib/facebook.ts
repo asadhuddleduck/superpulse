@@ -361,6 +361,27 @@ export async function fetchCampaigns(
 }
 
 /**
+ * Fetch ad sets under a campaign (ACTIVE and PAUSED only). Mirrors
+ * fetchCampaigns. The v8 execute cron uses this to adopt an ad set a prior tick
+ * created on Meta but crashed before writing the location_adsets row — so
+ * PROVISION_ADSET stays idempotent instead of stranding a duplicate.
+ */
+export async function fetchAdSets(
+  campaignId: string,
+  token: string
+): Promise<{ id: string; name: string; status: string }[]> {
+  const url = `${GRAPH_API}/${campaignId}/adsets?fields=id,name,status&effective_status=['ACTIVE','PAUSED']`;
+  const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+  await captureRateLimits(res, url);
+  if (!res.ok) {
+    const error = await res.text();
+    throw new Error(`Failed to fetch ad sets: ${error}`);
+  }
+  const data = await res.json();
+  return data.data ?? [];
+}
+
+/**
  * Update an ad set's daily_budget (in pennies). The v8 execute cron uses this
  * to apply BUDGET_TILT intents — proven Meta v25.0 field, same one used at
  * adset creation. Wraps captureRateLimits per the standard pattern.

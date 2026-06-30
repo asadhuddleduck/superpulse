@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
-import { getTenantCookie } from "@/lib/auth";
-import { getTenantById } from "@/lib/queries/tenants";
+import { getCurrentTenant } from "@/lib/auth";
 import { getLocationsForTenant } from "@/lib/queries/locations";
 import { PER_ADSET_FLOOR } from "@/lib/v8/budget-plan";
 import { BudgetForm } from "./budget-form";
@@ -13,10 +12,12 @@ export const metadata: Metadata = {
 export const dynamic = "force-dynamic";
 
 export default async function BudgetPage() {
-  const tenantId = await getTenantCookie();
-  if (!tenantId) redirect("/login");
-
-  const tenant = await getTenantById(tenantId);
+  // Impersonation-aware: during "view as client" this resolves the client's
+  // tenant (like the dashboard layout that redirects here for a provision_failed
+  // budget-too-tight state), so operators can read the broken step instead of
+  // being bounced to /login. Mutating writes stay blocked by impersonationGuard()
+  // in /api/onboarding/budget.
+  const tenant = await getCurrentTenant();
   if (!tenant) redirect("/login");
   // Allow both the first-time budget step and a provision_failed re-approval
   // (budget-too-tight): re-submitting flips the tenant back into 'provisioning'.
@@ -28,7 +29,7 @@ export default async function BudgetPage() {
   }
   const isRetry = tenant.provisioningStatus === "provision_failed";
 
-  const locations = await getLocationsForTenant(tenantId);
+  const locations = await getLocationsForTenant(tenant.id);
   const n = locations.length;
 
   return (

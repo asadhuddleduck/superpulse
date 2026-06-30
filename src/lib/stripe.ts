@@ -30,3 +30,23 @@ export const stripe = new Proxy({} as Stripe, {
     return value;
   },
 });
+
+/**
+ * Normalise a raw Stripe subscription status to the internal subscription_status
+ * the dashboard gate understands. Single source of truth shared by the Stripe
+ * webhook and the OAuth checkout reconcile so both write paths gate identically
+ * — a raw 'incomplete' (3DS/SCA pending) or 'unpaid' must never read as 'active'.
+ * Absent/unknown → 'pending' (gated to /pricing).
+ */
+export function mapSubscriptionStatus(raw: string | null | undefined): string {
+  const map: Record<string, string> = {
+    active: "active",
+    trialing: "trialing",
+    past_due: "past_due",
+    unpaid: "past_due",
+    canceled: "canceled",
+    incomplete: "pending",
+    incomplete_expired: "canceled",
+  };
+  return (raw && map[raw]) || "pending";
+}

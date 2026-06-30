@@ -5,6 +5,7 @@ import {
   createAdSet,
   createAdCreative,
   createAd,
+  fetchAdSets,
 } from "@/lib/facebook";
 import { checkCronAuth } from "@/lib/cron-auth";
 import { getActiveTenants, type Tenant } from "@/lib/queries/tenants";
@@ -60,8 +61,10 @@ import { writeAuditEvent } from "@/lib/queries/audit-events";
 //   - STEADY-STATE: up to 3 BUDGET_TILT/STOP_AD intents. Re-validates tilts vs
 //     fresh adset state via applyTilts (3× spread + 24h cooldown), applies
 //     STOP_AD via updateNodeStatus + recordReelAdRetirement.
-//   - CREATION: up to 8 PROVISION_ADSET/CREATE_AD/ACTIVATE_AD intents — creates
-//     adsets/ads PAUSED, activates after review (child→parent cascade).
+//   - CREATION: PROVISION_ADSET/CREATE_AD/ACTIVATE_AD intents — creates
+//     adsets/ads PAUSED, activates after review (child→parent cascade). Drains 8
+//     per tick steady-state, more for a tenant in its initial build (see
+//     MAX_CREATION_PER_TICK_BUILD), gated by the breaker's headroom.
 // Shared per-app circuit breaker gates both. Everything is created PAUSED;
 // activation is a separate ACTIVATE_AD step enqueued by the monitor review poll.
 
@@ -69,6 +72,16 @@ export const maxDuration = 60;
 
 const MAX_INTENTS_PER_TICK = 3;
 const MAX_CREATION_PER_TICK = 8;
+// Initial-build burst drain. A fresh multi-location tenant has hundreds-to-
+// thousands of creation intents (N adsets + N×reels ads + activations); at the
+// steady-state 8/tick that first build takes days. While a tenant is still in
+// its initial build (provisioning_status='provisioning') AND the app breaker has
+// ample headroom we drain a larger batch so the account goes live in hours.
+// Bounded by: the per-app circuit breaker (re-read every tick, halts the
+// creation lane at >35%) and maxDuration=60s (≤ ~2 Meta calls per CREATE_AD).
+// Safe against a timed-out tick because every creation step is replay-safe
+// (PROVISION_ADSET reuse guard + reelAdExists + idempotent ACTIVATE_AD).
+const MAX_CREATION_PER_TICK_BUILD = 30;
 
 interface TenantExecuteResult {
   tenantId: string;
@@ -255,7 +268,14 @@ async function executeOneTenant(tenant: Tenant): Promise<TenantExecuteResult> {
 
   // ---------- Creation lane: PROVISION_ADSET / CREATE_AD / ACTIVATE_AD ----------
   if (!haltCreation && tenantCampaign) {
-    await processCreationIntents(tenant, token, tenantCampaign, adsets, adsetsByMetaId, result);
+    // Burst the drain for tenants still in their initial build, but only while
+    // the app breaker has ample headroom (peak well under the creation halt) so
+    // a steady-state account never gets a surprise burst.
+    const creationLimit =
+      tenant.provisioningStatus === "provisioning" && breaker.peak < CREATION_BREAKER_THRESHOLD / 2
+        ? MAX_CREATION_PER_TICK_BUILD
+        : MAX_CREATION_PER_TICK;
+    await processCreationIntents(tenant, token, tenantCampaign, adsets, adsetsByMetaId, result, creationLimit);
   }
 
   return result;
@@ -272,12 +292,13 @@ async function processCreationIntents(
   adsets: LocationAdsetRow[],
   adsetsByMetaId: Map<string, LocationAdsetRow>,
   result: TenantExecuteResult,
+  creationLimit: number,
 ): Promise<void> {
   const adAccountId = tenant.adAccountId;
   if (!adAccountId || !tenant.pageId || !tenant.igUserId || !tenant.igUsername) return;
   const cleanAdAccountId = adAccountId.startsWith("act_") ? adAccountId.slice(4) : adAccountId;
 
-  const intents = await drainPendingCreationIntents(tenant.id, MAX_CREATION_PER_TICK);
+  const intents = await drainPendingCreationIntents(tenant.id, creationLimit);
   if (intents.length === 0) return;
   result.drained += intents.length;
 
@@ -286,6 +307,36 @@ async function processCreationIntents(
   const adsetsById = new Map<number, LocationAdsetRow>(adsets.map((a) => [a.id, a]));
   const plan = planAdsetBudgets(tenant.monthlyAdBudgetPennies ?? 0, Math.max(1, locations.length));
   let campaignStatus = campaign.status;
+
+  // ---- Budget drift fix (location-add) ----
+  // When NEW location adsets are being provisioned this tick, the even per-adset
+  // split (plan.perAdsetDailyPennies) drops because N grew. New adsets get the
+  // new split, but adsets created under the OLD (smaller) N still carry the OLD,
+  // larger per-adset budget — so total live daily spend drifts ABOVE the
+  // approved monthly budget (e.g. 1 adset @ £10 + 4 new @ £2 = £18/day vs the
+  // £10/day the £304/mo buys). Re-baseline every EXISTING adset to the new even
+  // split so the campaign total tracks monthly_ad_budget_pennies. Only runs on
+  // ticks that add adsets (steady-state CREATE_AD-only ticks leave LLM tilts
+  // alone); best-effort so a single PATCH miss doesn't fail the creation tick.
+  if (intents.some((i) => i.intentType === "PROVISION_ADSET")) {
+    for (const adset of adsets) {
+      if (adset.dailyBudgetPennies === plan.perAdsetDailyPennies) continue;
+      const reCallStart = Date.now();
+      try {
+        await updateAdSetDailyBudget(adset.metaAdsetId, plan.perAdsetDailyPennies, token);
+        await logApiCall({ tenantId: tenant.id, endpoint: `/${adset.metaAdsetId}`, method: "POST", statusCode: 200, durationMs: Date.now() - reCallStart });
+        await recordAdsetBudgetWrite(adset.metaAdsetId, plan.perAdsetDailyPennies);
+        const oldPennies = adset.dailyBudgetPennies;
+        adset.dailyBudgetPennies = plan.perAdsetDailyPennies;
+        const cached = adsetsByMetaId.get(adset.metaAdsetId);
+        if (cached) cached.dailyBudgetPennies = plan.perAdsetDailyPennies;
+        await writeAuditEvent(tenant.id, "v8_intent_executed", "Adset budget re-baselined on location add", { metaAdsetId: adset.metaAdsetId, oldPennies, newPennies: plan.perAdsetDailyPennies, locations: locations.length });
+      } catch (err) {
+        await logApiCall({ tenantId: tenant.id, endpoint: `/${adset.metaAdsetId}`, method: "POST", statusCode: 500, durationMs: Date.now() - reCallStart, error: err instanceof Error ? err.message : String(err) });
+        // best-effort: leave this adset for the next provision tick to retry
+      }
+    }
+  }
 
   // Flag-gated Batch-API pre-pass (V8_BATCH_CREATION). OFF by default → returns
   // null and the single-call loop below runs over ALL intents, byte-identical to
@@ -308,6 +359,27 @@ async function processCreationIntents(
     ? intents.filter((i) => !batchedIntentIds.has(i.id))
     : intents;
 
+  // PROVISION_ADSET idempotency guard (mirrors ensureCampaignRow's campaign
+  // reuse). A prior tick can create the Meta ad set then crash/time out before
+  // upsertLocationAdset, leaving no DB row — so the location still looks
+  // "missing" and gets re-enqueued. Without a pre-create existence check the
+  // retry mints a SECOND orphan ad set. Fetch the campaign's existing ad sets
+  // once and adopt any 'SuperPulse | {loc}' match instead of recreating it.
+  // Lazy (only when a PROVISION_ADSET is in this drain) + best-effort (a failed
+  // list falls through to create, same as the campaign-reuse path).
+  const existingAdsetIdByName = new Map<string, string>();
+  if (loopIntents.some((i) => i.intentType === "PROVISION_ADSET")) {
+    try {
+      const metaAdsets = await fetchAdSets(campaign.metaCampaignId, token);
+      for (const a of metaAdsets) {
+        if (a.status === "ACTIVE" || a.status === "PAUSED") existingAdsetIdByName.set(a.name, a.id);
+      }
+    } catch {
+      // Couldn't list ad sets — fall through and create (orphan risk reverts to
+      // pre-fix behaviour for this tick only).
+    }
+  }
+
   for (const intent of loopIntents) {
     try {
       if (intent.intentType === "PROVISION_ADSET") {
@@ -318,25 +390,32 @@ async function processCreationIntents(
           result.skipped++;
           continue;
         }
-        const callStart = Date.now();
+        const adsetName = `SuperPulse | ${loc.name}`;
         let metaAdsetId: string;
-        try {
-          const adset = await createAdSet(
-            campaign.metaCampaignId,
-            cleanAdAccountId,
-            `SuperPulse | ${loc.name}`,
-            plan.perAdsetDailyPennies / 100,
-            loc.radiusMiles,
-            loc.latitude,
-            loc.longitude,
-            tenant.pageId,
-            token,
-          );
-          metaAdsetId = adset.id;
-          await logApiCall({ tenantId: tenant.id, endpoint: `/act_${cleanAdAccountId}/adsets`, method: "POST", statusCode: 200, durationMs: Date.now() - callStart });
-        } catch (err) {
-          await logApiCall({ tenantId: tenant.id, endpoint: `/act_${cleanAdAccountId}/adsets`, method: "POST", statusCode: 500, durationMs: Date.now() - callStart, error: err instanceof Error ? err.message : String(err) });
-          throw err;
+        const reusedAdsetId = existingAdsetIdByName.get(adsetName);
+        if (reusedAdsetId) {
+          // Adopt the ad set a prior tick stranded on Meta instead of minting a duplicate.
+          metaAdsetId = reusedAdsetId;
+        } else {
+          const callStart = Date.now();
+          try {
+            const adset = await createAdSet(
+              campaign.metaCampaignId,
+              cleanAdAccountId,
+              adsetName,
+              plan.perAdsetDailyPennies / 100,
+              loc.radiusMiles,
+              loc.latitude,
+              loc.longitude,
+              tenant.pageId,
+              token,
+            );
+            metaAdsetId = adset.id;
+            await logApiCall({ tenantId: tenant.id, endpoint: `/act_${cleanAdAccountId}/adsets`, method: "POST", statusCode: 200, durationMs: Date.now() - callStart });
+          } catch (err) {
+            await logApiCall({ tenantId: tenant.id, endpoint: `/act_${cleanAdAccountId}/adsets`, method: "POST", statusCode: 500, durationMs: Date.now() - callStart, error: err instanceof Error ? err.message : String(err) });
+            throw err;
+          }
         }
         await upsertLocationAdset({ tenantCampaignId: campaign.id, locationId: loc.id, metaAdsetId, status: "PAUSED", dailyBudgetPennies: plan.perAdsetDailyPennies });
         await recordAdsetGuardrails(metaAdsetId, plan.minDailyBudgetPennies, plan.maxDailyBudgetPennies);
@@ -356,7 +435,7 @@ async function processCreationIntents(
         await markIntentDone(intent.id);
         result.done++;
         result.created++;
-        await writeAuditEvent(tenant.id, "v8_provision_adset_created", `Ad set created for ${loc.name}`, { metaAdsetId, locationId: loc.id });
+        await writeAuditEvent(tenant.id, "v8_provision_adset_created", `Ad set ${reusedAdsetId ? "reused (idempotent replay)" : "created"} for ${loc.name}`, { metaAdsetId, locationId: loc.id, reused: !!reusedAdsetId });
       } else if (intent.intentType === "CREATE_AD") {
         const payload = intent.payload as CreateAdPayload;
         // Idempotency: a prior tick may have created the row before crashing.

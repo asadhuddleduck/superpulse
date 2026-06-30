@@ -13,6 +13,10 @@ export type AuditEventType =
   | "error"
   | "onboarding_complete"
   | "subscription_changed"
+  // Reconcile token-health (added 2026-06-30). A stored Meta token failed its
+  // /me health check — the tenant must reconnect Instagram or every Meta write
+  // silently fails. Surfaced via Slack + the needs_reauth flag on the tenant.
+  | "token_dead"
   // v8 engine event types (added 2026-05-04). One per cron-tick lifecycle event.
   | "v8_scan_tick"
   | "v8_decision_made"
@@ -28,6 +32,11 @@ export type AuditEventType =
   | "v8_provision_activated"
   | "v8_provision_completed"
   | "v8_provision_failed"
+  // Built but nothing live — every ad disapproved/retired (e.g. all reels carry
+  // copyright music). Distinct from v8_provision_failed (which parks the tenant);
+  // here the tenant stays in 'provisioning' so a freshly-posted clean Reel still
+  // self-heals, and this event just dedups the operator alert.
+  | "v8_no_eligible_content"
   | "v8_batch_error"
   | "insights_pagination_capped"
   | "budget_approved"
@@ -66,6 +75,29 @@ export async function writeAuditEvent(
   } catch {
     // Audit logging must never break the caller.
   }
+}
+
+/**
+ * True if an audit event of `eventType` was written for this tenant within the
+ * last `withinHours`. Used to dedup recurring cron alerts (a 5-min cron must not
+ * Slack-spam the same condition every tick). created_at is UTC CURRENT_TIMESTAMP,
+ * directly comparable with datetime('now').
+ */
+export async function hasRecentAuditEvent(
+  tenantId: string,
+  eventType: AuditEventType,
+  withinHours: number,
+): Promise<boolean> {
+  const result = await db.execute({
+    sql: `
+      SELECT 1 FROM audit_events
+      WHERE tenant_id = ? AND event_type = ?
+        AND created_at >= datetime('now', ?)
+      LIMIT 1
+    `,
+    args: [tenantId, eventType, `-${withinHours} hours`],
+  });
+  return result.rows.length > 0;
 }
 
 export async function getRecentEvents(

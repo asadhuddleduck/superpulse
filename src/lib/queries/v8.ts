@@ -351,6 +351,10 @@ export async function getProvisioningProgress(tenantId: string): Promise<{
   adsetsCreated: number;
   adsActive: number;
   adsTotal: number;
+  // Ads that were created but disapproved/retired (status PAUSED, retired_at set).
+  // adsTotal counts these too — so adsActive==0 && adsRetired==adsTotal means the
+  // tenant is fully built but nothing will ever deliver from current content.
+  adsRetired: number;
 } | null> {
   const camp = await db.execute({
     sql: `SELECT id FROM tenant_campaigns WHERE tenant_id = ? LIMIT 1`,
@@ -364,7 +368,8 @@ export async function getProvisioningProgress(tenantId: string): Promise<{
     db.execute({
       sql: `SELECT
               COUNT(*) AS total,
-              SUM(CASE WHEN ra.status = 'ACTIVE' THEN 1 ELSE 0 END) AS active
+              SUM(CASE WHEN ra.status = 'ACTIVE' THEN 1 ELSE 0 END) AS active,
+              SUM(CASE WHEN ra.retired_at IS NOT NULL THEN 1 ELSE 0 END) AS retired
             FROM reel_ads ra
             JOIN location_adsets la ON la.id = ra.location_adset_id
             WHERE la.tenant_campaign_id = ?`,
@@ -376,6 +381,7 @@ export async function getProvisioningProgress(tenantId: string): Promise<{
     adsetsCreated: Number(adsets.rows[0]?.n ?? 0),
     adsActive: Number(ads.rows[0]?.active ?? 0),
     adsTotal: Number(ads.rows[0]?.total ?? 0),
+    adsRetired: Number(ads.rows[0]?.retired ?? 0),
   };
 }
 

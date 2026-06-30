@@ -386,6 +386,16 @@ CREATE TABLE IF NOT EXISTS email_unsubscribes (
 ALTER TABLE tenants ADD COLUMN provisioning_status TEXT;
 ALTER TABLE tenants ADD COLUMN monthly_ad_budget_pennies INTEGER;
 ALTER TABLE tenants ADD COLUMN budget_approved_at TEXT;
+-- Why a 'provision_failed' tenant was parked (added 2026-06-30). 'budget' =
+-- the even per-adset split fell below Meta's floor (user-self-fixable: raise
+-- budget OR remove locations); 'access' = a permanent Meta access/token/policy
+-- rejection (operational, Asad Slack-alerted). The cron records this when it
+-- parks the tenant so the dashboard branches on the RECORDED cause instead of
+-- re-deriving it from a live budget re-validation (which mis-classifies once
+-- locations/budget change between cron-park and render). NULL whenever
+-- provisioning_status is not 'provision_failed'.
+-- Values: NULL | budget | access
+ALTER TABLE tenants ADD COLUMN provisioning_failed_reason TEXT;
 CREATE INDEX IF NOT EXISTS idx_tenants_provisioning ON tenants(provisioning_status);
 
 -- Provisioning-progress markers on the v8 creation tables (observability + a
@@ -577,3 +587,11 @@ ALTER TABLE tenants ADD COLUMN offboarded_at TEXT;
 -- getTenantsAwaitingProvision) and live campaigns are paused so ad spend stops.
 -- Resuming clears it; the engine re-activates on its next cycle.
 ALTER TABLE tenants ADD COLUMN self_paused INTEGER DEFAULT 0;
+
+-- Meta token health (30 Jun 2026). Set to 1 by the reconcile cron when a stored
+-- token fails its /me health check (FB long-lived tokens expire ~60 days after
+-- connect and we don't proactively refresh). Before this, a dead token was only
+-- console.error'd, so a paying tenant's boosts silently stopped with no Slack /
+-- audit / dashboard signal. Cleared on a fresh token (re-auth) or when a later
+-- health check passes. Lets the dashboard prompt a "reconnect Instagram".
+ALTER TABLE tenants ADD COLUMN needs_reauth INTEGER DEFAULT 0;

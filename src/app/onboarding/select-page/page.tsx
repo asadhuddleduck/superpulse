@@ -1,9 +1,8 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
-import { getTenantCookie } from "@/lib/auth";
-import { getTenantById } from "@/lib/queries/tenants";
+import { getCurrentTenant } from "@/lib/auth";
 import { fetchPagesWithIG } from "@/lib/facebook";
-import { SelectPageForm } from "./select-page-form";
+import { SelectPageForm, AutoSelectPage } from "./select-page-form";
 
 export const metadata: Metadata = {
   title: "Choose Your Page — SuperPulse",
@@ -12,10 +11,11 @@ export const metadata: Metadata = {
 export const dynamic = "force-dynamic";
 
 export default async function SelectPagePage() {
-  const tenantId = await getTenantCookie();
-  if (!tenantId) redirect("/login");
-
-  const tenant = await getTenantById(tenantId);
+  // Impersonation-aware: during "view as client" this resolves the client's
+  // tenant (matching the dashboard layout that redirects here), so operators can
+  // read this onboarding step instead of being bounced to /login. The mutating
+  // submit route stays blocked by impersonationGuard().
+  const tenant = await getCurrentTenant();
   if (!tenant) redirect("/login");
 
   if (tenant.status !== "pending_page_selection") {
@@ -49,7 +49,10 @@ export default async function SelectPagePage() {
   }
 
   if (pagesWithIG.length === 1) {
-    redirect("/api/onboarding/select-page?pageId=" + pagesWithIG[0].id);
+    // One Page+IG: nothing to choose. Auto-submit via the guarded POST handler
+    // (client component) instead of redirecting to a GET write, which was
+    // CSRF-able and skipped impersonationGuard.
+    return <AutoSelectPage pageId={pagesWithIG[0].id} />;
   }
 
   const choices = pagesWithIG.map((p) => ({

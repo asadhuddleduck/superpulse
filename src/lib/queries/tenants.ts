@@ -12,6 +12,10 @@ export interface Tenant {
   igUsername: string | null;
   status: string;
   tokenExpiresAt: string | null;
+  // Meta token health (added 2026-06-30). True once the reconcile cron sees the
+  // stored token fail its /me check; cleared on a fresh token (re-auth) or when a
+  // later health check passes. Lets the dashboard prompt a reconnect.
+  needsReauth: boolean;
   // Phase 4 — Stripe billing
   subscriptionStatus: string;
   stripeCustomerId: string | null;
@@ -25,6 +29,12 @@ export interface Tenant {
   // v8 provisioning + budget intake (added 2026-06-02). NULL on every existing
   // tenant — a separate axis from `status` so the live dashboard gate is untouched.
   provisioningStatus: string | null;
+  // Why a 'provision_failed' tenant was parked: 'budget' (self-fixable) vs
+  // 'access' (operational). Recorded by the provision cron; NULL whenever
+  // provisioning_status is not 'provision_failed'. Lets the dashboard branch on
+  // the real cause instead of re-deriving it from a live budget check (added
+  // 2026-06-30).
+  provisioningFailedReason: string | null;
   monthlyAdBudgetPennies: number | null;
   budgetApprovedAt: string | null;
   // Agency HQ (added 25 Jun 2026)
@@ -51,6 +61,7 @@ function rowToTenant(row: Record<string, unknown>): Tenant {
     igUsername: (row.ig_username as string | null) ?? null,
     status: ((row.status as string | null) ?? "pending_oauth") as string,
     tokenExpiresAt: (row.token_expires_at as string | null) ?? null,
+    needsReauth: Number(row.needs_reauth ?? 0) === 1,
     subscriptionStatus: ((row.subscription_status as string | null) ?? "pending") as string,
     stripeCustomerId: (row.stripe_customer_id as string | null) ?? null,
     stripeSubscriptionId: (row.stripe_subscription_id as string | null) ?? null,
@@ -58,6 +69,7 @@ function rowToTenant(row: Record<string, unknown>): Tenant {
     legacy: Number(row.legacy ?? 0) === 1,
     paidLocations: row.paid_locations == null ? null : Number(row.paid_locations),
     provisioningStatus: (row.provisioning_status as string | null) ?? null,
+    provisioningFailedReason: (row.provisioning_failed_reason as string | null) ?? null,
     monthlyAdBudgetPennies: row.monthly_ad_budget_pennies == null ? null : Number(row.monthly_ad_budget_pennies),
     budgetApprovedAt: (row.budget_approved_at as string | null) ?? null,
     comp: Number(row.comp ?? 0) === 1,
@@ -104,8 +116,19 @@ export async function upsertTenant(t: TenantUpsert): Promise<void> {
         meta_pixel_id     = COALESCE(excluded.meta_pixel_id,     tenants.meta_pixel_id),
         page_id           = COALESCE(excluded.page_id,           tenants.page_id),
         ig_username       = COALESCE(excluded.ig_username,       tenants.ig_username),
-        status            = COALESCE(excluded.status,            tenants.status),
+        -- An offboarded (operator-kicked) tenant must NOT be silently reactivated
+        -- by a re-login/upsert (a kicked client re-authing would otherwise flip
+        -- status back to 'active' and slip past the dashboard's offboarded hard
+        -- gate). Only reinstateTenant (a direct UPDATE) may move it out.
+        status            = CASE WHEN tenants.status = 'offboarded'
+                                 THEN tenants.status
+                                 ELSE COALESCE(excluded.status, tenants.status) END,
         token_expires_at  = COALESCE(excluded.token_expires_at,  tenants.token_expires_at),
+        -- A fresh token (the client reconnected via OAuth) heals the dead-token
+        -- flag immediately so the dashboard stops prompting a reconnect; absent a
+        -- new token we leave whatever the reconcile cron set.
+        needs_reauth      = CASE WHEN excluded.meta_access_token IS NOT NULL
+                                 THEN 0 ELSE tenants.needs_reauth END,
         updated_at        = excluded.updated_at
     `,
     args: [
@@ -153,14 +176,23 @@ export async function getActiveTenants(): Promise<Tenant[]> {
 // v8 provisioning + budget intake (added 2026-06-02)
 // ---------------------------------------------------------------------------
 
-/** Set the budget-intake / provisioning axis. Does NOT touch tenants.status. */
+/**
+ * Set the budget-intake / provisioning axis. Does NOT touch tenants.status.
+ *
+ * `failedReason` records WHY a 'provision_failed' park happened ('budget' vs
+ * 'access') so the dashboard can branch on the real cause. It is only stored
+ * when status === 'provision_failed'; any other status clears it back to NULL
+ * (so a tenant that re-enters provisioning / completes never carries a stale
+ * reason).
+ */
 export async function setProvisioningStatus(
   id: string,
   status: "pending_locations" | "pending_budget" | "provisioning" | "provisioned" | "provision_failed",
+  failedReason: "budget" | "access" | null = null,
 ): Promise<void> {
   await db.execute({
-    sql: `UPDATE tenants SET provisioning_status = ?, updated_at = ? WHERE id = ?`,
-    args: [status, new Date().toISOString(), id],
+    sql: `UPDATE tenants SET provisioning_status = ?, provisioning_failed_reason = ?, updated_at = ? WHERE id = ?`,
+    args: [status, status === "provision_failed" ? failedReason : null, new Date().toISOString(), id],
   });
 }
 
@@ -172,10 +204,11 @@ export async function setTenantBudget(id: string, monthlyAdBudgetPennies: number
   const now = new Date().toISOString();
   await db.execute({
     sql: `UPDATE tenants
-            SET monthly_ad_budget_pennies = ?,
-                budget_approved_at        = ?,
-                provisioning_status       = 'provisioning',
-                updated_at                = ?
+            SET monthly_ad_budget_pennies   = ?,
+                budget_approved_at          = ?,
+                provisioning_status         = 'provisioning',
+                provisioning_failed_reason  = NULL,
+                updated_at                  = ?
           WHERE id = ?`,
     args: [monthlyAdBudgetPennies, now, now, id],
   });
@@ -234,10 +267,22 @@ export async function updateTenantToken(
       SET meta_access_token = ?,
           token_expires_at  = ?,
           status            = 'active',
+          needs_reauth      = 0,
           updated_at        = ?
       WHERE id = ?
     `,
     args: [ensureEncrypted(token), expiresAt, new Date().toISOString(), id],
+  });
+}
+
+/**
+ * Flag (or clear) a tenant whose Meta token failed its health check. Set by the
+ * reconcile cron on a dead token, cleared on recovery / re-auth. Idempotent.
+ */
+export async function setTenantNeedsReauth(id: string, needsReauth: boolean): Promise<void> {
+  await db.execute({
+    sql: `UPDATE tenants SET needs_reauth = ?, updated_at = ? WHERE id = ?`,
+    args: [needsReauth ? 1 : 0, new Date().toISOString(), id],
   });
 }
 
@@ -342,6 +387,11 @@ export async function setTenantSelfPaused(id: string, paused: boolean): Promise<
  * (it has no IG connection / campaigns / spend). Nulls its stripe linkage and
  * marks it 'merged' so getTenantByStripeCustomerId resolves to the IG tenant and
  * the placeholder never gates a dashboard. Non-destructive (no delete).
+ *
+ * Scoped to GENUINE webhook placeholders only — id LIKE 'cust_%' AND still
+ * status='pending_oauth' (createPendingTenant's shape). Without this narrowing a
+ * replayed checkout session could merge a fully-onboarded real IG tenant that
+ * happened to share the customer id, silently bricking the paying client.
  */
 export async function neutraliseCustomerPlaceholder(
   keepTenantId: string,
@@ -350,7 +400,9 @@ export async function neutraliseCustomerPlaceholder(
   await db.execute({
     sql: `UPDATE tenants
             SET stripe_customer_id = NULL, status = 'merged', subscription_status = 'merged', updated_at = ?
-          WHERE stripe_customer_id = ? AND id != ?`,
+          WHERE stripe_customer_id = ? AND id != ?
+            AND id LIKE 'cust\\_%' ESCAPE '\\'
+            AND status = 'pending_oauth'`,
     args: [new Date().toISOString(), stripeCustomerId, keepTenantId],
   });
 }

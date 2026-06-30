@@ -126,6 +126,7 @@ export function classifyMetaAccessError(err: unknown): { reason: string } | null
   const raw = err instanceof Error ? err.message : String(err);
 
   let code: number | null = null;
+  let subcode: number | null = null;
   let userMsg = "";
   let devMsg = "";
   const jsonStart = raw.indexOf("{");
@@ -134,6 +135,7 @@ export function classifyMetaAccessError(err: unknown): { reason: string } | null
       const parsed = JSON.parse(raw.slice(jsonStart));
       const errBody = parsed?.error ?? parsed;
       if (typeof errBody?.code === "number") code = errBody.code;
+      if (typeof errBody?.error_subcode === "number") subcode = errBody.error_subcode;
       userMsg = String(errBody?.error_user_msg ?? "");
       devMsg = String(errBody?.message ?? "");
     } catch {
@@ -154,11 +156,23 @@ export function classifyMetaAccessError(err: unknown): { reason: string } | null
 
   // Missing permission / capability — ads_management not granted, or the user
   // isn't an app tester while the permission is at Limited Access.
+  //   - code 294: "(#294) Managing advertisements requires an access token with
+  //     the extended permission ads_management" — the dedicated ads-management
+  //     permission error Meta returns from campaign/ad writes (the exact C2 case;
+  //     ads_read can pass the pre-flight but writes still need ads_management).
+  //   - code 100 / subcode 33: "Object ... cannot be loaded due to missing
+  //     permissions" — lost ad-account/object access. Scoped to subcode 33 so
+  //     generic code-100 invalid-parameter errors aren't swept up as permanent.
+  // The regex matches Meta's actual copy, which says "requires an access token
+  // with the extended permission ads_management" — NOT the literal "requires
+  // ads_management" — and "missing permission(s)" rather than "does not have".
   if (
     code === 10 ||
     code === 3 ||
     code === 200 ||
-    /\(#200\)|\(#10\)|\(#3\)|requires ads_management|does not have permission|do(?:es)? not have the capability|has not grant|permissions error/.test(
+    code === 294 ||
+    (code === 100 && subcode === 33) ||
+    /\(#200\)|\(#10\)|\(#3\)|\(#294\)|(?:extended permission|requires).*?ads_management|ads management permission|does not have permission|do(?:es)? not have the capability|has not grant|missing permission|permissions error/.test(
       haystack,
     )
   ) {
