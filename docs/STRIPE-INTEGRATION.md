@@ -1,5 +1,7 @@
 # Stripe Integration — Spec
 
+> **STALE PRICING (corrected 30 Jun 2026):** this doc describes the original flat **£300/mo** model + `STRIPE_PRICE_SUPERPULSE_MONTHLY`, which is **retired/dead code**. Live model since 29 Jun 2026 is **£27/location/mo** (Stripe quantity = locations, `STRIPE_PRICE_SUPERPULSE_SEAT`, `tenants.paid_locations` gate). Canonical pricing: CLAUDE.md "Pricing" section. The webhook events, apex-redirect trap, and legacy-bypass notes below are still accurate.
+
 **Authored:** 2026-04-30
 **Notion subtask:** 5 (Stripe billing — single £300/mo tier)
 **Files:** `src/lib/stripe.ts`, `src/app/pricing/page.tsx`, `src/app/api/checkout/route.ts`, `src/app/api/webhook/stripe/route.ts`, `src/app/onboarding/support/page.tsx`

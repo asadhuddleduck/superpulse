@@ -108,3 +108,62 @@ export function classifyMetaError(err: unknown): MetaPostRejection | null {
   }
   return null;
 }
+
+/**
+ * Detects a Meta error that is permanent for PROVISIONING — an access / token /
+ * permission failure that will keep failing every retry until a human acts
+ * (re-auth, grant ads_management, add the user as an app tester while we're at
+ * Limited Access, or fix ad-account access). This is distinct from
+ * classifyMetaError, which is about per-post content rejections (copyright,
+ * deprecated fields).
+ *
+ * Returns a stable reason string for the audit trail, or null when the error
+ * looks transient (rate limit, 5xx, network blip) and is worth retrying next
+ * cron tick. Conservative by design — only clear OAuth/permission signatures
+ * are treated as permanent, so a flaky Meta blip still gets retried.
+ */
+export function classifyMetaAccessError(err: unknown): { reason: string } | null {
+  const raw = err instanceof Error ? err.message : String(err);
+
+  let code: number | null = null;
+  let userMsg = "";
+  let devMsg = "";
+  const jsonStart = raw.indexOf("{");
+  if (jsonStart !== -1) {
+    try {
+      const parsed = JSON.parse(raw.slice(jsonStart));
+      const errBody = parsed?.error ?? parsed;
+      if (typeof errBody?.code === "number") code = errBody.code;
+      userMsg = String(errBody?.error_user_msg ?? "");
+      devMsg = String(errBody?.message ?? "");
+    } catch {
+      // Body wasn't JSON — fall back to the regex tier over `raw`.
+    }
+  }
+  const haystack = `${raw}\n${userMsg}\n${devMsg}`.toLowerCase();
+
+  // Invalid / expired / undecryptable access token — needs re-auth.
+  if (
+    code === 190 ||
+    /error validating access token|session has expired|access token (?:is invalid|has expired|could not be decrypted)|invalid oauth access token/.test(
+      haystack,
+    )
+  ) {
+    return { reason: "meta_token_invalid" };
+  }
+
+  // Missing permission / capability — ads_management not granted, or the user
+  // isn't an app tester while the permission is at Limited Access.
+  if (
+    code === 10 ||
+    code === 3 ||
+    code === 200 ||
+    /\(#200\)|\(#10\)|\(#3\)|requires ads_management|does not have permission|do(?:es)? not have the capability|has not grant|permissions error/.test(
+      haystack,
+    )
+  ) {
+    return { reason: "meta_permission_denied" };
+  }
+
+  return null;
+}

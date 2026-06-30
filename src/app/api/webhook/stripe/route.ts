@@ -251,6 +251,26 @@ async function handlePaymentFailed(invoice: Stripe.Invoice) {
 
 async function handleAuditPayment(session: Stripe.Checkout.Session) {
   const product = (session.metadata?.product ?? "").trim();
+
+  // £90 onboarding handhold — a one-off "we'll connect it for you" call. It has
+  // no DB table of its own; the value is that Asad is told to action it, so
+  // alert Slack with the buyer's contact details instead of silently banking it.
+  if (product === "onboarding-handhold") {
+    const email = (
+      session.customer_details?.email ??
+      session.customer_email ??
+      ""
+    ).trim().toLowerCase();
+    const name = (session.customer_details?.name ?? "").trim();
+    const amountTotal = session.amount_total ?? 0;
+    void notifySlack(
+      `🤝 £90 onboarding handhold purchased (${gbp(amountTotal)})\n*Email:* ${email || "unknown"}` +
+        (name ? `\n*Name:* ${name}` : "") +
+        `\nGet on a call and connect SuperPulse for them.`,
+    );
+    return;
+  }
+
   if (product !== "audit-27" && product !== "audit-97") return;
 
   const sessionId = session.id;

@@ -27,6 +27,9 @@ export async function POST() {
       cancel_url: `${baseUrl}/onboarding/support`,
       automatic_tax: { enabled: true },
       tax_id_collection: { enabled: true },
+      // Session-level metadata so the webhook (handleAuditPayment, mode=payment)
+      // can identify the handhold and alert Asad with the buyer's email/name.
+      metadata: { product: "onboarding-handhold" },
       payment_intent_data: {
         metadata: { product: "onboarding-handhold" },
       },

@@ -2,6 +2,8 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getCurrentTenant } from "@/lib/auth";
 import { fetchMe } from "@/lib/facebook";
+import { getLocationsForTenant } from "@/lib/queries/locations";
+import { validateTenantBudget } from "@/lib/v8/budget-plan";
 import ImpersonationBanner from "@/components/ImpersonationBanner";
 
 export default async function DashboardLayout({
@@ -53,6 +55,19 @@ export default async function DashboardLayout({
     }
     if (tenant.provisioningStatus === "pending_budget") {
       redirect("/onboarding/budget");
+    }
+    // provision_failed has two causes. Budget-too-tight is user-self-fixable, so
+    // loop them back to the budget step to re-approve (which flips them to
+    // 'provisioning' and re-enters the cron). A Meta access/token failure is
+    // operational — the provision cron has already Slack-alerted Asad — so we do
+    // NOT bounce them to budget (re-approving wouldn't help and would loop); we
+    // render the dashboard, where the activity feed shows the failure.
+    if (tenant.provisioningStatus === "provision_failed") {
+      const locs = await getLocationsForTenant(tenant.id);
+      const budget = validateTenantBudget(tenant.monthlyAdBudgetPennies ?? 0, locs.length);
+      if (!budget.ok) {
+        redirect("/onboarding/budget?reason=provision_failed");
+      }
     }
   }
 

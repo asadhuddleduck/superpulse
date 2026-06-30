@@ -254,6 +254,12 @@ export async function GET(request: NextRequest) {
     setTenantCookie(response, tenantId);
     await applyJoinComp(response, tenantId);
     await applyJoinMagic(response, tenantId);
+    // Single-Page buyers reach here too — attach the paid Stripe sub to this
+    // IG-keyed tenant, same as the multi-Page branch above. Without this the
+    // sub stays orphaned on the cust_ placeholder, the tenant keeps
+    // subscription_status='pending', and the dashboard bounces them to /pricing
+    // after they fully connected (the dominant one-Page local-business case).
+    await applyCheckoutSubscription(response, tenantId);
     return response;
   } catch (err) {
     console.error("Facebook OAuth callback error:", err);

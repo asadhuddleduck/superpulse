@@ -64,7 +64,7 @@ SuperPulse v8 is a single-objective, single-CTA, Reels-only auto-boost engine fo
 ### Migration
 25. **No legacy migration to v8.** All 8 paused campaigns stay paused. Six legacy tenants stay on manual SuperPulse-by-name forever (or until they choose to upgrade).
 26. **v8 = new sign-ups only.** First v8 customer goes through the new funnel. Asad's own ad account `act_1059094086326037` is the first soak target.
-27. **Meta App Review:** Standard Access for `ads_management` is rejected (status as of 23 Apr 2026). With no legacy migration, the 1500 calls/15d threshold has to come from new sign-ups. Realistic timing: 4–8 weeks post-launch with 15–30 active tenants. Sub-25-tester operation in the meantime.
+27. **Meta `ads_management` access — SCALE gate, not a launch gate (corrected 30 Jun 2026).** Earlier text framed this as "rejected/existential"; that conflated two separate Meta systems. (a) **Permission access level** (set by App Review): "Limited" works for users with a role on the app (testers/admins) + accounts we have access to → real clients run NOW at small scale; "Full" is only for the open public. (b) **Marketing API access tier** (rate limits): upgraded by **500+ successful Marketing API calls in 15 days, <15% error rate** — lowered from 1,500 on 4 May 2026 (the feature was renamed "Ads Management Standard Access" → "Marketing API Access Tier"; tiers "Standard"→"Limited", "Advanced"→"Full"). So: launch the first cohort under Limited Access, let usage clear the 500-call bar, earn Full Access for open self-serve. The path to scale runs through launching. See memory `meta-ads-management-not-a-blocker.md`.
 
 ### Dashboard
 28. **Phone-first.** Most customers will check on their phone in the kitchen / behind the counter.
@@ -212,7 +212,7 @@ These are deliberately deferred to keep v8 launchable:
 - Daily WhatsApp/SMS summary.
 - Multi-tier subscription pricing (Starter/Growth/Pro).
 - Annual billing.
-- Self-serve onboarding past 25 testers (App Review approval gates this).
+- Open public self-serve at scale (gated on the Full Access upgrade, earned via the 500-calls/15d usage threshold — see §27). Small-scale self-serve for added testers / accounts we access works now.
 - Full-AI audit fulfillment (hybrid is good enough for launch).
 
 ---

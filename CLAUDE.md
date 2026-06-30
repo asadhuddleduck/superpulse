@@ -25,7 +25,7 @@ SuperPulse automatically boosts Instagram posts for local businesses using AI. T
 - **Framework:** Next.js (App Router, TypeScript)
 - **Styling:** Tailwind CSS
 - **Database:** Turso (LibSQL/SQLite cloud)
-- **Auth:** Clerk
+- **Auth:** Self-rolled httpOnly Facebook-token cookie (`src/lib/auth.ts`) — NOT Clerk (Clerk was scaffolded but never used)
 - **Billing:** Stripe
 - **Ads API:** Meta Marketing API v25.0 (facebook-nodejs-business-sdk)
 - **Email:** Resend
@@ -222,7 +222,7 @@ Per cluster: seed 5 free businesses → harvest 15-20 paying through competitive
 Ahmed-type: Local restaurant/takeaway owner, 2-5K followers, posts 3-4x/week, £500 marketing budget, nephew does social media. Discovers tools through word of mouth. £49/month Starter tier.
 
 ## Key Risks
-1. **Meta App Review (EXISTENTIAL)** — Previously rejected. Must submit immediately. Fallback: Instagram Promote API.
+1. **Meta `ads_management` access — SCALE gate, NOT a launch gate (do not call it existential).** Two separate Meta systems get conflated: (a) the **permission access level** — "Limited" (works for users with a role on the app: admins/devs/testers, + accounts we have access to) vs "Full" (open public), set by App Review; and (b) the **Marketing API access tier** (rate limits), upgraded by hitting **500+ successful Marketing API calls in 15 days, <15% error rate** (lowered from 1,500 on 4 May 2026, when "Ads Management Standard Access" was renamed "Marketing API Access Tier"). We can run **real clients' ads now at small scale** (add each as an app tester / use accounts we access); the usage that generates is what earns Full Access for open self-serve. The path to scale runs through launching, not before it. See memory `meta-ads-management-not-a-blocker.md`.
 2. **Boosterberg ceiling** — $330K ARR after 9 years doing the same thing. SuperPulse MUST evolve beyond just boosting.
 3. **Copyright music** — 73% of restaurant Reels have copyrighted music. Try-and-fail pattern required (create PAUSED, wait for review, activate if clean).
 
@@ -341,6 +341,7 @@ The 13 Apr 2026 NEC waitlist (password-gated, name+email+phone only) was retired
 - **Initial API calls:** All 7 permissions tested via Graph API Explorer (4 Apr 2026)
 
 ## Meta App Review Status (updated 13 Apr 2026)
+> **Reframe (30 Jun 2026):** Full Access for `ads_management` (open public self-serve) is NOT a launch blocker. We run real clients at small scale under Limited Access now (testers / accounts we access); Full Access is earned via the 500-calls/15d Marketing API usage threshold. See Key Risks #1 + memory `meta-ads-management-not-a-blocker.md`. The submission record below is historical context for the eventual Full Access push.
 - **Current state:** ✅ **SUBMITTED — In Review** (submitted 13 Apr 2026)
 - **Submission ID:** 1962215541066852
 - **Business Verification:** DONE (inherited from Huddle Duck portfolio)

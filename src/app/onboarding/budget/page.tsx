@@ -18,7 +18,15 @@ export default async function BudgetPage() {
 
   const tenant = await getTenantById(tenantId);
   if (!tenant) redirect("/login");
-  if (tenant.provisioningStatus !== "pending_budget") redirect("/dashboard");
+  // Allow both the first-time budget step and a provision_failed re-approval
+  // (budget-too-tight): re-submitting flips the tenant back into 'provisioning'.
+  if (
+    tenant.provisioningStatus !== "pending_budget" &&
+    tenant.provisioningStatus !== "provision_failed"
+  ) {
+    redirect("/dashboard");
+  }
+  const isRetry = tenant.provisioningStatus === "provision_failed";
 
   const locations = await getLocationsForTenant(tenantId);
   const n = locations.length;
@@ -31,6 +39,13 @@ export default async function BudgetPage() {
             <span className="text-viridian">Super</span>
             <span className="text-sandstorm">Pulse</span>
           </h1>
+          {isRetry && (
+            <div className="mt-5 rounded-lg border border-sandstorm/40 bg-sandstorm/10 px-4 py-3 text-sm text-sandstorm">
+              Your budget was a little too low to run steadily across {n}{" "}
+              {n === 1 ? "location" : "locations"}. Nudge it up and we&apos;ll
+              get your campaigns going.
+            </div>
+          )}
           <p className="mt-3 text-zinc-400 leading-relaxed">
             How much should each location spend per day? Every location runs as
             its own local ad set. This is your Meta ad spend, billed on your own

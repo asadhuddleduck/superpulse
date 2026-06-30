@@ -20,7 +20,12 @@ export async function POST(request: NextRequest) {
 
   const tenant = await getTenantById(tenantId);
   if (!tenant) return NextResponse.json({ error: "Tenant not found" }, { status: 404 });
-  if (tenant.provisioningStatus !== "pending_budget") {
+  // 'provision_failed' is allowed too — a budget-too-tight tenant re-approving a
+  // viable budget, which setTenantBudget flips back to 'provisioning'.
+  if (
+    tenant.provisioningStatus !== "pending_budget" &&
+    tenant.provisioningStatus !== "provision_failed"
+  ) {
     return NextResponse.json({ error: "Not at the budget step" }, { status: 409 });
   }
 

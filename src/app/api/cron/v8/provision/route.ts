@@ -17,6 +17,8 @@ import {
 import { validateTenantBudget } from "@/lib/v8/budget-plan";
 import { guardTenant, CREATION_BREAKER_THRESHOLD } from "@/lib/v8/circuit-breaker";
 import { writeAuditEvent } from "@/lib/queries/audit-events";
+import { classifyMetaError, classifyMetaAccessError } from "@/lib/meta-errors";
+import { notifySlack } from "@/lib/slack";
 
 // v8 provision cron — 5-min cadence. PRODUCER: per active+provisioning,
 // non-legacy tenant, ensure the campaign row exists then enqueue the missing
@@ -94,7 +96,36 @@ async function provisionOneTenant(tenant: Tenant): Promise<TenantProvisionResult
     return result;
   }
 
-  const campaign = await ensureCampaignRow(tenant);
+  // The only Meta write in this lane is the campaign create inside
+  // ensureCampaignRow. A permanent access failure here (expired token, no
+  // ads_management grant, user not yet an app tester, ad-account access lost)
+  // would otherwise bubble to runProvision's summary-only catch — no audit
+  // event, no status change — leaving the tenant stuck in 'provisioning' and
+  // retrying every 5 min forever, invisibly. Catch it, surface it, and park the
+  // tenant in 'provision_failed' (excluded from getTenantsAwaitingProvision)
+  // so the loop stops and Asad gets a Slack ping to act. Transient errors are
+  // re-thrown so they still retry next tick.
+  let campaign: Awaited<ReturnType<typeof ensureCampaignRow>>;
+  try {
+    campaign = await ensureCampaignRow(tenant);
+  } catch (err) {
+    const access = classifyMetaAccessError(err);
+    const rejection = classifyMetaError(err);
+    if (!access && !rejection?.permanent) throw err; // transient → retry next tick
+    const reason = access?.reason ?? rejection!.reason;
+    await setProvisioningStatus(tenant.id, "provision_failed");
+    await writeAuditEvent(tenant.id, "v8_provision_failed", `Provisioning blocked: ${reason}`, {
+      reason,
+      error: (err instanceof Error ? err.message : String(err)).slice(0, 500),
+    });
+    void notifySlack(
+      `🔴 SuperPulse provisioning blocked — *${tenant.name ?? tenant.id}* (${reason}). ` +
+        `Campaign create was rejected by Meta. Likely needs the user added as an app tester / ` +
+        `re-auth / ad-account access. Tenant parked in provision_failed.`,
+    );
+    result.skipped = `provision_failed:${reason}`;
+    return result;
+  }
   result.campaignReady = true;
 
   const [missingLocations, missingPairs, pending] = await Promise.all([
