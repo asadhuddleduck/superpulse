@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import PostCard from "./PostCard";
 import type { IGPost } from "./PostCard";
+import { Card } from "@/components/ui/Card";
 
 interface IGAccount {
   pageId: string;
@@ -74,7 +75,7 @@ export default function IGPostsView({
         <div className="mb-6">
           <label
             htmlFor="ig-selector"
-            className="block text-sm font-medium text-zinc-400 mb-2"
+            className="mb-2 block text-sm font-medium text-mist"
           >
             Instagram Account
           </label>
@@ -82,7 +83,7 @@ export default function IGPostsView({
             id="ig-selector"
             value={selectedIg}
             onChange={(e) => setSelectedIg(e.target.value)}
-            className="rounded-lg border border-zinc-700 bg-zinc-900 px-4 py-2.5 text-white text-sm focus:border-[#1EBA8F] focus:outline-none focus:ring-1 focus:ring-[#1EBA8F] transition-colors"
+            className="min-h-11 max-w-full rounded-lg border border-slate bg-graphite px-4 text-sm text-white transition-colors focus:border-viridian focus:outline-none focus:ring-1 focus:ring-viridian"
           >
             {igAccounts.map((acc) => (
               <option key={acc.igUserId} value={acc.igUserId}>
@@ -96,29 +97,29 @@ export default function IGPostsView({
       {/* Loading */}
       {loading && (
         <div className="text-center py-10">
-          <div className="inline-block h-6 w-6 animate-spin rounded-full border-2 border-[#1EBA8F] border-t-transparent" />
-          <p className="text-zinc-500 mt-3 text-sm">Loading posts...</p>
+          <div className="inline-block h-6 w-6 animate-spin rounded-full border-2 border-viridian border-t-transparent" />
+          <p className="mt-3 text-sm text-mist">Loading posts...</p>
         </div>
       )}
 
       {/* Posts count */}
       {!loading && (
-        <p className="text-zinc-500 mb-4">
+        <p className="mb-4 text-mist">
           {posts.length} post{posts.length !== 1 ? "s" : ""} found
         </p>
       )}
 
       {/* Posts grid */}
       {!loading && posts.length === 0 && (
-        <div className="rounded-lg border border-zinc-800 bg-zinc-900/50 p-10 text-center">
-          <p className="text-zinc-400 text-lg font-medium">
+        <Card className="p-10 text-center">
+          <p className="text-lg font-medium text-white">
             No Instagram posts found
           </p>
-          <p className="text-zinc-500 text-sm mt-2">
+          <p className="mt-2 text-sm text-mist">
             This account may not have any recent posts, or the Instagram
             Business account may not be linked.
           </p>
-        </div>
+        </Card>
       )}
 
       {!loading && posts.length > 0 && (

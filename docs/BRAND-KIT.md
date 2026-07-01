@@ -41,43 +41,51 @@
 3. **No light mode** — the brand IS dark. Graphite (#111116) is the lightest allowable background.
 4. **Match Huddle Duck** — if in doubt, use the same colour Huddle Duck would use.
 
-### CSS Variables
+### CSS Variables (as actually wired)
+
+These live in `src/app/globals.css` under `:root`, and are exposed to Tailwind v4 via the `@theme inline` block in the same file. Names are **flat / unprefixed** (the app already used `viridian`/`sandstorm`, so we kept that and added the rest rather than churn every class to an `sp-` prefix).
 
 ```css
 :root {
-  /* Backgrounds */
-  --sp-void: #050508;
-  --sp-graphite: #111116;
-  --sp-slate: #1E1E26;
+  /* Backgrounds & surfaces */
+  --void: #050508;
+  --graphite: #111116;
+  --slate: #1e1e26;
 
   /* Accents */
-  --sp-yellow: #F7CE46;
-  --sp-green: #1EBA8F;
-  --sp-green-60: rgba(30, 186, 143, 0.6);
+  --sandstorm: #f7ce46;
+  --viridian: #1eba8f;
+  --viridian-muted: rgba(30, 186, 143, 0.6);
 
   /* Text */
-  --sp-white: #F0F0F5;
-  --sp-mist: #8888A0;
-  --sp-shadow: #555566;
+  --white: #f0f0f5; /* never pure #FFFFFF */
+  --mist: #8888a0;
+  --shadow: #555566;
+
+  /* Semantic aliases */
+  --background: var(--void);
+  --foreground: var(--white);
 }
 ```
 
-### Tailwind Config
+### Tailwind utilities
 
-```js
-colors: {
-  sp: {
-    void: '#050508',
-    graphite: '#111116',
-    slate: '#1E1E26',
-    yellow: '#F7CE46',
-    green: '#1EBA8F',
-    white: '#F0F0F5',
-    mist: '#8888A0',
-    shadow: '#555566',
-  }
-}
-```
+Tailwind v4 — there is **no `tailwind.config.js`**. The `@theme inline` block in `globals.css` turns each `--color-*` token into utilities automatically. Use these class names anywhere:
+
+| Token | Utilities |
+|---|---|
+| Void | `bg-void` |
+| Graphite | `bg-graphite` (cards; `/40`–`/50` opacity fine) |
+| Slate | `border-slate` (borders/dividers) |
+| Sandstorm | `bg-sandstorm` `text-sandstorm` `border-sandstorm` (identity + CTAs) |
+| Viridian | `bg-viridian` `text-viridian` `border-viridian` (data/status). `viridian/60` for hover |
+| White | `text-white` (already remapped to `#F0F0F5`) |
+| Mist | `text-mist` (secondary text/labels) |
+| Shadow | `text-shadow` `placeholder:text-shadow` (placeholders/disabled) |
+
+Opacity modifiers work on every token (`bg-viridian/90`, `border-sandstorm/40`). Text on a viridian/sandstorm surface is `text-void`.
+
+> **UI kit:** don't hand-roll buttons/cards/inputs. Import from `src/components/ui/` (`Button`, `Card`, `Input`/`Textarea`/`Label`, `PageHeading`, `Wordmark`, `OnboardingShell`, `OnboardingProgress`, `FadeIn`). These bake in the spacing scale, ≥44px tap targets, and the tokens above.
 
 ---
 
@@ -98,14 +106,14 @@ colors: {
 - **Line height:** 1.5-1.6 for body text.
 - **Letter spacing:** -0.02em on bold headlines for density.
 
-### Installation
+### Installation (as actually wired)
 
-```html
-<!-- Inter (Google Fonts) -->
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;800&display=swap" rel="stylesheet">
+Loaded via `next/font/google` in `src/app/layout.tsx` (self-hosted, no external `<link>`), exposed as CSS vars `--font-inter` / `--font-jetbrains`, and mapped to Tailwind's `--font-sans` / `--font-mono` in `globals.css`. Use `font-sans` (default) for text and `font-mono` for metrics/numbers.
 
-<!-- JetBrains Mono (Google Fonts) -->
-<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+```tsx
+import { Inter, JetBrains_Mono } from "next/font/google";
+const inter = Inter({ variable: "--font-inter", subsets: ["latin"], weight: ["400", "500", "700", "800"] });
+const jetbrainsMono = JetBrains_Mono({ variable: "--font-jetbrains", subsets: ["latin"], weight: ["400", "500"] });
 ```
 
 ---
@@ -199,52 +207,25 @@ The brand pattern (`brand/brand-pattern.jpg`) is a subtle dark texture of tiny l
 
 ## Quick Start for Developers
 
-```tsx
-// Tailwind config extension
-module.exports = {
-  theme: {
-    extend: {
-      colors: {
-        sp: {
-          void: '#050508',
-          graphite: '#111116',
-          slate: '#1E1E26',
-          yellow: '#F7CE46',
-          green: '#1EBA8F',
-          white: '#F0F0F5',
-          mist: '#8888A0',
-          shadow: '#555566',
-        }
-      },
-      fontFamily: {
-        sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif'],
-        mono: ['JetBrains Mono', 'SF Mono', 'Fira Code', 'monospace'],
-      },
-    },
-  },
-}
-```
+Tokens + fonts are already wired (Tailwind v4, no config file). Just use the flat utilities and the UI kit.
 
 ```tsx
+import { Wordmark } from "@/components/ui/Wordmark";
+import { Button } from "@/components/ui/Button";
+
 // Example component
-<div className="bg-sp-void min-h-screen">
-  <header className="bg-sp-graphite border-b border-sp-slate">
-    <h1 className="text-sp-white font-bold text-2xl tracking-tight">
-      SuperPulse
-    </h1>
+<div className="min-h-screen bg-void text-white">
+  <header className="border-b border-slate">
+    <Wordmark />
   </header>
-  <main className="p-8">
-    <div className="text-5xl font-mono text-sp-green">423</div>
-    <div className="text-xs uppercase text-sp-mist tracking-wider">
-      Profile Visits
-    </div>
-    <button className="bg-sp-yellow text-sp-void font-bold px-6 py-3 rounded-lg mt-4">
-      Get Started
-    </button>
+  <main className="p-6">
+    <div className="text-5xl font-mono tabular-nums text-viridian">423</div>
+    <div className="text-xs uppercase tracking-wider text-mist">Profile Visits</div>
+    <Button variant="sandstorm" className="mt-4">Get Started</Button>
   </main>
 </div>
 ```
 
 ---
 
-*Last updated: April 2026 | SuperPulse by Huddle Duck Ltd*
+*Last updated: July 2026 (tokens + fonts wired to the flat namespace; UI kit added) | SuperPulse by Huddle Duck Ltd*

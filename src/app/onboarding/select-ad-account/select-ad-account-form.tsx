@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { Button } from "@/components/ui/Button";
 
 interface Choice {
   adAccountId: string;
@@ -40,10 +41,10 @@ export function SelectAdAccountForm({ choices }: { choices: Choice[] }) {
       {choices.map((choice) => (
         <label
           key={choice.adAccountId}
-          className={`block rounded-lg border px-5 py-4 cursor-pointer transition-all ${
+          className={`block cursor-pointer rounded-xl border px-5 py-4 transition-all ${
             selected === choice.adAccountId
               ? "border-viridian bg-viridian/10"
-              : "border-zinc-800 hover:border-zinc-700"
+              : "border-slate hover:border-mist/40"
           }`}
         >
           <input
@@ -56,18 +57,18 @@ export function SelectAdAccountForm({ choices }: { choices: Choice[] }) {
           />
           <div className="flex items-center justify-between gap-4">
             <div className="min-w-0">
-              <div className="text-base font-medium text-zinc-100 truncate">
+              <div className="truncate text-base font-medium text-white">
                 {choice.name}
               </div>
-              <div className="text-xs text-zinc-500 mt-0.5 truncate">
+              <div className="mt-0.5 truncate font-mono text-xs text-mist">
                 {choice.currency}
               </div>
             </div>
             <span
-              className={`shrink-0 h-4 w-4 rounded-full border-2 ${
+              className={`h-4 w-4 shrink-0 rounded-full border-2 ${
                 selected === choice.adAccountId
                   ? "border-viridian bg-viridian"
-                  : "border-zinc-600"
+                  : "border-mist/40"
               }`}
               aria-hidden
             />
@@ -75,17 +76,16 @@ export function SelectAdAccountForm({ choices }: { choices: Choice[] }) {
         </label>
       ))}
 
-      {error ? (
-        <p className="text-sm text-red-400">{error}</p>
-      ) : null}
+      {error ? <p className="text-sm text-red-400">{error}</p> : null}
 
-      <button
+      <Button
         type="submit"
+        fullWidth
         disabled={!selected || submitting}
-        className="mt-4 w-full rounded-lg bg-viridian px-6 py-3 text-black font-semibold transition-all hover:bg-viridian/90 disabled:opacity-50 disabled:cursor-not-allowed"
+        className="mt-4"
       >
         {submitting ? "Connecting…" : "Continue"}
-      </button>
+      </Button>
     </form>
   );
 }

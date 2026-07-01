@@ -6,6 +6,7 @@ import { fetchMe } from "@/lib/facebook";
 import { getLocationsForTenant } from "@/lib/queries/locations";
 import { validateTenantBudget } from "@/lib/v8/budget-plan";
 import ImpersonationBanner from "@/components/ImpersonationBanner";
+import { Wordmark } from "@/components/ui/Wordmark";
 
 export default async function DashboardLayout({
   children,
@@ -99,46 +100,50 @@ export default async function DashboardLayout({
   }
 
   return (
-    <div className="min-h-screen bg-black">
+    <div className="min-h-screen bg-void text-white">
       <ImpersonationBanner />
       {/* Header */}
-      <header className="border-b border-zinc-800">
-        <div className="max-w-5xl mx-auto px-6 py-4 flex items-center justify-between">
-          <Link href="/dashboard" className="text-xl font-bold tracking-tight">
-            <span className="text-viridian">Super</span>
-            <span className="text-sandstorm">Pulse</span>
-          </Link>
-          <nav className="hidden sm:flex items-center gap-6">
+      <header className="border-b border-slate">
+        <div className="mx-auto flex max-w-5xl items-center justify-between gap-3 px-6 py-4">
+          <Wordmark href="/dashboard" />
+          <nav className="hidden items-center gap-6 sm:flex">
             <NavLink href="/dashboard">Dashboard</NavLink>
             <NavLink href="/dashboard/posts">Posts</NavLink>
             <NavLink href="/dashboard/locations">Locations</NavLink>
             <NavLink href="/dashboard/settings">Settings</NavLink>
           </nav>
           <div className="flex items-center gap-4">
-            <span className="text-sm text-zinc-400 hidden sm:inline">
+            <span className="hidden text-sm text-mist sm:inline">
               {user.name}
             </span>
             <a
               href="/api/auth/logout"
-              className="text-sm text-zinc-500 hover:text-white transition-colors"
+              className="inline-flex min-h-11 items-center text-sm text-mist transition-colors hover:text-white"
             >
               Log out
             </a>
           </div>
         </div>
-        {/* Mobile nav */}
-        <div className="sm:hidden border-t border-zinc-800/50">
-          <div className="max-w-5xl mx-auto px-6 py-2 flex items-center gap-4">
-            <NavLink href="/dashboard">Dashboard</NavLink>
-            <NavLink href="/dashboard/posts">Posts</NavLink>
-            <NavLink href="/dashboard/locations">Locations</NavLink>
-            <NavLink href="/dashboard/settings">Settings</NavLink>
+        {/* Mobile nav — horizontal-scroll pill strip so 4 links never crowd/clip at 390px */}
+        <div className="border-t border-slate sm:hidden">
+          <div
+            className="mx-auto flex max-w-5xl items-center gap-2 overflow-x-auto px-6 py-2"
+            style={{
+              scrollbarWidth: "none",
+              msOverflowStyle: "none",
+              WebkitOverflowScrolling: "touch",
+            }}
+          >
+            <NavPill href="/dashboard">Dashboard</NavPill>
+            <NavPill href="/dashboard/posts">Posts</NavPill>
+            <NavPill href="/dashboard/locations">Locations</NavPill>
+            <NavPill href="/dashboard/settings">Settings</NavPill>
           </div>
         </div>
       </header>
 
       {/* Main content */}
-      <main className="max-w-5xl mx-auto px-6 py-10">{children}</main>
+      <main className="mx-auto max-w-5xl px-6 py-10">{children}</main>
     </div>
   );
 }
@@ -153,7 +158,24 @@ function NavLink({
   return (
     <Link
       href={href}
-      className="text-sm text-zinc-400 hover:text-white transition-colors"
+      className="text-sm text-mist transition-colors hover:text-white"
+    >
+      {children}
+    </Link>
+  );
+}
+
+function NavPill({
+  href,
+  children,
+}: {
+  href: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <Link
+      href={href}
+      className="inline-flex min-h-11 shrink-0 items-center whitespace-nowrap rounded-full border border-transparent px-4 text-sm text-mist transition-colors hover:border-slate hover:bg-graphite hover:text-white"
     >
       {children}
     </Link>

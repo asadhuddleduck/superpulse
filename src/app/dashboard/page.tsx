@@ -7,10 +7,13 @@ import type { PageWithIG, AdAccount } from "@/lib/facebook";
 import StatusPanel from "@/components/StatusPanel";
 import BoostControl from "@/components/BoostControl";
 import { getLocationsForTenant } from "@/lib/queries/locations";
+import { PageHeading } from "@/components/ui/PageHeading";
+import { Card } from "@/components/ui/Card";
+import { Button } from "@/components/ui/Button";
 
 export const metadata: Metadata = {
-  title: "Dashboard — SuperPulse",
-  description: "Your SuperPulse dashboard — manage your Instagram ad boosting.",
+  title: "Dashboard | SuperPulse",
+  description: "Your SuperPulse dashboard. Manage your Instagram ad boosting.",
 };
 
 export default async function DashboardPage() {
@@ -44,38 +47,39 @@ export default async function DashboardPage() {
   return (
     <>
       {/* Welcome */}
-      <div className="mb-10">
-        <h2 className="text-3xl font-bold text-white">
-          Welcome, {user.name.split(" ")[0]}
-        </h2>
-        {user.email && (
-          <p className="text-zinc-500 mt-1">{user.email}</p>
-        )}
-      </div>
+      <PageHeading
+        className="mb-10"
+        title={`Welcome, ${user.name.split(" ")[0]}`}
+        subtitle={user.email}
+      />
 
       {/* Pause / Resume the whole engine (self-serve) */}
       <BoostControl initialPaused={tenant.selfPaused} />
 
       {/* Locations onboarding banner — only when none added yet */}
       {locationCount === 0 && (
-        <div className="mb-10 rounded-xl border border-sandstorm/40 bg-sandstorm/5 p-5 flex items-start justify-between gap-4">
+        <Card
+          variant="accent"
+          className="mb-10 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between"
+        >
           <div>
             <p className="font-semibold text-sandstorm">
               Add your locations to start boosting
             </p>
-            <p className="text-sm text-zinc-300 mt-1 max-w-xl">
+            <p className="mt-1 max-w-xl text-sm text-mist">
               SuperPulse targets each Instagram boost to a radius around a
               physical location. Add at least one address so your boosts know
               where to run.
             </p>
           </div>
-          <Link
+          <Button
             href="/dashboard/locations"
-            className="shrink-0 rounded-lg bg-sandstorm px-4 py-2 text-sm font-semibold text-black hover:bg-sandstorm/90 transition"
+            variant="sandstorm"
+            className="shrink-0"
           >
             Add locations
-          </Link>
-        </div>
+          </Button>
+        </Card>
       )}
 
       {/* Live status — replaces stats cards. Polls /api/status every 30s. */}
@@ -83,16 +87,16 @@ export default async function DashboardPage() {
 
       {/* Quick Nav */}
       <section className="mb-10">
-        <h3 className="text-lg font-semibold text-white mb-4">Quick Actions</h3>
+        <h3 className="mb-4 text-lg font-semibold text-white">Quick Actions</h3>
         <div className="grid gap-4 sm:grid-cols-2">
-          <Link
-            href="/dashboard/posts"
-            className="group rounded-lg border border-zinc-800 bg-zinc-900/50 p-5 transition-all hover:border-[#1EBA8F]/50 hover:bg-zinc-900"
-          >
-            <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-[#1EBA8F]/10">
+          <Link href="/dashboard/posts" className="group block">
+            <Card
+              variant="subtle"
+              className="flex items-center gap-3 transition-all hover:border-viridian/50 hover:bg-graphite"
+            >
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-viridian/10">
                 <svg
-                  className="h-5 w-5 text-[#1EBA8F]"
+                  className="h-5 w-5 text-viridian"
                   fill="none"
                   viewBox="0 0 24 24"
                   strokeWidth={1.5}
@@ -106,23 +110,23 @@ export default async function DashboardPage() {
                 </svg>
               </div>
               <div>
-                <p className="font-semibold text-white group-hover:text-[#1EBA8F] transition-colors">
+                <p className="font-semibold text-white transition-colors group-hover:text-viridian">
                   Your Posts
                 </p>
-                <p className="text-sm text-zinc-500">
+                <p className="text-sm text-mist">
                   View and manage boosted Instagram posts
                 </p>
               </div>
-            </div>
+            </Card>
           </Link>
-          <Link
-            href="/dashboard/settings"
-            className="group rounded-lg border border-zinc-800 bg-zinc-900/50 p-5 transition-all hover:border-[#F7CE46]/50 hover:bg-zinc-900"
-          >
-            <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-[#F7CE46]/10">
+          <Link href="/dashboard/settings" className="group block">
+            <Card
+              variant="subtle"
+              className="flex items-center gap-3 transition-all hover:border-sandstorm/50 hover:bg-graphite"
+            >
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-sandstorm/10">
                 <svg
-                  className="h-5 w-5 text-[#F7CE46]"
+                  className="h-5 w-5 text-sandstorm"
                   fill="none"
                   viewBox="0 0 24 24"
                   strokeWidth={1.5}
@@ -141,42 +145,39 @@ export default async function DashboardPage() {
                 </svg>
               </div>
               <div>
-                <p className="font-semibold text-white group-hover:text-[#F7CE46] transition-colors">
+                <p className="font-semibold text-white transition-colors group-hover:text-sandstorm">
                   Boost Settings
                 </p>
-                <p className="text-sm text-zinc-500">
+                <p className="text-sm text-mist">
                   Configure budget, radius, and boost preferences
                 </p>
               </div>
-            </div>
+            </Card>
           </Link>
         </div>
       </section>
 
       {/* Connected Pages with IG */}
       <section className="mb-10">
-        <h3 className="text-lg font-semibold text-viridian mb-4">
+        <h3 className="mb-4 text-lg font-semibold text-viridian">
           Connected Pages with Instagram
         </h3>
         {pagesWithIG.length === 0 ? (
-          <div className="rounded-lg border border-zinc-800 bg-zinc-900/50 p-6 text-center">
-            <p className="text-zinc-400">
+          <Card className="text-center">
+            <p className="text-mist">
               No Pages with linked Instagram Business accounts found.
             </p>
-            <p className="text-zinc-500 text-sm mt-2">
+            <p className="mt-2 text-sm text-mist">
               Make sure your Instagram account is converted to a Business or
               Creator account and linked to a Facebook Page.
             </p>
-          </div>
+          </Card>
         ) : (
           <div className="grid gap-4 sm:grid-cols-2">
             {pagesWithIG.map((page) => (
-              <div
-                key={page.id}
-                className="rounded-lg border border-zinc-800 bg-zinc-900/50 p-5"
-              >
+              <Card key={page.id}>
                 <p className="font-semibold text-white">{page.name}</p>
-                <p className="text-sm text-zinc-500 mt-1">
+                <p className="mt-1 text-sm text-mist">
                   Page ID: {page.id}
                 </p>
                 <div className="mt-3 flex items-center gap-2">
@@ -185,7 +186,7 @@ export default async function DashboardPage() {
                     IG Account: {page.instagram_business_account!.id}
                   </span>
                 </div>
-              </div>
+              </Card>
             ))}
           </div>
         )}
@@ -193,42 +194,39 @@ export default async function DashboardPage() {
 
       {/* Ad Accounts */}
       <section className="mb-10">
-        <h3 className="text-lg font-semibold text-sandstorm mb-4">
+        <h3 className="mb-4 text-lg font-semibold text-sandstorm">
           Ad Accounts
         </h3>
         {filteredAdAccounts.length === 0 ? (
-          <div className="rounded-lg border border-zinc-800 bg-zinc-900/50 p-6 text-center">
-            <p className="text-zinc-400">No ad accounts found.</p>
-            <p className="text-zinc-500 text-sm mt-2">
+          <Card className="text-center">
+            <p className="text-mist">No ad accounts found.</p>
+            <p className="mt-2 text-sm text-mist">
               Make sure you have an ad account in Meta Business Manager.
             </p>
-          </div>
+          </Card>
         ) : (
           <div className="grid gap-4 sm:grid-cols-2">
             {filteredAdAccounts.map((account) => (
-              <div
-                key={account.id}
-                className="rounded-lg border border-zinc-800 bg-zinc-900/50 p-5"
-              >
-                <div className="flex items-center justify-between">
+              <Card key={account.id}>
+                <div className="flex items-center justify-between gap-3">
                   <p className="font-semibold text-white">{account.name}</p>
                   <span
-                    className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-medium ${
+                    className={`inline-flex shrink-0 items-center rounded-full border px-2.5 py-0.5 text-xs font-medium ${
                       account.account_status === 1
-                        ? "bg-[#1EBA8F]/15 text-[#1EBA8F] border-[#1EBA8F]/30"
-                        : "bg-[#F7CE46]/15 text-[#F7CE46] border-[#F7CE46]/30"
+                        ? "border-viridian/30 bg-viridian/15 text-viridian"
+                        : "border-sandstorm/30 bg-sandstorm/15 text-sandstorm"
                     }`}
                   >
                     {account.account_status === 1 ? "Active" : "Inactive"}
                   </span>
                 </div>
-                <p className="text-sm text-zinc-500 mt-1">
+                <p className="mt-1 text-sm text-mist">
                   Account ID: {account.id}
                 </p>
-                <p className="text-sm text-zinc-500 mt-1">
+                <p className="mt-1 text-sm text-mist">
                   Currency: {account.currency}
                 </p>
-              </div>
+              </Card>
             ))}
           </div>
         )}
@@ -237,23 +235,20 @@ export default async function DashboardPage() {
       {/* Pages without IG */}
       {pagesWithoutIG.length > 0 && (
         <section>
-          <h3 className="text-lg font-semibold text-zinc-400 mb-4">
+          <h3 className="mb-4 text-lg font-semibold text-mist">
             Pages without Instagram
           </h3>
           <div className="grid gap-4 sm:grid-cols-2">
             {pagesWithoutIG.map((page) => (
-              <div
-                key={page.id}
-                className="rounded-lg border border-zinc-800/50 bg-zinc-950 p-5"
-              >
-                <p className="font-semibold text-zinc-300">{page.name}</p>
-                <p className="text-sm text-zinc-600 mt-1">
+              <Card key={page.id} variant="subtle">
+                <p className="font-semibold text-mist">{page.name}</p>
+                <p className="mt-1 text-sm text-shadow">
                   Page ID: {page.id}
                 </p>
-                <p className="text-xs text-zinc-600 mt-2">
+                <p className="mt-2 text-xs text-shadow">
                   No Instagram Business account linked
                 </p>
-              </div>
+              </Card>
             ))}
           </div>
         </section>

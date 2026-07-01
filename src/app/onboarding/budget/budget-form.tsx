@@ -1,6 +1,8 @@
 "use client";
 
 import { useState } from "react";
+import { Button } from "@/components/ui/Button";
+import { Card } from "@/components/ui/Card";
 
 const DAYS_PER_MONTH = 30.4;
 
@@ -53,12 +55,12 @@ export function BudgetForm({ locationCount, minPerLocationDailyPennies }: Props)
   return (
     <form onSubmit={onSubmit} className="space-y-4">
       <label className="block">
-        <span className="flex items-center justify-between">
-          <span className="text-sm text-zinc-400">Budget per location, per day</span>
+        <span className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+          <span className="text-sm text-mist">Budget per location, per day</span>
           <span className="text-xs font-medium text-viridian">Recommended £{RECOMMENDED_PER_LOCATION_GBP}/day</span>
         </span>
-        <div className="mt-2 flex items-center rounded-lg border border-zinc-800 bg-zinc-900/40 px-4 focus-within:border-viridian">
-          <span className="text-zinc-500 text-lg">£</span>
+        <div className="mt-2 flex min-h-11 items-center rounded-lg border border-slate bg-graphite px-4 focus-within:border-viridian">
+          <span className="text-lg text-mist">£</span>
           <input
             type="number"
             inputMode="decimal"
@@ -69,39 +71,40 @@ export function BudgetForm({ locationCount, minPerLocationDailyPennies }: Props)
             className="w-full bg-transparent px-2 py-3 text-lg text-white outline-none"
             placeholder={String(RECOMMENDED_PER_LOCATION_GBP)}
           />
-          <span className="text-zinc-500 text-sm whitespace-nowrap">/day each</span>
+          <span className="whitespace-nowrap text-sm text-mist">/day each</span>
         </div>
       </label>
 
-      <div className="rounded-lg border border-zinc-800 bg-zinc-900/20 px-4 py-3 text-sm text-zinc-300">
+      <Card variant="subtle" className="text-sm text-mist">
         {valid ? (
           <>
-            {gbp(dailyTotalPennies)}/day total across {locationCount} location
+            <span className="font-mono tabular-nums text-white">{gbp(dailyTotalPennies)}</span>/day total across{" "}
+            {locationCount} location
             {locationCount === 1 ? "" : "s"}
-            <span className="text-zinc-500"> · ≈ {gbp(monthlyPennies)}/month on your Meta account</span>
+            <span className="text-mist"> · ≈ <span className="font-mono tabular-nums">{gbp(monthlyPennies)}</span>/month on your Meta account</span>
           </>
         ) : (
           <>Enter an amount per location.</>
         )}
-        <div className="mt-1 text-xs text-zinc-500">
-          Minimum {gbp(minPerLocationDailyPennies)}/day per location (Meta&apos;s delivery floor).
+        <div className="mt-1 text-xs text-mist">
+          Minimum <span className="font-mono tabular-nums">{gbp(minPerLocationDailyPennies)}</span>/day per location (Meta&apos;s delivery floor).
         </div>
-      </div>
+      </Card>
 
       {belowMin ? (
-        <p className="text-sm text-amber-400">
+        <p className="text-sm text-red-400">
           Meta needs at least {gbp(minPerLocationDailyPennies)}/day per location to deliver. Nudge it up a little.
         </p>
       ) : null}
       {error ? <p className="text-sm text-red-400">{error}</p> : null}
 
-      <button
+      <Button
         type="submit"
+        fullWidth
         disabled={!valid || belowMin || submitting}
-        className="mt-2 w-full rounded-lg bg-viridian px-6 py-3 text-black font-semibold transition-all hover:bg-viridian/90 disabled:opacity-50 disabled:cursor-not-allowed"
       >
         {submitting ? "Setting up…" : "Approve and launch"}
-      </button>
+      </Button>
     </form>
   );
 }

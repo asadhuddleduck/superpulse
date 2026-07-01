@@ -2,6 +2,9 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
+import { PageHeading } from "@/components/ui/PageHeading";
+import { Card } from "@/components/ui/Card";
+import { Button } from "@/components/ui/Button";
 
 interface BoostSettings {
   dailyBudgetCap: number;
@@ -65,42 +68,46 @@ export default function SettingsPage() {
         });
       }
     } catch {
-      setMessage({ type: "error", text: "Network error — please try again" });
+      setMessage({ type: "error", text: "Network error, please try again" });
     } finally {
       setSaving(false);
     }
   }
 
+  const backLink = (
+    <Link
+      href="/dashboard"
+      className="mb-2 -ml-2 inline-flex min-h-11 items-center gap-1 rounded-lg px-2 text-sm text-mist transition-colors hover:text-white"
+    >
+      <svg
+        className="h-3.5 w-3.5"
+        fill="none"
+        viewBox="0 0 24 24"
+        strokeWidth={2}
+        stroke="currentColor"
+      >
+        <path
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          d="M15.75 19.5 8.25 12l7.5-7.5"
+        />
+      </svg>
+      Back to Dashboard
+    </Link>
+  );
+
   if (loading) {
     return (
       <>
         <div className="mb-8">
-          <Link
-            href="/dashboard"
-            className="text-sm text-zinc-500 hover:text-white transition-colors mb-2 inline-flex items-center gap-1"
-          >
-            <svg
-              className="h-3.5 w-3.5"
-              fill="none"
-              viewBox="0 0 24 24"
-              strokeWidth={2}
-              stroke="currentColor"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M15.75 19.5 8.25 12l7.5-7.5"
-              />
-            </svg>
-            Back to Dashboard
-          </Link>
-          <h2 className="text-3xl font-bold text-white">Boost Settings</h2>
+          {backLink}
+          <PageHeading title="Boost Settings" />
         </div>
         <div className="space-y-4">
           {[1, 2, 3].map((i) => (
             <div
               key={i}
-              className="h-20 rounded-lg border border-zinc-800 bg-zinc-900/50 animate-pulse"
+              className="h-20 animate-pulse rounded-xl border border-slate bg-graphite/50"
             />
           ))}
         </div>
@@ -112,45 +119,27 @@ export default function SettingsPage() {
     <>
       {/* Header */}
       <div className="mb-8">
-        <Link
-          href="/dashboard"
-          className="text-sm text-zinc-500 hover:text-white transition-colors mb-2 inline-flex items-center gap-1"
-        >
-          <svg
-            className="h-3.5 w-3.5"
-            fill="none"
-            viewBox="0 0 24 24"
-            strokeWidth={2}
-            stroke="currentColor"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              d="M15.75 19.5 8.25 12l7.5-7.5"
-            />
-          </svg>
-          Back to Dashboard
-        </Link>
-        <h2 className="text-3xl font-bold text-white">Boost Settings</h2>
-        <p className="text-zinc-500 mt-1">
-          Configure how SuperPulse boosts your posts
-        </p>
+        {backLink}
+        <PageHeading
+          title="Boost Settings"
+          subtitle="Configure how SuperPulse boosts your posts"
+        />
       </div>
 
       <form onSubmit={handleSave} className="max-w-lg space-y-6">
         {/* Daily Budget */}
-        <div className="rounded-lg border border-zinc-800 bg-zinc-900/50 p-5">
+        <Card>
           <label
             htmlFor="daily_budget"
-            className="block text-sm font-medium text-zinc-300"
+            className="block text-sm font-medium text-white"
           >
             Daily Budget Cap
           </label>
-          <p className="text-xs text-zinc-500 mt-1">
+          <p className="mt-1 text-xs text-mist">
             Maximum amount to spend per day across all boosted posts
           </p>
-          <div className="mt-3 relative">
-            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400 text-sm">
+          <div className="relative mt-3">
+            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-mist">
               £
             </span>
             <input
@@ -166,23 +155,23 @@ export default function SettingsPage() {
                   dailyBudgetCap: parseFloat(e.target.value) || 0,
                 }))
               }
-              className="w-full rounded-lg border border-zinc-700 bg-zinc-800 pl-7 pr-4 py-2.5 text-white text-sm focus:border-[#1EBA8F] focus:outline-none focus:ring-1 focus:ring-[#1EBA8F] transition-colors"
+              className="min-h-11 w-full rounded-lg border border-slate bg-void pl-7 pr-4 py-2.5 text-sm text-white transition-colors focus:border-viridian focus:outline-none focus:ring-1 focus:ring-viridian"
             />
           </div>
-        </div>
+        </Card>
 
         {/* Target Radius */}
-        <div className="rounded-lg border border-zinc-800 bg-zinc-900/50 p-5">
+        <Card>
           <label
             htmlFor="target_radius"
-            className="block text-sm font-medium text-zinc-300"
+            className="block text-sm font-medium text-white"
           >
             Target Radius
           </label>
-          <p className="text-xs text-zinc-500 mt-1">
+          <p className="mt-1 text-xs text-mist">
             How far from your location to target (in miles)
           </p>
-          <div className="mt-3 relative">
+          <div className="relative mt-3">
             <input
               id="target_radius"
               type="number"
@@ -196,20 +185,20 @@ export default function SettingsPage() {
                   targetRadiusMiles: parseInt(e.target.value) || 0,
                 }))
               }
-              className="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-4 py-2.5 text-white text-sm focus:border-[#1EBA8F] focus:outline-none focus:ring-1 focus:ring-[#1EBA8F] transition-colors"
+              className="min-h-11 w-full rounded-lg border border-slate bg-void px-4 py-2.5 text-sm text-white transition-colors focus:border-viridian focus:outline-none focus:ring-1 focus:ring-viridian"
             />
-            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 text-sm">
+            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-mist">
               miles
             </span>
           </div>
-        </div>
+        </Card>
 
         {/* Smart Boost Toggle */}
-        <div className="rounded-lg border border-zinc-800 bg-zinc-900/50 p-5">
-          <div className="flex items-center justify-between">
+        <Card>
+          <div className="flex items-center justify-between gap-4">
             <div>
-              <p className="text-sm font-medium text-zinc-300">Smart Boost</p>
-              <p className="text-xs text-zinc-500 mt-1">
+              <p className="text-sm font-medium text-white">Smart Boost</p>
+              <p className="mt-1 text-xs text-mist">
                 Recommend and boost new posts that score above the threshold
               </p>
             </div>
@@ -220,8 +209,8 @@ export default function SettingsPage() {
               onClick={() =>
                 setSettings((s) => ({ ...s, autoBoostEnabled: !s.autoBoostEnabled }))
               }
-              className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-[#1EBA8F] focus:ring-offset-2 focus:ring-offset-black ${
-                settings.autoBoostEnabled ? "bg-[#1EBA8F]" : "bg-zinc-700"
+              className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-viridian focus:ring-offset-2 focus:ring-offset-void ${
+                settings.autoBoostEnabled ? "bg-viridian" : "bg-mist/30"
               }`}
             >
               <span
@@ -231,14 +220,14 @@ export default function SettingsPage() {
               />
             </button>
           </div>
-        </div>
+        </Card>
 
         {/* Status message */}
         {message && (
           <div
             className={`rounded-lg px-4 py-3 text-sm font-medium ${
               message.type === "success"
-                ? "bg-[#1EBA8F]/10 text-[#1EBA8F] border border-[#1EBA8F]/20"
+                ? "bg-viridian/10 text-viridian border border-viridian/20"
                 : "bg-red-500/10 text-red-400 border border-red-500/20"
             }`}
           >
@@ -247,13 +236,9 @@ export default function SettingsPage() {
         )}
 
         {/* Save button */}
-        <button
-          type="submit"
-          disabled={saving}
-          className="rounded-lg bg-[#1EBA8F] px-8 py-3 text-sm font-semibold text-black transition-all hover:bg-[#1EBA8F]/90 hover:scale-[1.02] active:scale-[0.98] shadow-lg shadow-[#1EBA8F]/20 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
-        >
+        <Button type="submit" disabled={saving} loading={saving}>
           {saving ? "Saving..." : "Save Settings"}
-        </button>
+        </Button>
       </form>
     </>
   );

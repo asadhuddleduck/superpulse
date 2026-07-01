@@ -5,10 +5,11 @@ import { redirect } from "next/navigation";
 import { getCurrentTenant } from "@/lib/auth";
 import { fetchPagesWithIG } from "@/lib/facebook";
 import IGPostsView from "@/components/IGPostsView";
+import { PageHeading } from "@/components/ui/PageHeading";
 import type { IGPost } from "@/components/PostCard";
 
 export const metadata: Metadata = {
-  title: "Your Posts — SuperPulse",
+  title: "Your Posts | SuperPulse",
   description: "View and manage your Instagram posts and boost campaigns.",
 };
 
@@ -95,7 +96,7 @@ export default async function PostsPage() {
       <div className="mb-8">
         <Link
           href="/dashboard"
-          className="text-sm text-zinc-500 hover:text-white transition-colors mb-2 inline-flex items-center gap-1"
+          className="mb-3 inline-flex items-center gap-1 text-sm text-mist transition-colors hover:text-white"
         >
           <svg
             className="h-3.5 w-3.5"
@@ -112,7 +113,7 @@ export default async function PostsPage() {
           </svg>
           Back to Dashboard
         </Link>
-        <h2 className="text-3xl font-bold text-white">Your Posts</h2>
+        <PageHeading title="Your Posts" />
       </div>
 
       <IGPostsView

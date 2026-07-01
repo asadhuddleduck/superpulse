@@ -5,9 +5,10 @@ import { getCurrentTenant } from "@/lib/auth";
 import { getLocationsForTenant } from "@/lib/queries/locations";
 import { resolveSeatCap } from "@/lib/seats";
 import LocationsManager from "@/components/LocationsManager";
+import { PageHeading } from "@/components/ui/PageHeading";
 
 export const metadata: Metadata = {
-  title: "Locations — SuperPulse",
+  title: "Locations | SuperPulse",
   description: "Add the locations SuperPulse should target your boosts to.",
 };
 
@@ -26,16 +27,15 @@ export default async function LocationsPage() {
       <div className="mb-8">
         <Link
           href="/dashboard"
-          className="text-sm text-zinc-500 hover:text-white transition-colors"
+          className="inline-flex min-h-11 items-center text-sm text-mist transition-colors hover:text-white"
         >
           ← Back to dashboard
         </Link>
-        <h1 className="text-3xl font-bold mt-3">Your locations</h1>
-        <p className="text-zinc-400 mt-2 max-w-xl">
-          Add every location SuperPulse should target. Each address becomes a
-          radius around which your Instagram boosts will run. You can change
-          these any time.
-        </p>
+        <PageHeading
+          className="mt-3"
+          title="Your locations"
+          subtitle="Add every location SuperPulse should target. Each address becomes a radius around which your Instagram boosts will run. You can change these any time."
+        />
       </div>
 
       <LocationsManager

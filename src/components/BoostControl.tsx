@@ -1,6 +1,8 @@
 "use client";
 
 import { useState } from "react";
+import { Button } from "@/components/ui/Button";
+import { Card } from "@/components/ui/Card";
 
 interface Props {
   initialPaused: boolean;
@@ -44,35 +46,32 @@ export default function BoostControl({ initialPaused }: Props) {
   }
 
   return (
-    <div className="mb-10 rounded-xl border border-zinc-800 bg-zinc-900/40 p-5 flex items-center justify-between gap-4">
+    <Card className="mb-10 flex items-center justify-between gap-4">
       <div className="min-w-0">
         <div className="flex items-center gap-2">
           <span
-            className={`inline-block h-2.5 w-2.5 rounded-full ${paused ? "bg-zinc-500" : "bg-viridian"}`}
+            className={`inline-block h-2.5 w-2.5 rounded-full ${paused ? "bg-shadow" : "bg-viridian"}`}
           />
           <p className="font-semibold text-white">
             {paused ? "SuperPulse is paused" : "SuperPulse is running"}
           </p>
         </div>
-        <p className="mt-1 text-sm text-zinc-400 max-w-xl">
+        <p className="mt-1 text-sm text-mist max-w-xl">
           {paused
             ? "Scanning and boosting are stopped. Resume any time."
             : "Scanning your posts and managing boosts automatically."}
         </p>
-        {note ? <p className="mt-2 text-xs text-zinc-500">{note}</p> : null}
+        {note ? <p className="mt-2 text-xs text-mist">{note}</p> : null}
       </div>
-      <button
+      <Button
         type="button"
+        variant={paused ? "primary" : "secondary"}
         onClick={toggle}
         disabled={busy}
-        className={`shrink-0 rounded-lg px-4 py-2 text-sm font-semibold transition disabled:opacity-50 ${
-          paused
-            ? "bg-viridian text-black hover:bg-viridian/90"
-            : "border border-zinc-700 text-zinc-200 hover:border-zinc-500 hover:text-white"
-        }`}
+        className="shrink-0"
       >
         {busy ? "…" : paused ? "Resume SuperPulse" : "Pause SuperPulse"}
-      </button>
-    </div>
+      </Button>
+    </Card>
   );
 }

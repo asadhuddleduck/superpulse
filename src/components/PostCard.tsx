@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import StatusBadge from "./StatusBadge";
+import { Button } from "@/components/ui/Button";
 
 export interface IGPost {
   id: string;
@@ -89,16 +90,16 @@ export default function PostCard({
         setBoostResult(data.error || "Failed to create boost");
       }
     } catch {
-      setBoostResult("Network error — please try again");
+      setBoostResult("Network error, please try again");
     } finally {
       setBoostLoading(false);
     }
   }
 
   return (
-    <div className="rounded-lg border border-zinc-800 bg-zinc-900/50 overflow-hidden transition-all hover:border-zinc-700">
+    <div className="overflow-hidden rounded-xl border border-slate bg-graphite transition-all hover:border-mist/40">
       {/* Thumbnail */}
-      <div className="relative aspect-square bg-zinc-800">
+      <div className="relative aspect-square bg-slate">
         {imageUrl ? (
           <img
             src={imageUrl}
@@ -106,7 +107,7 @@ export default function PostCard({
             className="h-full w-full object-cover"
           />
         ) : (
-          <div className="flex h-full w-full items-center justify-center text-zinc-600">
+          <div className="flex h-full w-full items-center justify-center text-shadow">
             <svg
               className="h-12 w-12"
               fill="none"
@@ -123,12 +124,12 @@ export default function PostCard({
           </div>
         )}
         {post.mediaType === "VIDEO" && (
-          <span className="absolute top-2 left-2 rounded bg-black/70 px-1.5 py-0.5 text-[10px] font-medium text-white">
+          <span className="absolute top-2 left-2 rounded bg-void/70 px-2 py-0.5 text-xs font-medium text-white">
             VIDEO
           </span>
         )}
         {post.mediaType === "CAROUSEL_ALBUM" && (
-          <span className="absolute top-2 left-2 rounded bg-black/70 px-1.5 py-0.5 text-[10px] font-medium text-white">
+          <span className="absolute top-2 left-2 rounded bg-void/70 px-2 py-0.5 text-xs font-medium text-white">
             CAROUSEL
           </span>
         )}
@@ -137,50 +138,50 @@ export default function PostCard({
       {/* Content */}
       <div className="p-4">
         <div className="flex items-start justify-between gap-2">
-          <p className="text-sm text-zinc-300 leading-snug line-clamp-2">
+          <p className="text-sm leading-snug text-white line-clamp-2">
             {captionSnippet}
           </p>
           <StatusBadge status={status} />
         </div>
 
         {/* Engagement row */}
-        <div className="mt-3 flex items-center gap-4 text-xs text-zinc-500">
+        <div className="mt-3 flex items-center gap-4 text-xs text-mist">
           <span>{post.likeCount} likes</span>
           <span>{post.commentsCount} comments</span>
         </div>
 
         {/* Boost metrics (when already boosted) */}
         {isBoosted && (
-          <div className="mt-3 grid grid-cols-4 gap-2 border-t border-zinc-800 pt-3">
+          <div className="mt-3 grid grid-cols-2 gap-3 border-t border-slate pt-3 sm:grid-cols-4">
             <div>
-              <p className="text-[10px] uppercase tracking-wider text-zinc-500">
+              <p className="text-xs uppercase tracking-wider text-mist">
                 Impr
               </p>
-              <p className="text-sm font-medium text-white">
+              <p className="font-mono text-sm font-medium tabular-nums text-white">
                 {impressions != null ? formatNumber(impressions) : "-"}
               </p>
             </div>
             <div>
-              <p className="text-[10px] uppercase tracking-wider text-zinc-500">
+              <p className="text-xs uppercase tracking-wider text-mist">
                 Reach
               </p>
-              <p className="text-sm font-medium text-white">
+              <p className="font-mono text-sm font-medium tabular-nums text-white">
                 {reach != null ? formatNumber(reach) : "-"}
               </p>
             </div>
             <div>
-              <p className="text-[10px] uppercase tracking-wider text-zinc-500">
+              <p className="text-xs uppercase tracking-wider text-mist">
                 Clicks
               </p>
-              <p className="text-sm font-medium text-white">
+              <p className="font-mono text-sm font-medium tabular-nums text-white">
                 {clicks != null ? formatNumber(clicks) : "-"}
               </p>
             </div>
             <div>
-              <p className="text-[10px] uppercase tracking-wider text-zinc-500">
+              <p className="text-xs uppercase tracking-wider text-mist">
                 Spend
               </p>
-              <p className="text-sm font-medium text-white">
+              <p className="font-mono text-sm font-medium tabular-nums text-white">
                 {spend != null ? `£${spend.toFixed(2)}` : "-"}
               </p>
             </div>
@@ -189,17 +190,19 @@ export default function PostCard({
 
         {/* Boost button + form (only for non-boosted posts) */}
         {!isBoosted && !showBoostForm && (
-          <button
+          <Button
+            variant="primary"
+            fullWidth
             onClick={() => setShowBoostForm(true)}
-            className="mt-4 w-full rounded-lg bg-[#1EBA8F] px-4 py-2.5 text-sm font-semibold text-black transition-all hover:bg-[#1EBA8F]/90 hover:scale-[1.01] active:scale-[0.99] shadow-lg shadow-[#1EBA8F]/20"
+            className="mt-4"
           >
             Boost This Post
-          </button>
+          </Button>
         )}
 
         {/* Boost form */}
         {!isBoosted && showBoostForm && (
-          <div className="mt-4 rounded-lg border border-zinc-700 bg-zinc-800/50 p-4 space-y-3">
+          <div className="mt-4 space-y-3 rounded-lg border border-slate bg-graphite/50 p-4">
             <div className="flex items-center justify-between">
               <p className="text-sm font-medium text-white">Create Boost</p>
               <button
@@ -207,44 +210,47 @@ export default function PostCard({
                   setShowBoostForm(false);
                   setBoostResult(null);
                 }}
-                className="text-xs text-zinc-500 hover:text-white transition-colors"
+                className="text-xs text-mist transition-colors hover:text-white"
               >
                 Cancel
               </button>
             </div>
 
             <div>
-              <label className="text-xs text-zinc-400">
+              <label htmlFor={`budget-${post.id}`} className="text-xs text-mist">
                 Daily budget
               </label>
-              <div className="mt-1 relative">
-                <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-zinc-500 text-xs">
+              <div className="relative mt-1">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-mist">
                   £
                 </span>
                 <input
+                  id={`budget-${post.id}`}
                   type="number"
                   min={1}
                   max={100}
                   step={0.5}
                   value={budget}
                   onChange={(e) => setBudget(parseFloat(e.target.value) || 5)}
-                  className="w-full rounded border border-zinc-600 bg-zinc-900 pl-6 pr-3 py-1.5 text-sm text-white focus:border-[#1EBA8F] focus:outline-none"
+                  className="min-h-11 w-full rounded-lg border border-slate bg-graphite py-2.5 pl-7 pr-3 text-sm text-white transition-colors focus:border-viridian focus:outline-none"
                 />
               </div>
             </div>
 
-            <p className="text-xs text-zinc-500 leading-relaxed">
+            <p className="text-xs leading-relaxed text-mist">
               Targets each of your locations using its own radius. Manage
               locations and radii in Settings.
             </p>
 
-            <button
+            <Button
+              variant="primary"
+              fullWidth
               onClick={handleBoost}
               disabled={boostLoading}
-              className="w-full rounded-lg bg-[#1EBA8F] px-4 py-2 text-sm font-semibold text-black transition-all hover:bg-[#1EBA8F]/90 disabled:opacity-50 disabled:cursor-not-allowed"
+              loading={boostLoading}
             >
               {boostLoading ? "Creating..." : "Create Boost (Paused)"}
-            </button>
+            </Button>
           </div>
         )}
 
@@ -253,8 +259,8 @@ export default function PostCard({
           <div
             className={`mt-3 rounded-lg px-3 py-2 text-xs font-medium ${
               status === "PAUSED"
-                ? "bg-[#1EBA8F]/10 text-[#1EBA8F] border border-[#1EBA8F]/20"
-                : "bg-red-500/10 text-red-400 border border-red-500/20"
+                ? "border border-viridian/20 bg-viridian/10 text-viridian"
+                : "border border-red-500/20 bg-red-500/10 text-red-400"
             }`}
           >
             {boostResult}

@@ -3,10 +3,15 @@ import { redirect } from "next/navigation";
 import { getCurrentTenant } from "@/lib/auth";
 import { getLocationsForTenant } from "@/lib/queries/locations";
 import { PER_ADSET_FLOOR } from "@/lib/v8/budget-plan";
+import { OnboardingShell } from "@/components/ui/OnboardingShell";
+import { OnboardingProgress } from "@/components/ui/OnboardingProgress";
+import { PageHeading } from "@/components/ui/PageHeading";
+import { Card } from "@/components/ui/Card";
+import { FadeIn } from "@/components/ui/FadeIn";
 import { BudgetForm } from "./budget-form";
 
 export const metadata: Metadata = {
-  title: "Set Your Budget — SuperPulse",
+  title: "Set Your Budget | SuperPulse",
 };
 
 export const dynamic = "force-dynamic";
@@ -33,35 +38,36 @@ export default async function BudgetPage() {
   const n = locations.length;
 
   return (
-    <div className="flex flex-1 flex-col items-center justify-center min-h-screen bg-black px-6 py-12">
-      <main className="w-full max-w-xl">
-        <header className="text-center mb-10">
-          <h1 className="text-3xl font-bold tracking-tight">
-            <span className="text-viridian">Super</span>
-            <span className="text-sandstorm">Pulse</span>
-          </h1>
-          {isRetry && (
-            <div className="mt-5 rounded-lg border border-sandstorm/40 bg-sandstorm/10 px-4 py-3 text-sm text-sandstorm">
-              Your budget was a little too low to run steadily across {n}{" "}
-              {n === 1 ? "location" : "locations"}. Nudge it up and we&apos;ll
-              get your campaigns going.
-            </div>
-          )}
-          <p className="mt-3 text-zinc-400 leading-relaxed">
-            How much should each location spend per day? Every location runs as
-            its own local ad set. This is your Meta ad spend, billed on your own
-            ad account — separate from your SuperPulse subscription.
-          </p>
-        </header>
+    <OnboardingShell center maxWidth="xl">
+      <FadeIn>
+        <OnboardingProgress step="budget" />
 
-        <BudgetForm locationCount={n} minPerLocationDailyPennies={PER_ADSET_FLOOR} />
+        <PageHeading title="Set your budget" align="center" />
 
-        <p className="mt-6 text-xs text-zinc-500 leading-relaxed">
-          We recommend £5 per location per day — enough to deliver steadily in
+        {isRetry && (
+          <Card variant="accent" className="mt-5 text-sm text-sandstorm">
+            Your budget was a little too low to run steadily across {n}{" "}
+            {n === 1 ? "location" : "locations"}. Nudge it up and we&apos;ll
+            get your campaigns going.
+          </Card>
+        )}
+
+        <p className="mx-auto mt-4 max-w-md text-center leading-relaxed text-mist">
+          How much should each location spend per day? Every location runs as
+          its own local ad set. This is your Meta ad spend, billed on your own
+          ad account, separate from your SuperPulse subscription.
+        </p>
+
+        <div className="mt-8">
+          <BudgetForm locationCount={n} minPerLocationDailyPennies={PER_ADSET_FLOOR} />
+        </div>
+
+        <p className="mt-6 text-xs leading-relaxed text-mist">
+          We recommend £5 per location per day, enough to deliver steadily in
           every area. You can change it any time, and SuperPulse keeps every
           location balanced within a 3× range so none runs away.
         </p>
-      </main>
-    </div>
+      </FadeIn>
+    </OnboardingShell>
   );
 }

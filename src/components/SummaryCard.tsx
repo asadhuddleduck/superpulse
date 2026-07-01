@@ -1,3 +1,5 @@
+import { Card } from "@/components/ui/Card";
+
 interface SummaryCardProps {
   label: string;
   value: string;
@@ -9,7 +11,7 @@ function TrendArrow({ trend }: { trend: "up" | "down" | "neutral" }) {
   if (trend === "up") {
     return (
       <svg
-        className="h-4 w-4 text-[#1EBA8F]"
+        className="h-4 w-4 text-viridian"
         fill="none"
         viewBox="0 0 24 24"
         strokeWidth={2.5}
@@ -34,7 +36,7 @@ function TrendArrow({ trend }: { trend: "up" | "down" | "neutral" }) {
   }
   return (
     <svg
-      className="h-4 w-4 text-zinc-500"
+      className="h-4 w-4 text-mist"
       fill="none"
       viewBox="0 0 24 24"
       strokeWidth={2.5}
@@ -47,15 +49,15 @@ function TrendArrow({ trend }: { trend: "up" | "down" | "neutral" }) {
 
 export default function SummaryCard({ label, value, trend, prefix }: SummaryCardProps) {
   return (
-    <div className="rounded-lg border border-zinc-800 bg-zinc-900/50 p-5">
-      <p className="text-sm text-zinc-400">{label}</p>
+    <Card>
+      <p className="text-sm text-mist">{label}</p>
       <div className="mt-2 flex items-center gap-2">
-        <p className="text-3xl font-bold text-white">
-          {prefix && <span className="text-zinc-400">{prefix}</span>}
+        <p className="text-3xl font-bold text-white font-mono tabular-nums">
+          {prefix && <span className="text-mist">{prefix}</span>}
           {value}
         </p>
         {trend && <TrendArrow trend={trend} />}
       </div>
-    </div>
+    </Card>
   );
 }

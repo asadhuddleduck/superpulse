@@ -1,23 +1,75 @@
 @import "tailwindcss";
 
+/*
+ * SuperPulse design tokens — source of truth: docs/BRAND-KIT.md
+ * Flat, unprefixed names (viridian/sandstorm already used across the app).
+ * Tailwind v4 auto-generates utilities from --color-*: bg-void, text-mist,
+ * border-slate, ring-viridian, etc. Opacity modifiers (bg-viridian/90) work
+ * via color-mix.
+ */
 :root {
-  --background: #000000;
-  --foreground: #ededed;
-  --viridian: #1EBA8F;
-  --sandstorm: #F7CE46;
+  /* Backgrounds & surfaces */
+  --void: #050508;
+  --graphite: #111116;
+  --slate: #1e1e26;
+
+  /* Accents */
+  --sandstorm: #f7ce46;
+  --viridian: #1eba8f;
+  --viridian-muted: rgba(30, 186, 143, 0.6);
+
+  /* Text */
+  --white: #f0f0f5; /* never pure #FFFFFF */
+  --mist: #8888a0;
+  --shadow: #555566;
+
+  /* Semantic aliases */
+  --background: var(--void);
+  --foreground: var(--white);
 }
 
 @theme inline {
+  /* Colours */
+  --color-void: var(--void);
+  --color-graphite: var(--graphite);
+  --color-slate: var(--slate);
+  --color-sandstorm: var(--sandstorm);
+  --color-viridian: var(--viridian);
+  --color-viridian-muted: var(--viridian-muted);
+  --color-white: var(--white);
+  --color-mist: var(--mist);
+  --color-shadow: var(--shadow);
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --color-viridian: var(--viridian);
-  --color-sandstorm: var(--sandstorm);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+
+  /* Fonts — next/font sets --font-inter / --font-jetbrains on <html> */
+  --font-sans: var(--font-inter), system-ui, -apple-system, sans-serif;
+  --font-mono: var(--font-jetbrains), "SF Mono", "Fira Code", monospace;
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-inter), system-ui, -apple-system, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* Bold headlines get tighter tracking for density (BRAND-KIT typography rules) */
+h1,
+h2,
+h3 {
+  letter-spacing: -0.02em;
+}
+
+/* Respect reduced-motion for the subtle transitions added in the redesign */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }

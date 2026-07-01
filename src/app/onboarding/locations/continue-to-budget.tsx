@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { Button } from "@/components/ui/Button";
 
 export function ContinueToBudget() {
   const [submitting, setSubmitting] = useState(false);
@@ -25,14 +26,16 @@ export function ContinueToBudget() {
   return (
     <div className="mt-10">
       {error ? <p className="mb-2 text-sm text-red-400">{error}</p> : null}
-      <button
+      <Button
         type="button"
         onClick={onClick}
         disabled={submitting}
-        className="w-full rounded-lg bg-viridian px-6 py-3 text-black font-semibold transition-all hover:bg-viridian/90 disabled:opacity-50 disabled:cursor-not-allowed"
+        loading={submitting}
+        fullWidth
+        size="lg"
       >
         {submitting ? "Saving…" : "Continue to budget →"}
-      </button>
+      </Button>
     </div>
   );
 }

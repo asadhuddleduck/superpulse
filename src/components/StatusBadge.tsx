@@ -1,10 +1,10 @@
 type Status = "ACTIVE" | "PAUSED" | "ENDED" | "NOT_BOOSTED";
 
 const statusStyles: Record<Status, string> = {
-  ACTIVE: "bg-[#1EBA8F]/15 text-[#1EBA8F] border-[#1EBA8F]/30",
-  PAUSED: "bg-[#F7CE46]/15 text-[#F7CE46] border-[#F7CE46]/30",
-  ENDED: "bg-zinc-600/15 text-zinc-400 border-zinc-600/30",
-  NOT_BOOSTED: "bg-transparent text-zinc-500 border-zinc-700",
+  ACTIVE: "bg-viridian/15 text-viridian border-viridian/30",
+  PAUSED: "bg-sandstorm/15 text-sandstorm border-sandstorm/30",
+  ENDED: "bg-slate/40 text-mist border-slate",
+  NOT_BOOSTED: "bg-transparent text-mist border-slate",
 };
 
 const statusLabels: Record<Status, string> = {
@@ -20,7 +20,7 @@ export default function StatusBadge({ status }: { status: Status }) {
       className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-medium ${statusStyles[status]}`}
     >
       {status === "ACTIVE" && (
-        <span className="mr-1.5 h-1.5 w-1.5 rounded-full bg-[#1EBA8F] animate-pulse" />
+        <span className="mr-1.5 h-1.5 w-1.5 rounded-full bg-viridian animate-pulse" />
       )}
       {statusLabels[status]}
     </span>

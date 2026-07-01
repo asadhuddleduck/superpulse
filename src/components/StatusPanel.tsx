@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { Card } from "@/components/ui/Card";
 
 type Health = "green" | "yellow" | "red";
 
@@ -53,9 +54,9 @@ function formatNumber(n: number): string {
 function HealthDot({ health }: { health: Health }) {
   const color =
     health === "green"
-      ? "bg-[#1EBA8F]"
+      ? "bg-viridian"
       : health === "yellow"
-        ? "bg-[#F7CE46]"
+        ? "bg-sandstorm"
         : "bg-red-500";
   return (
     <span
@@ -110,9 +111,9 @@ export default function StatusPanel() {
   if (loading || !data) {
     return (
       <section className="mb-10">
-        <div className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-6">
-          <p className="text-sm text-zinc-500">Loading status…</p>
-        </div>
+        <Card>
+          <p className="text-sm text-mist">Loading status…</p>
+        </Card>
       </section>
     );
   }
@@ -125,10 +126,10 @@ export default function StatusPanel() {
       ) : null}
 
       {/* Hero strip */}
-      <div className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-6">
+      <Card>
         <div className="flex items-center gap-2 mb-5">
           <HealthDot health={data.health} />
-          <p className="text-sm text-zinc-300">
+          <p className="text-sm text-mist">
             Last scan: <span className="text-white">{formatRelative(data.scanLastRun)}</span>
           </p>
         </div>
@@ -144,31 +145,31 @@ export default function StatusPanel() {
             <span className="text-red-400/60">({formatRelative(data.lastError.at)})</span>
           </div>
         )}
-      </div>
+      </Card>
 
       {/* Recent activity */}
-      <div className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-6">
-        <h3 className="text-sm font-semibold text-zinc-300 mb-3">Recent activity</h3>
+      <Card>
+        <h3 className="text-sm font-semibold text-white mb-3">Recent activity</h3>
         {data.recentActivity.length === 0 ? (
-          <p className="text-sm text-zinc-500">
+          <p className="text-sm text-mist">
             No activity yet. The first scan runs every 2 hours — sit tight.
           </p>
         ) : (
           <ul className="space-y-2">
             {data.recentActivity.map((event, i) => (
               <li key={i} className="flex items-start gap-3 text-sm">
-                <span className="shrink-0 text-zinc-500 tabular-nums w-20">
+                <span className="shrink-0 text-mist tabular-nums w-20">
                   {formatRelative(event.createdAt)}
                 </span>
-                <span className="shrink-0 inline-block rounded bg-zinc-800 px-2 py-0.5 text-xs text-zinc-300 w-28">
+                <span className="shrink-0 inline-block rounded bg-slate px-2 py-0.5 text-xs text-mist w-28">
                   {eventLabel(event.eventType)}
                 </span>
-                <span className="text-zinc-200 flex-1 min-w-0 break-words">{event.message}</span>
+                <span className="text-white flex-1 min-w-0 break-words">{event.message}</span>
               </li>
             ))}
           </ul>
         )}
-      </div>
+      </Card>
     </section>
   );
 }
@@ -198,7 +199,7 @@ function ProvisioningBanner({
     <div className={`rounded-xl border p-4 text-sm ${tone}`}>
       <p className="font-medium">{message}</p>
       {p.state === "provisioning" ? (
-        <div className="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-zinc-800">
+        <div className="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-slate">
           <div className="h-full rounded-full bg-viridian transition-all" style={{ width: `${fillPct}%` }} />
         </div>
       ) : null}
@@ -209,8 +210,8 @@ function ProvisioningBanner({
 function Stat({ label, value }: { label: string; value: string }) {
   return (
     <div>
-      <p className="text-xs uppercase tracking-wide text-zinc-500">{label}</p>
-      <p className="mt-1 text-2xl font-bold text-white tabular-nums">{value}</p>
+      <p className="text-xs uppercase tracking-wide text-mist">{label}</p>
+      <p className="mt-1 text-2xl font-bold text-white font-mono tabular-nums">{value}</p>
     </div>
   );
 }

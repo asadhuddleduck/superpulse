@@ -2,10 +2,15 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { getCurrentTenant } from "@/lib/auth";
 import { fetchPagesWithIG } from "@/lib/facebook";
+import { OnboardingShell } from "@/components/ui/OnboardingShell";
+import { OnboardingProgress } from "@/components/ui/OnboardingProgress";
+import { PageHeading } from "@/components/ui/PageHeading";
+import { FadeIn } from "@/components/ui/FadeIn";
+import { Button } from "@/components/ui/Button";
 import { SelectPageForm, AutoSelectPage } from "./select-page-form";
 
 export const metadata: Metadata = {
-  title: "Choose Your Page — SuperPulse",
+  title: "Choose Your Page | SuperPulse",
 };
 
 export const dynamic = "force-dynamic";
@@ -30,21 +35,19 @@ export default async function SelectPagePage() {
 
   if (pagesWithIG.length === 0) {
     return (
-      <div className="flex flex-1 flex-col items-center justify-center min-h-screen bg-black px-6">
-        <main className="max-w-md text-center text-zinc-300">
-          <h1 className="text-3xl font-bold tracking-tight">
-            <span className="text-viridian">Super</span>
-            <span className="text-sandstorm">Pulse</span>
-          </h1>
-          <p className="mt-6 text-zinc-400">
+      <OnboardingShell center maxWidth="xl">
+        <FadeIn className="w-full text-center">
+          <p className="leading-relaxed text-mist">
             We couldn&apos;t find an Instagram Business Account linked to any of your Facebook Pages.
             Connect one in Meta Business Suite, then come back and log in again.
           </p>
-          <a href="/login" className="mt-6 inline-block text-viridian hover:underline">
-            Back to login
-          </a>
-        </main>
-      </div>
+          <div className="mt-6">
+            <Button href="/login" variant="secondary">
+              Back to login
+            </Button>
+          </div>
+        </FadeIn>
+      </OnboardingShell>
     );
   }
 
@@ -62,24 +65,24 @@ export default async function SelectPagePage() {
   }));
 
   return (
-    <div className="flex flex-1 flex-col items-center justify-center min-h-screen bg-black px-6 py-12">
-      <main className="w-full max-w-xl">
-        <header className="text-center mb-10">
-          <h1 className="text-3xl font-bold tracking-tight">
-            <span className="text-viridian">Super</span>
-            <span className="text-sandstorm">Pulse</span>
-          </h1>
-          <p className="mt-3 text-zinc-400 leading-relaxed">
-            You manage {choices.length} Pages with Instagram. Pick the one SuperPulse should boost from.
-          </p>
-        </header>
+    <OnboardingShell center maxWidth="xl">
+      <FadeIn className="w-full">
+        <OnboardingProgress step="account" />
 
-        <SelectPageForm choices={choices} />
+        <PageHeading
+          align="center"
+          title="Choose your Page"
+          subtitle={`You manage ${choices.length} Pages with Instagram. Pick the one SuperPulse should boost from.`}
+        />
 
-        <p className="mt-6 text-center text-xs text-zinc-500">
+        <div className="mt-8">
+          <SelectPageForm choices={choices} />
+        </div>
+
+        <p className="mt-6 text-center text-xs text-mist">
           You can switch later in Settings.
         </p>
-      </main>
-    </div>
+      </FadeIn>
+    </OnboardingShell>
   );
 }

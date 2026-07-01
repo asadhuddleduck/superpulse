@@ -1,9 +1,13 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import PricingClient from "./PricingClient";
+import { OnboardingShell } from "@/components/ui/OnboardingShell";
+import { PageHeading } from "@/components/ui/PageHeading";
+import { Card } from "@/components/ui/Card";
+import { FadeIn } from "@/components/ui/FadeIn";
 
 export const metadata: Metadata = {
-  title: "Pricing — SuperPulse",
+  title: "Pricing | SuperPulse",
   description:
     "£27 per location per month plus VAT. Boost every Instagram post you've already made into a local ad that runs forever.",
 };
@@ -14,25 +18,22 @@ export default function PricingPage({
   searchParams?: Promise<{ reason?: string }>;
 }) {
   return (
-    <div className="min-h-screen bg-black text-white">
-      <header className="border-b border-zinc-800">
-        <div className="max-w-5xl mx-auto px-6 py-4 flex items-center justify-between">
-          <Link href="/" className="text-xl font-bold tracking-tight">
-            <span className="text-viridian">Super</span>
-            <span className="text-sandstorm">Pulse</span>
-          </Link>
-          <a
-            href="/api/auth/logout"
-            className="text-sm text-zinc-500 hover:text-white transition-colors"
-          >
-            Sign out
-          </a>
-        </div>
-      </header>
-
-      <main className="max-w-2xl mx-auto px-6 py-16">
-        <div className="mb-8 rounded-lg border border-sandstorm/30 bg-sandstorm/5 px-4 py-3 text-sm text-zinc-200">
-          <strong className="text-sandstorm">SuperPulse is waitlist only right now.</strong>{" "}
+    <OnboardingShell
+      maxWidth="2xl"
+      headerRight={
+        <a
+          href="/api/auth/logout"
+          className="text-mist transition-colors hover:text-white"
+        >
+          Sign out
+        </a>
+      }
+    >
+      <FadeIn>
+        <Card variant="accent" className="mb-8 text-sm text-mist">
+          <strong className="text-sandstorm">
+            SuperPulse is waitlist only right now.
+          </strong>{" "}
           You can subscribe today, but a paid account still joins the waitlist.
           We bring accounts live in order and email you when yours is switched
           on. Not ready to subscribe?{" "}
@@ -40,40 +41,38 @@ export default function PricingPage({
             Join the free waitlist
           </Link>
           .
-        </div>
+        </Card>
 
         <PastDueBanner searchParams={searchParams} />
 
-        <h1 className="text-3xl sm:text-4xl font-bold mb-3">
-          One simple plan.
-        </h1>
-        <p className="text-zinc-400 mb-10">
-          £27 per location, per month. Auto-boosts every post you make on
-          Instagram, with daily scoring and a finger-on-the-pulse dashboard.
-        </p>
+        <PageHeading
+          title="One simple plan."
+          subtitle="£27 per location, per month. Auto-boosts every post you make on Instagram, with daily scoring and a finger-on-the-pulse dashboard."
+          className="mb-10"
+        />
 
-        <div className="rounded-2xl border border-zinc-800 bg-zinc-900/40 p-8">
-          <ul className="space-y-3 mb-8 text-sm text-zinc-300">
+        <Card className="p-6 sm:p-8">
+          <ul className="mb-8 space-y-3 text-sm text-mist">
             <Bullet>AI-driven Instagram boost automation, 24/7</Bullet>
-            <Bullet>£27 per location — add or remove locations whenever</Bullet>
+            <Bullet>£27 per location, add or remove locations whenever</Bullet>
             <Bullet>Radius targeting around each location</Bullet>
             <Bullet>Daily scoring + auto-launch (no clicks needed)</Bullet>
-            <Bullet>Real-time dashboard — last scan, posts boosted, spend, performance</Bullet>
-            <Bullet>Cancel anytime — no contracts</Bullet>
+            <Bullet>Real-time dashboard: last scan, posts boosted, spend, performance</Bullet>
+            <Bullet>Cancel anytime, no contracts</Bullet>
           </ul>
 
           <PricingClient />
 
-          <p className="text-xs text-zinc-500 text-center mt-4">
+          <p className="mt-4 text-center text-xs text-mist">
             Have a code? Use{" "}
-            <span className="font-mono text-zinc-300">FIRSTMONTHFREE</span> to
-            zero out your first month.
+            <span className="font-mono text-white">FIRSTMONTHFREE</span> to zero
+            out your first month.
           </p>
-        </div>
+        </Card>
 
-        <div className="mt-10 text-sm text-zinc-400 space-y-3">
+        <div className="mt-10 space-y-3 text-sm text-mist">
           <p>
-            <strong className="text-zinc-200">Need help connecting Facebook?</strong>{" "}
+            <strong className="text-white">Need help connecting Facebook?</strong>{" "}
             <Link
               href="/onboarding/support"
               className="text-viridian hover:underline"
@@ -82,12 +81,12 @@ export default function PricingPage({
             </Link>
           </p>
           <p>
-            Existing client? Use the same checkout — your tenant will be linked
+            Existing client? Use the same checkout, your tenant will be linked
             automatically.
           </p>
         </div>
-      </main>
-    </div>
+      </FadeIn>
+    </OnboardingShell>
   );
 }
 
@@ -99,7 +98,7 @@ async function PastDueBanner({
   const params = await searchParams;
   if (params?.reason !== "past_due") return null;
   return (
-    <div className="mb-8 rounded-lg border border-red-500/30 bg-red-500/5 px-4 py-3 text-sm text-red-200">
+    <div className="mb-8 rounded-xl border border-red-500/30 bg-red-500/5 px-5 py-4 text-sm text-red-200">
       Your last payment failed. Re-enter card details below to keep your boosts
       running.
     </div>
@@ -110,7 +109,7 @@ function Bullet({ children }: { children: React.ReactNode }) {
   return (
     <li className="flex items-start gap-2">
       <svg
-        className="h-5 w-5 text-viridian shrink-0 mt-0.5"
+        className="h-5 w-5 shrink-0 text-viridian mt-0.5"
         fill="none"
         viewBox="0 0 24 24"
         strokeWidth={2}

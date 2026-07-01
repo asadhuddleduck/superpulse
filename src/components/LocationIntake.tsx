@@ -1,6 +1,9 @@
 "use client";
 
 import { useState } from "react";
+import { Button } from "@/components/ui/Button";
+import { Card } from "@/components/ui/Card";
+import { Textarea } from "@/components/ui/Input";
 
 interface Candidate {
   display: string;
@@ -175,84 +178,76 @@ export default function LocationIntake({ onAdded, defaultRadius = 5 }: Props) {
   // Stage 1: textarea.
   if (lines.length === 0) {
     return (
-      <form
-        onSubmit={handleParse}
-        className="rounded-xl border border-zinc-800 bg-zinc-900/40 p-6 space-y-4"
-      >
-        <h2 className="text-lg font-semibold">Tell us where your locations are</h2>
-        <p className="text-sm text-zinc-400">
-          Type each location on a new line. Include the postcode if you can —
-          biz name + postcode is enough.
-        </p>
+      <Card>
+        <form onSubmit={handleParse} className="space-y-4">
+          <h2 className="text-lg font-semibold text-white">
+            Tell us where your locations are
+          </h2>
+          <p className="text-sm text-mist">
+            Type each location on a new line. Include the postcode if you can,
+            biz name + postcode is enough.
+          </p>
 
-        <textarea
-          rows={5}
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-          placeholder={`Heavenly Desserts Coventry Road B10 0RX
+          <Textarea
+            rows={5}
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            placeholder={`Heavenly Desserts Coventry Road B10 0RX
 Phat Buns 89 Stratford Rd, Sparkhill B11 1RA`}
-          className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-4 py-2.5 text-white placeholder:text-zinc-600 focus:border-viridian outline-none font-mono text-sm"
-        />
-
-        <div>
-          <label className="block text-sm text-zinc-400 mb-1.5">
-            Targeting radius:{" "}
-            <span className="text-white">{radius} miles</span>
-          </label>
-          <input
-            type="range"
-            min={1}
-            max={25}
-            value={radius}
-            onChange={(e) => setRadius(Number(e.target.value))}
-            className="w-full accent-viridian"
+            className="font-mono"
           />
-          <div className="flex justify-between text-xs text-zinc-500 mt-1">
-            <span>1 mi</span>
-            <span>25 mi</span>
-          </div>
-        </div>
 
-        {globalError && (
-          <div className="rounded-lg border border-red-900/50 bg-red-950/40 px-4 py-3 text-sm text-red-300">
-            {globalError}
+          <div>
+            <label className="mb-1.5 block text-sm text-mist">
+              Targeting radius:{" "}
+              <span className="font-mono tabular-nums text-white">
+                {radius} miles
+              </span>
+            </label>
+            <input
+              type="range"
+              min={1}
+              max={25}
+              value={radius}
+              onChange={(e) => setRadius(Number(e.target.value))}
+              className="w-full accent-viridian"
+            />
+            <div className="mt-1 flex justify-between font-mono text-xs text-mist">
+              <span>1 mi</span>
+              <span>25 mi</span>
+            </div>
           </div>
-        )}
 
-        <button
-          type="submit"
-          disabled={parsing}
-          className="rounded-lg bg-viridian px-5 py-2.5 text-sm font-semibold text-black hover:bg-viridian/90 disabled:opacity-50 transition"
-        >
-          {parsing ? "Looking up…" : "Find these locations"}
-        </button>
-      </form>
+          {globalError && (
+            <div className="rounded-lg border border-red-900/50 bg-red-950/40 px-4 py-3 text-sm text-red-300">
+              {globalError}
+            </div>
+          )}
+
+          <Button type="submit" variant="primary" fullWidth disabled={parsing} loading={parsing}>
+            {parsing ? "Looking up…" : "Find these locations"}
+          </Button>
+        </form>
+      </Card>
     );
   }
 
   // Stage 2: candidate confirmation per line.
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <h2 className="text-lg font-semibold">Confirm matches</h2>
-        <button
-          type="button"
-          onClick={handleStartOver}
-          className="text-xs text-zinc-500 hover:text-zinc-300 transition"
-        >
+      <div className="flex items-center justify-between gap-3">
+        <h2 className="text-lg font-semibold text-white">Confirm matches</h2>
+        <Button type="button" variant="ghost" onClick={handleStartOver}>
           Start over
-        </button>
+        </Button>
       </div>
 
       {lines.map((line, lineIdx) => (
-        <div
-          key={lineIdx}
-          className="rounded-xl border border-zinc-800 bg-zinc-900/40 p-5"
-        >
-          <p className="text-xs uppercase tracking-wide text-zinc-500 mb-2">
+        <Card key={lineIdx}>
+          <p className="mb-2 text-xs uppercase tracking-wide text-mist">
             You typed
           </p>
-          <p className="text-sm text-zinc-300 mb-4 font-mono">{line.input}</p>
+          <p className="mb-4 font-mono text-sm text-mist">{line.input}</p>
 
           {line.saved ? (
             <div className="rounded-lg border border-viridian/40 bg-viridian/5 px-4 py-3 text-sm text-viridian">
@@ -260,17 +255,17 @@ Phat Buns 89 Stratford Rd, Sparkhill B11 1RA`}
             </div>
           ) : line.result && line.result.candidates.length > 0 ? (
             <>
-              <p className="text-xs uppercase tracking-wide text-zinc-500 mb-2">
+              <p className="mb-2 text-xs uppercase tracking-wide text-mist">
                 Did you mean
               </p>
-              <div className="space-y-2 mb-4">
+              <div className="mb-4 space-y-2">
                 {line.result.candidates.map((c, ci) => (
                   <label
                     key={ci}
                     className={`block cursor-pointer rounded-lg border px-4 py-3 transition ${
                       line.selectedIdx === ci
                         ? "border-viridian bg-viridian/5"
-                        : "border-zinc-800 bg-zinc-950/40 hover:border-zinc-700"
+                        : "border-slate bg-void/40 hover:border-mist/40"
                     }`}
                   >
                     <input
@@ -288,24 +283,24 @@ Phat Buns 89 Stratford Rd, Sparkhill B11 1RA`}
                     />
                     <div className="text-sm text-white">{c.display}</div>
                     {c.source === "postcode-centroid" && (
-                      <div className="text-xs text-zinc-500 mt-1">
-                        Postcode area only — biz lookup didn&apos;t return a match.
+                      <div className="mt-1 text-xs text-mist">
+                        Postcode area only. Biz lookup didn&apos;t return a match.
                       </div>
                     )}
                   </label>
                 ))}
               </div>
               {line.result?.message && (
-                <p className="text-xs text-zinc-500 mb-3">{line.result.message}</p>
+                <p className="mb-3 text-xs text-mist">{line.result.message}</p>
               )}
               {line.error && (
-                <div className="rounded-lg border border-red-900/50 bg-red-950/40 px-4 py-2 text-sm text-red-300 mb-3">
+                <div className="mb-3 rounded-lg border border-red-900/50 bg-red-950/40 px-4 py-2 text-sm text-red-300">
                   {line.error}
                 </div>
               )}
               {line.seatPrompt ? (
-                <div className="rounded-lg border border-sandstorm/40 bg-sandstorm/5 px-4 py-3 mb-3">
-                  <p className="text-sm text-zinc-200">
+                <Card variant="accent">
+                  <p className="text-sm text-mist">
                     You&apos;re using all{" "}
                     <span className="font-semibold text-sandstorm">
                       {line.seatPrompt.paidLocations}
@@ -315,60 +310,62 @@ Phat Buns 89 Stratford Rd, Sparkhill B11 1RA`}
                     <span className="font-semibold text-white">£27/mo</span> (+ VAT)
                     on the card you already have on file?
                   </p>
-                  <div className="mt-3 flex gap-2">
-                    <button
+                  <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+                    <Button
                       type="button"
+                      variant="primary"
                       onClick={() => confirmAddSeat(lineIdx)}
                       disabled={line.busy}
-                      className="rounded-lg bg-viridian px-4 py-2 text-sm font-semibold text-black hover:bg-viridian/90 disabled:opacity-50 transition"
+                      loading={line.busy}
                     >
                       {line.busy ? "Adding…" : "Add location (£27/mo)"}
-                    </button>
-                    <button
+                    </Button>
+                    <Button
                       type="button"
+                      variant="secondary"
                       onClick={() => cancelSeat(lineIdx)}
                       disabled={line.busy}
-                      className="rounded-lg border border-zinc-700 px-4 py-2 text-sm text-zinc-300 hover:border-zinc-600 disabled:opacity-50 transition"
                     >
                       Not now
-                    </button>
+                    </Button>
                   </div>
-                </div>
+                </Card>
               ) : (
-                <div className="flex gap-2">
-                  <button
+                <div className="flex flex-col gap-2 sm:flex-row">
+                  <Button
                     type="button"
+                    variant="primary"
                     onClick={() => handleConfirm(lineIdx)}
                     disabled={line.busy}
-                    className="rounded-lg bg-viridian px-4 py-2 text-sm font-semibold text-black hover:bg-viridian/90 disabled:opacity-50 transition"
+                    loading={line.busy}
                   >
                     {line.busy ? "Saving…" : "Confirm"}
-                  </button>
-                  <button
+                  </Button>
+                  <Button
                     type="button"
+                    variant="secondary"
                     onClick={() => handleRetry(lineIdx)}
-                    className="rounded-lg border border-zinc-700 px-4 py-2 text-sm text-zinc-300 hover:border-zinc-600 transition"
                   >
-                    None of these — let me retry
-                  </button>
+                    None of these, let me retry
+                  </Button>
                 </div>
               )}
             </>
           ) : (
             <>
-              <p className="text-sm text-zinc-400 mb-3">
+              <p className="mb-3 text-sm text-mist">
                 {line.result?.message ?? "Couldn't find that one."}
               </p>
-              <button
+              <Button
                 type="button"
+                variant="secondary"
                 onClick={() => handleRetry(lineIdx)}
-                className="rounded-lg border border-zinc-700 px-4 py-2 text-sm text-zinc-300 hover:border-zinc-600 transition"
               >
                 Retry this one
-              </button>
+              </Button>
             </>
           )}
-        </div>
+        </Card>
       ))}
     </div>
   );

@@ -4,10 +4,14 @@ import { getCurrentTenant } from "@/lib/auth";
 import { getLocationsForTenant } from "@/lib/queries/locations";
 import { resolveSeatCap } from "@/lib/seats";
 import LocationsManager from "@/components/LocationsManager";
+import { OnboardingShell } from "@/components/ui/OnboardingShell";
+import { OnboardingProgress } from "@/components/ui/OnboardingProgress";
+import { PageHeading } from "@/components/ui/PageHeading";
+import { FadeIn } from "@/components/ui/FadeIn";
 import { ContinueToBudget } from "./continue-to-budget";
 
 export const metadata: Metadata = {
-  title: "Add Your Locations — SuperPulse",
+  title: "Add Your Locations | SuperPulse",
 };
 
 export const dynamic = "force-dynamic";
@@ -24,27 +28,28 @@ export default async function OnboardingLocationsPage() {
   ]);
 
   return (
-    <div className="min-h-screen bg-black px-6 py-12">
-      <main className="mx-auto w-full max-w-2xl">
-        <header className="mb-10 text-center">
-          <h1 className="text-3xl font-bold tracking-tight">
-            <span className="text-viridian">Super</span>
-            <span className="text-sandstorm">Pulse</span>
-          </h1>
-          <p className="mt-3 text-zinc-400 leading-relaxed">
-            Add every location SuperPulse should boost to. Each one becomes its
-            own local ad set. Got a lot? Use &ldquo;Add many at once&rdquo;.
-          </p>
-        </header>
-
-        <LocationsManager
-          initialLocations={locations}
-          paidLocations={cap === Infinity ? null : cap}
-          unlimited={cap === Infinity}
+    <OnboardingShell maxWidth="2xl">
+      <FadeIn>
+        <OnboardingProgress step="locations" />
+        <PageHeading
+          title="Add your locations"
+          subtitle={
+            <>
+              Add every location SuperPulse should boost to. Each one becomes
+              its own local ad set. Got a lot? Use &ldquo;Add many at
+              once&rdquo;.
+            </>
+          }
         />
-
+        <div className="mt-8">
+          <LocationsManager
+            initialLocations={locations}
+            paidLocations={cap === Infinity ? null : cap}
+            unlimited={cap === Infinity}
+          />
+        </div>
         <ContinueToBudget />
-      </main>
-    </div>
+      </FadeIn>
+    </OnboardingShell>
   );
 }
